@@ -30,8 +30,8 @@ tryable `worldr-shell`.
 1. DRM/KMS + Vulkan clear-to-screen in Go — done
 2. Minimal Wayland server (surface → textured window actor) — done
 3. SSD borders + input/focus — done (simple chrome)
-4. XWayland — **this branch** (`--xwayland`, tiny XWM + `xwayland_shell_v1`)
-5. Compiz-style effect graph
+4. XWayland — done (`--xwayland`, tiny XWM + `xwayland_shell_v1`)
+5. Compiz-style theater v0 — **this branch** (hardcoded map/unmap scale+fade)
 6. Revisit UI toolkit
 
 ## Layers
@@ -155,7 +155,7 @@ actors + SSD → upload (`vkCmdCopyBufferToImage`) or dumb-buffer memcpy.
 - Client-side decorations as the default chrome
 - Vendoring large dependency trees
 - macOS / Windows as first-class targets
-- Compiz effect graph in this push
+- Full Compiz effect-graph plugin system (v0 is hardcoded map/unmap/focus)
 - Full EWMH / ICCCM XWM (spike maps managed windows + `xwayland_shell_v1` serials)
 
 ## Vendor bring-up

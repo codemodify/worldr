@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/codemodify/worldr/internal/engine"
 )
 
 // Backend selects a present path.
@@ -36,6 +38,7 @@ type Options struct {
 	ClientWidth      int
 	ClientHeight     int
 	XWayland         bool
+	Effects          engine.Tier
 }
 
 // ErrTakeOverRequired is returned when a real display backend would steal
@@ -59,6 +62,7 @@ func ParseFlags(args []string) (Options, error) {
 	fs.IntVar(&o.ClientWidth, "width", 1280, "wayland-client window width")
 	fs.IntVar(&o.ClientHeight, "height", 720, "wayland-client window height")
 	fs.BoolVar(&o.XWayland, "xwayland", false, "launch rootless Xwayland against the worldr socket (xterm/xeyes)")
+	effects := fs.String("effects", "high", "window theater: high|low|off (scale+fade map/unmap; off disables)")
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}
@@ -74,6 +78,11 @@ func ParseFlags(args []string) (Options, error) {
 	}
 	o.Color = c
 	o.SSD = *ssd
+	tier, err := engine.ParseTier(*effects)
+	if err != nil {
+		return o, err
+	}
+	o.Effects = tier
 	return o, nil
 }
 

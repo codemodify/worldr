@@ -48,6 +48,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	}
 
 	scene := engine.NewScene()
+	scene.SetTheater(opt.Effects)
 	pixel := PackBGRA(opt.Color)
 
 	p, err := openPresent(stdout, stderr, opt)
@@ -117,6 +118,16 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	var drag *engine.Actor
 	dx, dy := 0, 0
 
+	switch opt.Effects {
+	case engine.TierOff:
+		fmt.Fprintln(stdout, "theater: effects=off")
+	case engine.TierLow:
+		fmt.Fprintln(stdout, "theater: effects=low (fade-only map/unmap)")
+	default:
+		fmt.Fprintf(stdout, "theater: effects=high (scale+fade map %s / unmap %s, focus pulse)\n",
+			engine.MapInDuration, engine.MapOutDuration)
+	}
+
 	fmt.Fprintln(stdout, "running. Exit: Ctrl+C, or --duration, or Esc/Q on an evdev keyboard.")
 	if TakesDisplay(Backend(p.name)) {
 		fmt.Fprintln(stdout, "WARNING: this process may own the VT display. Prefer a spare TTY (Ctrl+Alt+F2). See docs/RUN-ABOX.md")
@@ -135,6 +146,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		if srv != nil {
 			srv.Dispatch()
 		}
+		scene.Sweep(time.Now())
 		w, h = p.size()
 		if srv != nil {
 			srv.ScreenW, srv.ScreenH = int(w), int(h)
@@ -205,7 +217,8 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				cx, cy, hx, hy, pix, cw, ch, cstride, shape, vis := srv.Cursor()
 				cur = CursorBlit{X: cx, Y: cy, HX: hx, HY: hy, Pix: pix, W: cw, H: ch, Stride: cstride, Shape: shape, Visible: vis}
 			}
-			CompositeDesktop(fb, stride, int(w), int(h), pixel, scene.Actors(), opt.SSD, cur)
+			CompositeDesktop(fb, stride, int(w), int(h), pixel, scene.Actors(), opt.SSD, cur,
+				Theater{Now: time.Now(), Tier: opt.Effects})
 			if err := p.upload(fb, uint32(stride)); err != nil {
 				return err
 			}
