@@ -12,7 +12,13 @@ import (
 // Server is the compositor core.
 type Server = wlsrv.Server
 
-// Listen starts a Wayland socket.
-func Listen(displayName string, scene *engine.Scene, screenW, screenH int) (*Server, error) {
-	return wlsrv.Listen(displayName, scene, screenW, screenH)
+// DMABufImport is the GPU client buffer importer.
+type DMABufImport = wlsrv.DMABufImport
+
+// DMABufPlane is one linux-dmabuf plane.
+type DMABufPlane = wlsrv.DMABufPlane
+
+// Listen starts a Wayland socket. imp may be nil (shm-only).
+func Listen(displayName string, scene *engine.Scene, screenW, screenH int, imp wlsrv.DMABufImport) (*Server, error) {
+	return wlsrv.Listen(displayName, scene, screenW, screenH, imp)
 }

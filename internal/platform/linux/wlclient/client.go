@@ -39,16 +39,16 @@ type Window struct {
 func Open(title string, w, h int, fullscreen bool) (*Window, error) {
 	name := os.Getenv("WAYLAND_DISPLAY")
 	if name == "" {
-		return nil, fmt.Errorf("WAYLAND_DISPLAY is empty (nested debug backend needs a running compositor)")
+		return nil, fmt.Errorf("WAYLAND_DISPLAY is empty (nested debug backend needs a running compositor such as Hyprland/Sway)")
 	}
 	dir := os.Getenv("XDG_RUNTIME_DIR")
 	if dir == "" {
-		return nil, fmt.Errorf("XDG_RUNTIME_DIR is empty")
+		return nil, fmt.Errorf("XDG_RUNTIME_DIR is empty (expected /run/user/%d)", os.Getuid())
 	}
 	addr := filepath.Join(dir, name)
 	c, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: addr, Net: "unix"})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("connect %s: %w (is the host compositor running?)", addr, err)
 	}
 	win := &Window{conn: c, rd: wayland.NewReader(c), wr: wayland.NewWriter(c), nextID: 1, w: w, h: h}
 	if err := win.setup(title, fullscreen); err != nil {
