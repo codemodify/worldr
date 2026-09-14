@@ -27,6 +27,9 @@ func TestCheckTakeoverHeadlessOK(t *testing.T) {
 	if err := CheckTakeover(BackendWaylandClient, false); err != nil {
 		t.Fatal(err)
 	}
+	if err := CheckTakeover(BackendNested, false); err != nil {
+		t.Fatal(err)
+	}
 	if err := CheckTakeover(BackendAuto, false); err != nil {
 		t.Fatal(err)
 	}
@@ -40,6 +43,16 @@ func TestCheckTakeoverVKDisplayRefusesSession(t *testing.T) {
 	}
 	if err := CheckTakeover(BackendVKDisplay, true); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestParseBackendNested(t *testing.T) {
+	o, err := ParseFlags([]string{"-backend=nested", "-width=800", "-height=600"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Backend != BackendNested || !o.Compositor {
+		t.Fatalf("backend=%s compositor=%v", o.Backend, o.Compositor)
 	}
 }
 

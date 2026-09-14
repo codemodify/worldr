@@ -7,14 +7,22 @@ import (
 	"github.com/codemodify/worldr/internal/wayland"
 )
 
+const (
+	ifaceCompositor = "wl_compositor"
+	ifaceShm        = "wl_shm"
+	ifaceXdg        = "xdg_wm_base"
+	ifaceSeat       = "wl_seat"
+)
+
 // Max version we implement for each interface we actually bind.
-// Trap interfaces (seat, output, viewporter, dmabuf, cursor-shape, …)
+// Trap interfaces (output, viewporter, dmabuf, cursor-shape, …)
 // have max 0 so they are never bound — a too-high or v0 bind on those
 // is a common KWin "invalid arguments for wl_registry.bind" cause.
 var bindMaxVersion = map[string]uint32{
 	ifaceCompositor: 6, // damage_buffer is v4; we do not use v5 offset
 	ifaceShm:        1, // create_pool only (v2 is wl_shm.release)
 	ifaceXdg:        6, // client requests are v1; extra events are ignored
+	ifaceSeat:       5, // get_pointer + get_keyboard + pointer.frame
 }
 
 type registryGlobal struct {

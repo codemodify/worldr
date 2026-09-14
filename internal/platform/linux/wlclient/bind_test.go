@@ -25,8 +25,10 @@ func TestClampBindVersion(t *testing.T) {
 		{ifaceXdg, 5, 5, true},
 		{ifaceXdg, 2, 2, true},
 		{ifaceXdg, 0, 0, false},
+		{ifaceSeat, 8, 5, true},
+		{ifaceSeat, 4, 4, true},
+		{ifaceSeat, 0, 0, false},
 		// common KWin traps — must never bind (v0 or too-high)
-		{"wl_seat", 8, 0, false},
 		{"wl_output", 4, 0, false},
 		{"wp_viewporter", 1, 0, false},
 		{"zwp_linux_dmabuf_v1", 5, 0, false},

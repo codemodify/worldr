@@ -3,11 +3,11 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** client hardening on `feat/client-harden` (stacked on linux-dmabuf).
-Tryable `worldr-shell` (Vulkan/DRM present, shm **and** GPU dmabuf import, SSD).
-**foot** connected and disconnected cleanly on abox. Nested `--backend=wayland-client`
-is the safe Plasma/KWin demo path. Not a daily-driver desktop yet.
-See the client matrix in [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
+**Status:** nested compositor present on `feat/nested-compositor-present`.
+Safe desktop demo: `--backend=wayland-client` (or `--backend=nested`) opens a
+Plasma window **and** a worldr compositor socket — run `WAYLAND_DISPLAY=wayland-1 foot`
+and see foot + SSD inside that window. vk-display/drm unchanged (spare TTY).
+Not a daily-driver desktop yet. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
 ## Quick links
 
@@ -35,10 +35,14 @@ make build   # bin/worldr-shell, bin/worldr-session
 make test
 ```
 
-Safe nested try (existing Wayland session):
+Safe nested compositor (existing Wayland session — recommended first try):
 
 ```sh
-./bin/worldr-shell --backend=wayland-client --duration=20s
+./bin/worldr-shell --backend=wayland-client --duration=30s
+# other terminal:
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+export WAYLAND_DISPLAY=wayland-1   # use the name the shell printed
+foot
 ```
 
 Spare TTY (real display — do not run this on top of your desktop without reading the safety notes):

@@ -62,7 +62,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	}
 
 	var srv *compositor.Server
-	if opt.Compositor && p.name != string(BackendWaylandClient) {
+	if opt.Compositor {
 		var imp compositor.DMABufImport
 		if p.vk != nil && p.vk.HasDMABuf() {
 			imp = vkDMABuf{p.vk}
@@ -76,12 +76,16 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		} else {
 			srv = s
 			defer srv.Close()
-			fmt.Fprintf(stdout, "wayland compositor: WAYLAND_DISPLAY=%s  (example: WAYLAND_DISPLAY=%s weston-simple-shm)\n",
+			fmt.Fprintf(stdout, "wayland compositor: WAYLAND_DISPLAY=%s  (example: WAYLAND_DISPLAY=%s foot)\n",
 				srv.DisplayName, srv.DisplayName)
 			fmt.Fprintf(stdout, "socket: %s\n", srv.SocketPath)
+			if nestedPresent(p.name) {
+				fmt.Fprintf(stdout, "nested compositor: clients appear inside this window. Keep this WAYLAND_DISPLAY=%s for the host; use WAYLAND_DISPLAY=%s for foot/weston-simple-shm.\n",
+					os.Getenv("WAYLAND_DISPLAY"), srv.DisplayName)
+			}
 		}
-	} else if p.name == string(BackendWaylandClient) {
-		fmt.Fprintln(stdout, "nested wayland-client debug path: not a compositor. Safe inside your existing session.")
+	} else if nestedPresent(p.name) {
+		fmt.Fprintln(stdout, "nested wayland-client debug path: --compositor=false, clear window only.")
 	}
 
 	ptr := input.Open(int(w), int(h))
@@ -111,7 +115,33 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		if srv != nil {
 			srv.Dispatch()
 		}
+		w, h = p.size()
+		if srv != nil {
+			srv.ScreenW, srv.ScreenH = int(w), int(h)
+		}
+		need := int(w) * int(h) * 4
+		if len(fb) != need {
+			fb = make([]byte, need)
+			stride = int(w) * 4
+			ptr.W, ptr.H = int(w), int(h)
+		}
 		ptr.Poll()
+		if p.wl != nil {
+			in := p.wl.TakeInput()
+			ptr.X, ptr.Y = in.X, in.Y
+			if in.Click {
+				ptr.Click = true
+			}
+			if in.Release {
+				ptr.Release = true
+			}
+			for _, k := range in.Keys {
+				ptr.Keys = append(ptr.Keys, input.Key{Code: k.Code, Pressed: k.Pressed})
+				if k.Pressed && (k.Code == 1 || k.Code == 16) { // ESC, Q
+					ptr.Quit = true
+				}
+			}
+		}
 		if ptr.Quit {
 			fmt.Fprintln(stdout, "quit key")
 			return nil
@@ -148,25 +178,14 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			srv.SetPointerPos(ptr.X, ptr.Y)
 		}
 
-		needFB := scene.HasActors() || srv != nil || p.name == string(BackendWaylandClient) || p.name == string(BackendDRM)
+		needFB := scene.HasActors() || srv != nil || nestedPresent(p.name) || p.name == string(BackendDRM)
 		if needFB {
-			engine.FillBGRA(fb, stride, int(w), int(h), pixel)
-			if opt.SSD {
-				for _, a := range scene.Actors() {
-					decorations.Draw(fb, stride, int(w), int(h), a)
-					engine.BlitBGRA(fb, stride, int(w), int(h), a.X, a.Y, a.Pixels, a.Stride, a.Width, a.Height)
-				}
-			} else {
-				for _, a := range scene.Actors() {
-					engine.BlitBGRA(fb, stride, int(w), int(h), a.X, a.Y, a.Pixels, a.Stride, a.Width, a.Height)
-				}
-			}
+			cur := CursorBlit{}
 			if srv != nil {
 				cx, cy, hx, hy, pix, cw, ch, cstride, shape, vis := srv.Cursor()
-				if vis {
-					decorations.OverlayCursor(fb, stride, int(w), int(h), cx, cy, hx, hy, pix, cw, ch, cstride, shape)
-				}
+				cur = CursorBlit{X: cx, Y: cy, HX: hx, HY: hy, Pix: pix, W: cw, H: ch, Stride: cstride, Shape: shape, Visible: vis}
 			}
+			CompositeDesktop(fb, stride, int(w), int(h), pixel, scene.Actors(), opt.SSD, cur)
 			if err := p.upload(fb, uint32(stride)); err != nil {
 				return err
 			}
@@ -190,7 +209,19 @@ type presenter struct {
 	color  [4]float32
 }
 
-func (p *presenter) size() (uint32, uint32) { return p.w, p.h }
+func nestedPresent(name string) bool {
+	return name == string(BackendWaylandClient) || name == string(BackendNested)
+}
+
+func (p *presenter) size() (uint32, uint32) {
+	if p.wl != nil {
+		w, h, _ := p.wl.Size()
+		if w > 0 && h > 0 {
+			p.w, p.h = uint32(w), uint32(h)
+		}
+	}
+	return p.w, p.h
+}
 
 func (p *presenter) close() {
 	if p.vk != nil {
@@ -270,7 +301,7 @@ func openPresent(stdout, stderr io.Writer, opt Options) (*presenter, error) {
 		switch b {
 		case BackendVKDisplay:
 			err = hintVKDisplay(err)
-		case BackendWaylandClient:
+		case BackendWaylandClient, BackendNested:
 			err = hintWaylandClient(err)
 		case BackendDRM:
 			err = hintDRM(err)
@@ -308,14 +339,32 @@ func openOne(opt Options, b Backend) (*presenter, error) {
 		w, h, _ := d.Size()
 		return &presenter{name: string(b), device: d.Card(), w: w, h: h, drm: d, color: opt.Color,
 			note: "DRM/KMS dumb buffer present (CPU blit). Vulkan is used when --backend=vk-display."}, nil
-	case BackendWaylandClient:
-		win, err := wlclient.Open("worldr-shell (nested debug)", opt.ClientWidth, opt.ClientHeight, opt.FullscreenClient)
+	case BackendWaylandClient, BackendNested:
+		title := "worldr-shell (nested compositor)"
+		note := "SAFE DEMO: nested window on the host session + worldr compositor socket. Run clients with the printed WAYLAND_DISPLAY (not the host's)."
+		if !opt.Compositor {
+			title = "worldr-shell (nested debug)"
+			note = "DEBUG ONLY: nested Wayland client via wl_shm. --compositor=false, no socket."
+		}
+		win, err := wlclient.Open(title, opt.ClientWidth, opt.ClientHeight, opt.FullscreenClient)
 		if err != nil {
 			return nil, err
 		}
 		w, h, _ := win.Size()
-		return &presenter{name: string(b), device: "wayland-client", w: uint32(w), h: uint32(h), wl: win, color: opt.Color,
-			note: "DEBUG ONLY: nested Wayland client via wl_shm. Not the real compositor path."}, nil
+		p := &presenter{name: string(b), device: "wayland-client", w: uint32(w), h: uint32(h), wl: win, color: opt.Color, note: note}
+		if native.Available() {
+			vk, err := native.OpenVK(false, 64, 64)
+			if err != nil {
+				p.note += " Vulkan import unavailable: " + err.Error()
+			} else {
+				p.vk = vk
+				if vk.DeviceName() != "" {
+					p.device = vk.DeviceName() + "+wayland-client"
+				}
+				p.note += " Vulkan dmabuf import available for nested GPU clients."
+			}
+		}
+		return p, nil
 	case BackendHeadless:
 		p := &presenter{name: string(b), device: "none", w: 1280, h: 720, color: opt.Color,
 			note: "headless: no DRM. Tries Vulkan offscreen clear if an ICD exists."}

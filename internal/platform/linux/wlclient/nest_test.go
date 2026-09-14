@@ -56,6 +56,8 @@ func TestNestedClientAgainstWorldr(t *testing.T) {
 	if cw < 1 || ch < 1 || stride < cw*4 {
 		t.Fatalf("size %dx%d stride %d", cw, ch, stride)
 	}
+	_ = win.TakeInput()
+
 	pix := make([]byte, stride*ch)
 	for i := 0; i < 8; i++ {
 		if err := win.Present(pix, stride); err != nil {
