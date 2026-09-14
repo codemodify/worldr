@@ -49,7 +49,7 @@ func TestAdvertiseGlobals(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(2 * time.Second)
-	var sawComp, sawXdg, sawDma, sawDone bool
+	var sawComp, sawXdg, sawDma, sawCursor, sawAct, sawPrim, sawDone bool
 	for time.Now().Before(deadline) && !sawDone {
 		_ = c.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		msg, err := rd.Next()
@@ -60,21 +60,27 @@ func TestAdvertiseGlobals(t *testing.T) {
 			cur := wayland.NewCursor(msg.Payload, nil)
 			_, _ = cur.U32()
 			iface, _ := cur.String()
-			if iface == "wl_compositor" {
+			switch iface {
+			case "wl_compositor":
 				sawComp = true
-			}
-			if iface == "xdg_wm_base" {
+			case "xdg_wm_base":
 				sawXdg = true
-			}
-			if iface == "zwp_linux_dmabuf_v1" {
+			case "zwp_linux_dmabuf_v1":
 				sawDma = true
+			case "wp_cursor_shape_manager_v1":
+				sawCursor = true
+			case "xdg_activation_v1":
+				sawAct = true
+			case "zwp_primary_selection_device_manager_v1":
+				sawPrim = true
 			}
 		}
 		if msg.Object == 3 && msg.Opcode == 0 {
 			sawDone = true
 		}
 	}
-	if !sawComp || !sawXdg || !sawDma || !sawDone {
-		t.Fatalf("globals compositor=%v xdg=%v dmabuf=%v done=%v", sawComp, sawXdg, sawDma, sawDone)
+	if !sawComp || !sawXdg || !sawDma || !sawCursor || !sawAct || !sawPrim || !sawDone {
+		t.Fatalf("globals compositor=%v xdg=%v dmabuf=%v cursor=%v activation=%v primary=%v done=%v",
+			sawComp, sawXdg, sawDma, sawCursor, sawAct, sawPrim, sawDone)
 	}
 }

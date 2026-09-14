@@ -24,6 +24,14 @@ type Server struct {
 	mu          sync.Mutex
 	clients     []*Client
 	log         *log.Logger
+
+	cursorX, cursorY   int
+	cursorHX, cursorHY int
+	cursorPix          []byte
+	cursorW, cursorH   int
+	cursorStride       int
+	cursorShape        uint32
+	cursorVisible      bool
 }
 
 // Listen opens $XDG_RUNTIME_DIR/<name>. Empty name → first free wayland-N (from 1).
@@ -57,14 +65,16 @@ func Listen(name string, scene *engine.Scene, screenW, screenH int, imp DMABufIm
 		return nil, err
 	}
 	s := &Server{
-		ln:          ln,
-		DisplayName: name,
-		SocketPath:  path,
-		Scene:       scene,
-		ScreenW:     screenW,
-		ScreenH:     screenH,
-		Import:      imp,
-		log:         log.New(os.Stderr, "wlsrv: ", 0),
+		ln:            ln,
+		DisplayName:   name,
+		SocketPath:    path,
+		Scene:         scene,
+		ScreenW:       screenW,
+		ScreenH:       screenH,
+		Import:        imp,
+		log:           log.New(os.Stderr, "wlsrv: ", 0),
+		cursorVisible: true,
+		cursorShape:   cursorShapeDefault,
 	}
 	go s.acceptLoop()
 	return s, nil
@@ -157,6 +167,60 @@ func (s *Server) PointerMotion(sx, sy int) {
 	for _, c := range cl {
 		c.pointerMotion(sx, sy)
 	}
+}
+
+// SetPointerPos updates the software cursor location.
+func (s *Server) SetPointerPos(x, y int) {
+	s.mu.Lock()
+	s.cursorX, s.cursorY = x, y
+	s.mu.Unlock()
+}
+
+// Cursor returns the current cursor blit (pixels may be nil → draw default).
+func (s *Server) Cursor() (x, y, hx, hy int, pix []byte, w, h, stride int, shape uint32, visible bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cursorX, s.cursorY, s.cursorHX, s.cursorHY, s.cursorPix, s.cursorW, s.cursorH, s.cursorStride, s.cursorShape, s.cursorVisible
+}
+
+func (s *Server) setCursorFromSurface(c *Client, sid uint32, hx, hy int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sid == 0 {
+		s.cursorVisible = false
+		s.cursorPix = nil
+		return
+	}
+	s.cursorVisible = true
+	s.cursorHX, s.cursorHY = hx, hy
+	so := c.objs[sid]
+	if so == nil || so.surf == nil || so.surf.attached == nil {
+		return
+	}
+	att := so.surf.attached
+	if att.buf != nil && att.buf.pool != nil && att.buf.pool.mem != nil {
+		b := att.buf
+		need := b.offset + b.stride*b.h
+		if need <= len(b.pool.mem) {
+			pix := make([]byte, b.stride*b.h)
+			copy(pix, b.pool.mem[b.offset:need])
+			s.cursorPix, s.cursorW, s.cursorH, s.cursorStride = pix, b.w, b.h, b.stride
+		}
+	} else if att.dma != nil && len(att.dma.pixels) > 0 {
+		pix := make([]byte, len(att.dma.pixels))
+		copy(pix, att.dma.pixels)
+		s.cursorPix = pix
+		s.cursorW, s.cursorH, s.cursorStride = att.dma.w, att.dma.h, att.dma.stride
+	}
+}
+
+func (s *Server) setCursorShape(shape uint32) {
+	s.mu.Lock()
+	s.cursorVisible = true
+	s.cursorPix = nil
+	s.cursorShape = shape
+	s.cursorHX, s.cursorHY = 0, 0
+	s.mu.Unlock()
 }
 
 // KeyboardKey delivers an evdev key to every client (focused surface filters inside).
