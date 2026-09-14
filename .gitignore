@@ -1,0 +1,38 @@
+# Built binaries
+/bin/
+/dist/
+/worldr-shell
+/worldr-session
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Tests and coverage
+*.test
+*.out
+coverage.out
+coverage.html
+
+# cgo / native objects
+*.o
+*.a
+*.syso
+
+# Go workspace files (local only)
+go.work
+go.work.sum
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Crash dumps (Linux desktop / compositor bring-up)
+*.core
+core
+vgcore.*
