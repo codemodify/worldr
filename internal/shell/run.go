@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/codemodify/worldr/internal/compositor"
+	"github.com/codemodify/worldr/internal/compositor/xwayland"
 	"github.com/codemodify/worldr/internal/decorations"
 	"github.com/codemodify/worldr/internal/engine"
 	"github.com/codemodify/worldr/internal/input"
@@ -83,9 +84,28 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				fmt.Fprintf(stdout, "nested compositor: clients appear inside this window. Keep this WAYLAND_DISPLAY=%s for the host; use WAYLAND_DISPLAY=%s for foot/weston-simple-shm.\n",
 					os.Getenv("WAYLAND_DISPLAY"), srv.DisplayName)
 			}
+			if opt.XWayland {
+				runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+				xw, err := xwayland.Start(srv.DisplayName, runtimeDir, srv.Dispatch)
+				if err != nil {
+					fmt.Fprintf(stderr, "xwayland: %v\n", err)
+					fmt.Fprintln(stderr, "xwayland: install xorg-xwayland (Arch) and retry. Wayland clients still work.")
+				} else {
+					defer xw.Close()
+					fmt.Fprintf(stdout, "xwayland: DISPLAY=%s  (example: DISPLAY=%s xeyes)\n", xw.Display, xw.Display)
+					if xw.WM != nil {
+						fmt.Fprintln(stdout, "xwayland: tiny XWM ready — managed X11 windows map as worldr actors + SSD. Do not use the host DISPLAY.")
+					} else {
+						fmt.Fprintln(stderr, "xwayland: running without XWM; override-redirect clients only. Do not use the host DISPLAY.")
+					}
+				}
+			}
 		}
 	} else if nestedPresent(p.name) {
 		fmt.Fprintln(stdout, "nested wayland-client debug path: --compositor=false, clear window only.")
+	}
+	if opt.XWayland && srv == nil {
+		fmt.Fprintln(stderr, "xwayland: ignored (--compositor is off or listen failed)")
 	}
 
 	ptr := input.Open(int(w), int(h))

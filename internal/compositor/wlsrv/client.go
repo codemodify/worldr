@@ -21,7 +21,7 @@ const (
 	globalViewporter uint32 = 8
 	globalDataDev    uint32 = 9
 	globalSubcomp    uint32 = 10
-	// 11–13 are in extras.go (cursor shape, activation, primary selection)
+	// 11–14 are in extras.go (cursor, activation, primary, xwayland_shell)
 )
 
 type objectKind int
@@ -62,6 +62,8 @@ const (
 	kindPrimMgr
 	kindPrimDevice
 	kindPrimSource
+	kindXwShell
+	kindXwSurface
 )
 
 type object struct {
@@ -79,6 +81,8 @@ type shmPool struct {
 	fd   int
 	size int
 	mem  []byte
+	live int  // buffers still using this pool
+	gone bool // client destroyed the pool object
 }
 
 type shmBuffer struct {
@@ -87,6 +91,20 @@ type shmBuffer struct {
 	w, h   int
 	stride int
 	format uint32
+}
+
+func releasePool(p *shmPool) {
+	if p == nil || !p.gone || p.live > 0 {
+		return
+	}
+	if p.mem != nil {
+		_ = syscall.Munmap(p.mem)
+		p.mem = nil
+	}
+	if p.fd > 0 {
+		_ = syscall.Close(p.fd)
+		p.fd = -1
+	}
 }
 
 type surface struct {
@@ -98,6 +116,7 @@ type surface struct {
 	sx, sy   int32
 	destW    int
 	destH    int
+	xwayland bool
 }
 
 type xdgSurface struct {
@@ -226,6 +245,10 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqShmPool(o, msg.Opcode, cur)
 	case kindBuffer:
 		if msg.Opcode == 0 {
+			if o.buf != nil && o.buf.pool != nil {
+				o.buf.pool.live--
+				releasePool(o.buf.pool)
+			}
 			delete(c.objs, o.id)
 		}
 		return nil
@@ -283,6 +306,10 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqPrimaryMgr(o, msg.Opcode, cur)
 	case kindPrimDevice:
 		return c.reqPrimDevice(o, msg.Opcode, cur)
+	case kindXwShell:
+		return c.reqXwaylandShell(o, msg.Opcode, cur)
+	case kindXwSurface:
+		return c.reqXwaylandSurface(o, msg.Opcode, cur)
 	case kindKeyboard, kindOutput, kindDataDevice, kindPositioner, kindCallback, kindDmaFeedback, kindSubsurface, kindPrimSource:
 		return nil
 	default:
@@ -322,7 +349,7 @@ func (c *Client) advertise(reg uint32) error {
 		{globalXdgWm, "xdg_wm_base", 5},
 		{globalSeat, "wl_seat", 8},
 		{globalOutput, "wl_output", 4},
-		{globalDmabuf, "zwp_linux_dmabuf_v1", linuxDmabufVersion},
+		{globalDmabuf, "zwp_linux_dmabuf_v1", linuxDmabufAdvertiseVersion()},
 		{globalDeco, "zxdg_decoration_manager_v1", 1},
 		{globalViewporter, "wp_viewporter", 1},
 		{globalDataDev, "wl_data_device_manager", 3},
@@ -330,6 +357,7 @@ func (c *Client) advertise(reg uint32) error {
 		{globalCursorShape, "wp_cursor_shape_manager_v1", 1},
 		{globalActivation, "xdg_activation_v1", 1},
 		{globalPrimary, "zwp_primary_selection_device_manager_v1", 1},
+		{globalXwayland, "xwayland_shell_v1", 1},
 	}
 	for _, gl := range globals {
 		p := wayland.PutU32(nil, gl.name)
@@ -405,6 +433,8 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 		o.kind = kindActivation
 	case globalPrimary:
 		o.kind = kindPrimMgr
+	case globalXwayland:
+		o.kind = kindXwShell
 	default:
 		switch iface {
 		case "wl_data_device_manager":
@@ -505,17 +535,16 @@ func (c *Client) reqShmPool(o *object, op uint16, cur *wayland.Cursor) error {
 		h, _ := cur.I32()
 		stride, _ := cur.I32()
 		format, _ := cur.U32()
+		if o.pool != nil {
+			o.pool.live++
+		}
 		c.objs[id] = &object{id: id, kind: kindBuffer, buf: &shmBuffer{
 			pool: o.pool, offset: int(off), w: int(w), h: int(h), stride: int(stride), format: format,
 		}}
-	case 1: // destroy
+	case 1: // destroy — buffers may still map this pool
 		if o.pool != nil {
-			if o.pool.mem != nil {
-				_ = syscall.Munmap(o.pool.mem)
-			}
-			if o.pool.fd > 0 {
-				_ = syscall.Close(o.pool.fd)
-			}
+			o.pool.gone = true
+			releasePool(o.pool)
 		}
 		delete(c.objs, o.id)
 	case 2: // resize
@@ -584,7 +613,8 @@ func (c *Client) commit(s *surface) {
 			c.srv.log.Printf("dmabuf resolve: %v", err)
 		}
 	}
-	if s.xdg != nil && s.xdg.top != nil && s.attached != nil && s.xdg.acked != 0 {
+	xdgReady := s.xdg != nil && s.xdg.top != nil && s.xdg.acked != 0
+	if s.attached != nil && (xdgReady || s.xwayland) {
 		c.mapSurface(s)
 	}
 }
@@ -597,15 +627,31 @@ func (c *Client) mapSurface(s *surface) {
 	var pix []byte
 	var w, h, stride int
 	switch {
-	case o.buf != nil && o.buf.pool != nil && o.buf.pool.mem != nil:
+	case o.buf != nil && o.buf.pool != nil:
 		b := o.buf
-		need := b.offset + b.stride*b.h
-		if need > len(b.pool.mem) {
+		n := b.stride * b.h
+		if b.w <= 0 || b.h <= 0 || b.stride <= 0 || b.offset < 0 || n <= 0 {
 			return
 		}
-		pix = make([]byte, b.stride*b.h)
-		copy(pix, b.pool.mem[b.offset:need])
-		w, h, stride = b.w, b.h, b.stride
+		need := b.offset + n
+		if b.pool.mem != nil && need >= b.offset && need <= len(b.pool.mem) {
+			out := make([]byte, n)
+			copy(out, b.pool.mem[b.offset:need])
+			pix, w, h, stride = out, b.w, b.h, b.stride
+			break
+		}
+		if b.pool.fd > 0 {
+			out := make([]byte, n)
+			got, err := syscall.Pread(b.pool.fd, out, int64(b.offset))
+			if err != nil || got != n {
+				c.srv.log.Printf("shm pread w=%d h=%d stride=%d off=%d got=%d err=%v",
+					b.w, b.h, b.stride, b.offset, got, err)
+				return
+			}
+			pix, w, h, stride = out, b.w, b.h, b.stride
+			break
+		}
+		return
 	case o.dma != nil && len(o.dma.pixels) > 0:
 		d := o.dma
 		pix = d.pixels
@@ -628,6 +674,14 @@ func (c *Client) mapSurface(s *surface) {
 	if s.xdg != nil && s.xdg.top != nil {
 		s.actor.Title = s.xdg.top.title
 		s.actor.AppID = s.xdg.top.app
+	} else if s.xwayland {
+		if s.actor.Title == "" {
+			s.actor.Title = "X11"
+		}
+		if s.actor.AppID == "" {
+			s.actor.AppID = "xwayland"
+		}
+		c.srv.log.Printf("mapped X11 actor %dx%d", w, h)
 	}
 	_ = c.send(o.id, 0, nil, nil) // wl_buffer.release
 }

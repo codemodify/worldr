@@ -38,8 +38,11 @@ sudo pacman -S --needed \
   go gcc pkgconf \
   vulkan-headers vulkan-icd-loader vulkan-intel vulkan-tools \
   mesa libdrm wayland wayland-protocols \
-  weston   # provides weston-simple-shm for a client test
+  weston \
+  xorg-xwayland xorg-xeyes xterm
 ```
+
+`weston` provides `weston-simple-shm`. `xorg-xwayland` + `xterm` / `xorg-xeyes` are for `--xwayland`.
 
 `vulkan-radeon` / `nvidia-utils` are fine later; **abox is Intel first**.
 
@@ -65,8 +68,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on client-harden):
-git checkout feat/nested-compositor-present
+# this branch (stacked on nested compositor):
+git checkout feat/xwayland-spike
 
 export CGO_ENABLED=1
 make build
@@ -122,6 +125,33 @@ to stderr as `wayland-client: global …` / `bind …`.
 
 If the host window fails to map, paste those lines. Workaround: spare TTY
 `--backend=vk-display --duration=15s`.
+
+### X11 apps via XWayland (spike)
+
+Same nested window, plus a rootless Xwayland child attached to the **worldr**
+socket (not Plasma’s Xwayland) and a tiny compositing XWM (`-wm` fd,
+`CompositeRedirectSubwindows` + MapRequest / ConfigureRequest).
+X11 windows become actors + SSD via `xwayland_shell_v1`.
+
+```sh
+./bin/worldr-shell --backend=wayland-client --xwayland --duration=60s
+```
+
+The shell prints `xwayland: DISPLAY=:N`. **Other terminal:**
+
+```sh
+export DISPLAY=:N          # the number the shell printed — not $DISPLAY from Plasma
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+xeyes
+# or: xterm
+```
+
+Do **not** set `WAYLAND_DISPLAY` for xeyes/xterm (they are X11 clients).
+Do **not** use the host `DISPLAY=:0` — that is Plasma, not worldr.
+
+If `Xwayland` is missing: `pacman -S xorg-xwayland`. The compositor still hosts
+foot. Known spike limits: no full EWMH (no `_NET_WM_*` desktop, no reparenting),
+override-redirect / popups may mis-size, titles default to `X11`.
 
 Fullscreen nested (still inside your compositor):
 
@@ -208,6 +238,7 @@ without `/dev/dri`.
 | `--duration` | 0 (until signal) | Safety timer |
 | `--color` | `#0b1020` | Clear color |
 | `--compositor` | true | Listen as Wayland server (on for `wayland-client`/`nested` too) |
+| `--xwayland` | false | Launch rootless Xwayland on the worldr socket |
 | `--wayland-display` | first free `wayland-N` | Socket name |
 | `--ssd` | true | Server-side decoration chrome |
 | `--card` | first `/dev/dri/cardN` | DRM device |
@@ -232,7 +263,7 @@ disconnected cleanly** against the compositor.
 | `kitty` | linux-dmabuf (GL) | **Try** | GPU path: Vulkan import + CPU readback. Needs `linux-dmabuf: Vulkan import` in the shell log. LINEAR mmap fallback if the buffer is linear. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Needs clipboard, popups, subsurfaces, idle-inhibit, etc. |
-| X11 apps | XWayland | **No** | Next PR after this unless trivial — not hooked up |
+| X11 apps | XWayland | **Try (`--xwayland`)** | Rootless `Xwayland` + tiny XWM on the worldr socket. `DISPLAY=:N xeyes` / `xterm` should map as SSD actors. |
 
 GPU-accelerated path: client dmabuf → `VK_EXT_external_memory_dma_buf` import → copy to linear host image → actor pixels → existing SSD + focus + present. shm remains the fallback.
 
@@ -266,7 +297,7 @@ export XDG_RUNTIME_DIR=/run/user/$(id -u)
 
 ## Known gaps
 
-- No XWayland (next after this if you want legacy X11 apps)
+- XWayland spike: `--xwayland` rootless + tiny XWM + `xwayland_shell_v1` (not a full EWMH WM)
 - No `xdg_popup` / real subsurface stacking
 - Clipboard / primary selection objects bind; no MIME transfer yet
 - No zero-copy GPU composite (import is readback)

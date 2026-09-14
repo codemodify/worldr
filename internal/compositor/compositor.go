@@ -1,7 +1,6 @@
-// Package compositor hosts the Wayland server and (later) XWayland.
+// Package compositor hosts the Wayland server and optional rootless XWayland.
 //
-// Phase 2: minimal xdg_shell compositor. Surfaces become engine window actors.
-// XWayland is not hooked up. Known gaps are listed in docs/RUN-ABOX.md.
+// Client surfaces (including Xwayland xdg_toplevels) become engine window actors.
 package compositor
 
 import (

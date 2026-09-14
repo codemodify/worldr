@@ -35,6 +35,7 @@ type Options struct {
 	FullscreenClient bool
 	ClientWidth      int
 	ClientHeight     int
+	XWayland         bool
 }
 
 // ErrTakeOverRequired is returned when a real display backend would steal
@@ -57,6 +58,7 @@ func ParseFlags(args []string) (Options, error) {
 	fs.BoolVar(&o.FullscreenClient, "fullscreen-client", false, "wayland-client: request fullscreen (still nested, safe)")
 	fs.IntVar(&o.ClientWidth, "width", 1280, "wayland-client window width")
 	fs.IntVar(&o.ClientHeight, "height", 720, "wayland-client window height")
+	fs.BoolVar(&o.XWayland, "xwayland", false, "launch rootless Xwayland against the worldr socket (xterm/xeyes)")
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}

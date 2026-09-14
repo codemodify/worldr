@@ -10,6 +10,7 @@ const (
 	globalCursorShape uint32 = 11
 	globalActivation  uint32 = 12
 	globalPrimary     uint32 = 13
+	globalXwayland    uint32 = 14
 )
 
 // wp_cursor_shape_v1 shapes (enum starts at 1).
@@ -118,5 +119,47 @@ func (c *Client) reqPrimDevice(o *object, op uint16, _ *wayland.Cursor) error {
 	if op == 1 {
 		delete(c.objs, o.id)
 	}
+	return nil
+}
+
+func (c *Client) reqXwaylandShell(_ *object, op uint16, cur *wayland.Cursor) error {
+	if op != 1 { // get_xwayland_surface
+		return nil
+	}
+	id, err := cur.U32()
+	if err != nil {
+		return err
+	}
+	sid, err := cur.U32()
+	if err != nil {
+		return err
+	}
+	var surf *surface
+	if so := c.objs[sid]; so != nil {
+		surf = so.surf
+	}
+	if surf != nil {
+		surf.xwayland = true
+	}
+	c.objs[id] = &object{id: id, kind: kindXwSurface, surf: surf}
+	return nil
+}
+
+func (c *Client) reqXwaylandSurface(o *object, op uint16, cur *wayland.Cursor) error {
+	// Protocol XML order has varied: some scanners emit set_serial as
+	// opcode 0, others destroy=0 / set_serial=1. Two uint32s → serial.
+	lo, err1 := cur.U32()
+	hi, err2 := cur.U32()
+	if err1 == nil && err2 == nil {
+		_, _ = lo, hi
+		if o.surf != nil {
+			o.surf.xwayland = true
+			if o.surf.attached != nil {
+				c.mapSurface(o.surf)
+			}
+		}
+		return nil
+	}
+	delete(c.objs, o.id)
 	return nil
 }
