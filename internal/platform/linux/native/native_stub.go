@@ -23,6 +23,18 @@ func (v *VK) ClearPresent(r, g, b, a float32) error { return ErrUnavailable }
 func (v *VK) UploadPresent(bgra []byte, stride uint32) error {
 	return ErrUnavailable
 }
+func (v *VK) HasDMABuf() bool { return false }
+
+type DMABufPlane struct {
+	FD     int
+	Offset uint32
+	Stride uint32
+}
+
+func (v *VK) ImportDMABuf(width, height, fourcc uint32, modifier uint64, planes []DMABufPlane) ([]byte, int, error) {
+	return nil, 0, ErrUnavailable
+}
+
 func (v *VK) HeadlessClear(r, g, b, a float32) (uint32, error) { return 0, ErrUnavailable }
 
 type DRM struct{}

@@ -32,6 +32,12 @@ type evdevEvent struct {
 	Value int32
 }
 
+// Key is one evdev key edge this poll.
+type Key struct {
+	Code    uint32
+	Pressed bool
+}
+
 // Pointer is a software cursor plus quit request.
 type Pointer struct {
 	X, Y    int
@@ -39,6 +45,7 @@ type Pointer struct {
 	Click   bool
 	Release bool
 	Quit    bool
+	Keys    []Key
 	files   []*os.File
 }
 
@@ -68,6 +75,7 @@ func (p *Pointer) Close() {
 func (p *Pointer) Poll() {
 	p.Click = false
 	p.Release = false
+	p.Keys = p.Keys[:0]
 	buf := make([]byte, 24)
 	for _, f := range p.files {
 		for i := 0; i < 32; i++ {
@@ -92,6 +100,9 @@ func (p *Pointer) Poll() {
 				}
 				if code == btnLeft && val == 0 {
 					p.Release = true
+				}
+				if code < 0x100 && (val == 0 || val == 1) {
+					p.Keys = append(p.Keys, Key{Code: uint32(code), Pressed: val == 1})
 				}
 				if (code == keyEsc || code == keyQ) && val == 1 {
 					p.Quit = true

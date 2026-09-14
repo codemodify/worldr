@@ -12,7 +12,7 @@ import (
 func TestAdvertiseGlobals(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 	scene := engine.NewScene()
-	s, err := Listen("wayland-test", scene, 800, 600)
+	s, err := Listen("wayland-test", scene, 800, 600, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestAdvertiseGlobals(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(2 * time.Second)
-	var sawComp, sawXdg, sawDone bool
+	var sawComp, sawXdg, sawDma, sawDone bool
 	for time.Now().Before(deadline) && !sawDone {
 		_ = c.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		msg, err := rd.Next()
@@ -66,12 +66,15 @@ func TestAdvertiseGlobals(t *testing.T) {
 			if iface == "xdg_wm_base" {
 				sawXdg = true
 			}
+			if iface == "zwp_linux_dmabuf_v1" {
+				sawDma = true
+			}
 		}
 		if msg.Object == 3 && msg.Opcode == 0 {
 			sawDone = true
 		}
 	}
-	if !sawComp || !sawXdg || !sawDone {
-		t.Fatalf("globals compositor=%v xdg=%v done=%v", sawComp, sawXdg, sawDone)
+	if !sawComp || !sawXdg || !sawDma || !sawDone {
+		t.Fatalf("globals compositor=%v xdg=%v dmabuf=%v done=%v", sawComp, sawXdg, sawDma, sawDone)
 	}
 }

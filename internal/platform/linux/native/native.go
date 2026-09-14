@@ -110,6 +110,45 @@ func (v *VK) UploadPresent(bgra []byte, stride uint32) error {
 	return nil
 }
 
+// HasDMABuf is true when the device can import client dma-bufs via Vulkan.
+func (v *VK) HasDMABuf() bool {
+	return v != nil && v.ptr != nil && C.worldr_vk_has_dmabuf(v.ptr) != 0
+}
+
+// DMABufPlane is one linux-dmabuf plane (compositor owns the fd until Import returns).
+type DMABufPlane struct {
+	FD     int
+	Offset uint32
+	Stride uint32
+}
+
+// ImportDMABuf copies a client dma-buf into host BGRA (GPU import + linear readback).
+func (v *VK) ImportDMABuf(width, height, fourcc uint32, modifier uint64, planes []DMABufPlane) ([]byte, int, error) {
+	if v == nil || v.ptr == nil {
+		return nil, 0, fmt.Errorf("vulkan session closed")
+	}
+	if len(planes) == 0 || len(planes) > 4 {
+		return nil, 0, fmt.Errorf("dmabuf plane count %d", len(planes))
+	}
+	fds := make([]C.int, len(planes))
+	offs := make([]C.uint32_t, len(planes))
+	pits := make([]C.uint32_t, len(planes))
+	for i, p := range planes {
+		fds[i] = C.int(p.FD)
+		offs[i] = C.uint32_t(p.Offset)
+		pits[i] = C.uint32_t(p.Stride)
+	}
+	stride := int(width * 4)
+	out := make([]byte, stride*int(height))
+	errb := make([]C.char, errBuf)
+	if C.worldr_vk_dmabuf_import(v.ptr, C.uint32_t(width), C.uint32_t(height), C.uint32_t(fourcc), C.uint64_t(modifier),
+		C.int(len(planes)), &fds[0], &offs[0], &pits[0], (*C.uint8_t)(unsafe.Pointer(&out[0])), C.uint32_t(stride),
+		&errb[0], C.int(len(errb))) != 0 {
+		return nil, 0, cErr(errb)
+	}
+	return out, stride, nil
+}
+
 func (v *VK) HeadlessClear(r, g, b, a float32) (pixel uint32, err error) {
 	errb := make([]C.char, errBuf)
 	var p C.uint32_t

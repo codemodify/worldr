@@ -4,7 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <vulkan/vulkan.h>
+#include <drm_fourcc.h>
 
 #define WORLDR_MAX_IMAGES 8
 
@@ -36,6 +38,7 @@ struct worldr_vk {
 	uint32_t vendor_id;
 	char device_name[256];
 	VkFormat format;
+	int dmabuf_ok;
 };
 
 static void seterr(char *err, int errlen, const char *fmt, VkResult r)
@@ -167,6 +170,29 @@ static int pick_phys(VkInstance inst, int mode, VkPhysicalDevice *out, uint32_t 
 	return 0;
 }
 
+static int has_dev_ext(VkPhysicalDevice phys, const char *name)
+{
+	uint32_t n = 0;
+	vkEnumerateDeviceExtensionProperties(phys, NULL, &n, NULL);
+	if (!n) {
+		return 0;
+	}
+	VkExtensionProperties *p = (VkExtensionProperties *)calloc(n, sizeof(*p));
+	if (!p) {
+		return 0;
+	}
+	vkEnumerateDeviceExtensionProperties(phys, NULL, &n, p);
+	int ok = 0;
+	for (uint32_t i = 0; i < n; i++) {
+		if (strcmp(p[i].extensionName, name) == 0) {
+			ok = 1;
+			break;
+		}
+	}
+	free(p);
+	return ok;
+}
+
 static int create_device(worldr_vk *vk, int need_swapchain, char *err, int errlen)
 {
 	float prio = 1.0f;
@@ -176,15 +202,33 @@ static int create_device(worldr_vk *vk, int need_swapchain, char *err, int errle
 	qci.queueCount = 1;
 	qci.pQueuePriorities = &prio;
 
-	const char *sw = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+	const char *want[] = {
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+		VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
+		VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
+		VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
+		VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME,
+	};
+	const char *have[8];
+	uint32_t nh = 0;
+	for (uint32_t i = 0; i < sizeof(want) / sizeof(want[0]); i++) {
+		if (strcmp(want[i], VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0 && !need_swapchain) {
+			continue;
+		}
+		if (has_dev_ext(vk->phys, want[i])) {
+			have[nh++] = want[i];
+		}
+	}
+	vk->dmabuf_ok = has_dev_ext(vk->phys, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME) &&
+			has_dev_ext(vk->phys, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+
 	VkDeviceCreateInfo dci = {0};
 	dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	dci.queueCreateInfoCount = 1;
 	dci.pQueueCreateInfos = &qci;
-	if (need_swapchain) {
-		dci.enabledExtensionCount = 1;
-		dci.ppEnabledExtensionNames = &sw;
-	}
+	dci.enabledExtensionCount = nh;
+	dci.ppEnabledExtensionNames = nh ? have : NULL;
 
 	VkResult r = vkCreateDevice(vk->phys, &dci, NULL, &vk->device);
 	if (r != VK_SUCCESS) {
@@ -867,4 +911,313 @@ int worldr_vk_headless_clear(worldr_vk *vk, float r, float g, float b, float a, 
 		}
 	}
 	return 0;
+}
+
+int worldr_vk_has_dmabuf(const worldr_vk *vk)
+{
+	return vk && vk->dmabuf_ok && vk->device;
+}
+
+static VkFormat fourcc_to_vk(uint32_t fourcc, int *swizzle_rb)
+{
+	*swizzle_rb = 0;
+	switch (fourcc) {
+	case DRM_FORMAT_XRGB8888:
+	case DRM_FORMAT_ARGB8888:
+		return VK_FORMAT_B8G8R8A8_UNORM;
+	case DRM_FORMAT_XBGR8888:
+	case DRM_FORMAT_ABGR8888:
+		*swizzle_rb = 1;
+		return VK_FORMAT_R8G8B8A8_UNORM;
+	default:
+		return VK_FORMAT_UNDEFINED;
+	}
+}
+
+int worldr_vk_dmabuf_import(worldr_vk *vk, uint32_t width, uint32_t height, uint32_t fourcc, uint64_t modifier,
+			    int nplanes, const int *fds, const uint32_t *offsets, const uint32_t *pitches,
+			    uint8_t *out_bgra, uint32_t out_stride, char *err, int errlen)
+{
+	if (!vk || !vk->device || !out_bgra || nplanes < 1 || nplanes > 4 || !fds) {
+		seterr(err, errlen, "dmabuf import: bad args", VK_SUCCESS);
+		return -1;
+	}
+	if (!vk->dmabuf_ok) {
+		seterr(err, errlen, "device lacks VK_EXT_external_memory_dma_buf + VK_KHR_external_memory_fd", VK_SUCCESS);
+		return -1;
+	}
+	if (vk->fence) {
+		vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, UINT64_MAX);
+		vkResetFences(vk->device, 1, &vk->fence);
+	}
+
+	int swizzle = 0;
+	VkFormat fmt = fourcc_to_vk(fourcc, &swizzle);
+	if (fmt == VK_FORMAT_UNDEFINED) {
+		seterr(err, errlen, "unsupported dmabuf fourcc (want ARGB/XRGB/ABGR/XBGR8888)", VK_SUCCESS);
+		return -1;
+	}
+
+	int use_mod = has_dev_ext(vk->phys, VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME) &&
+		      modifier != DRM_FORMAT_MOD_INVALID;
+	if (modifier == DRM_FORMAT_MOD_LINEAR) {
+		use_mod = use_mod && modifier != 0; /* linear can use TILING_LINEAR */
+		use_mod = 0;			    /* prefer LINEAR tiling for modifier 0 */
+	}
+
+	VkImageDrmFormatModifierExplicitCreateInfoEXT expl = {0};
+	VkSubresourceLayout layouts[4];
+	memset(layouts, 0, sizeof(layouts));
+	for (int i = 0; i < nplanes; i++) {
+		layouts[i].offset = offsets[i];
+		layouts[i].rowPitch = pitches[i];
+	}
+	expl.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT;
+	expl.drmFormatModifier = modifier;
+	expl.drmFormatModifierPlaneCount = (uint32_t)nplanes;
+	expl.pPlaneLayouts = layouts;
+
+	VkExternalMemoryImageCreateInfo ext = {0};
+	ext.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+	ext.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+	if (use_mod) {
+		ext.pNext = &expl;
+	}
+
+	VkImageCreateInfo ii = {0};
+	ii.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	ii.pNext = &ext;
+	ii.imageType = VK_IMAGE_TYPE_2D;
+	ii.format = fmt;
+	ii.extent.width = width;
+	ii.extent.height = height;
+	ii.extent.depth = 1;
+	ii.mipLevels = 1;
+	ii.arrayLayers = 1;
+	ii.samples = VK_SAMPLE_COUNT_1_BIT;
+	ii.tiling = use_mod ? VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT : VK_IMAGE_TILING_LINEAR;
+	ii.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	ii.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	VkImage src = VK_NULL_HANDLE;
+	VkResult r = vkCreateImage(vk->device, &ii, NULL, &src);
+	if (r != VK_SUCCESS) {
+		seterr(err, errlen, "vkCreateImage dmabuf failed (Intel tiled modifiers need VK_EXT_image_drm_format_modifier)", r);
+		return -1;
+	}
+
+	VkDeviceMemory plane_mem[4] = {0};
+	int imported = 0;
+	if (use_mod && nplanes > 1) {
+		for (int i = 0; i < nplanes; i++) {
+			VkImagePlaneMemoryRequirementsInfo preq = {0};
+			preq.sType = VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO;
+			preq.planeAspect = (VkImageAspectFlagBits)(VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT << i);
+			VkImageMemoryRequirementsInfo2 in2 = {0};
+			in2.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+			in2.pNext = &preq;
+			in2.image = src;
+			VkMemoryRequirements2 mr2 = {.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2};
+			vkGetImageMemoryRequirements2(vk->device, &in2, &mr2);
+			uint32_t mi = find_memory(vk->phys, mr2.memoryRequirements.memoryTypeBits, 0);
+			if (mi == UINT32_MAX) {
+				mi = 0;
+			}
+			int dfd = dup(fds[i]);
+			if (dfd < 0) {
+				seterr(err, errlen, "dup dmabuf fd", VK_SUCCESS);
+				goto fail;
+			}
+			VkImportMemoryFdInfoKHR imp = {0};
+			imp.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
+			imp.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+			imp.fd = dfd;
+			VkMemoryDedicatedAllocateInfo ded = {0};
+			ded.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+			ded.pNext = &imp;
+			ded.image = src;
+			VkMemoryAllocateInfo ai = {0};
+			ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			ai.pNext = &ded;
+			ai.allocationSize = mr2.memoryRequirements.size;
+			ai.memoryTypeIndex = mi;
+			r = vkAllocateMemory(vk->device, &ai, NULL, &plane_mem[i]);
+			if (r != VK_SUCCESS) {
+				close(dfd);
+				seterr(err, errlen, "vkAllocateMemory import plane failed", r);
+				goto fail;
+			}
+			imported++;
+			VkBindImagePlaneMemoryInfo bp = {0};
+			bp.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO;
+			bp.planeAspect = preq.planeAspect;
+			VkBindImageMemoryInfo bi = {0};
+			bi.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
+			bi.pNext = &bp;
+			bi.image = src;
+			bi.memory = plane_mem[i];
+			r = vkBindImageMemory2(vk->device, 1, &bi);
+			if (r != VK_SUCCESS) {
+				seterr(err, errlen, "vkBindImageMemory2 plane failed", r);
+				goto fail;
+			}
+		}
+	} else {
+		VkMemoryRequirements mr;
+		vkGetImageMemoryRequirements(vk->device, src, &mr);
+		uint32_t mi = find_memory(vk->phys, mr.memoryTypeBits, 0);
+		if (mi == UINT32_MAX) {
+			mi = 0;
+		}
+		int dfd = dup(fds[0]);
+		if (dfd < 0) {
+			seterr(err, errlen, "dup dmabuf fd", VK_SUCCESS);
+			goto fail;
+		}
+		VkImportMemoryFdInfoKHR imp = {0};
+		imp.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
+		imp.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+		imp.fd = dfd;
+		VkMemoryDedicatedAllocateInfo ded = {0};
+		ded.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+		ded.pNext = &imp;
+		ded.image = src;
+		VkMemoryAllocateInfo ai = {0};
+		ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		ai.pNext = &ded;
+		ai.allocationSize = mr.size;
+		ai.memoryTypeIndex = mi;
+		r = vkAllocateMemory(vk->device, &ai, NULL, &plane_mem[0]);
+		if (r != VK_SUCCESS) {
+			close(dfd);
+			seterr(err, errlen, "vkAllocateMemory import failed", r);
+			goto fail;
+		}
+		imported = 1;
+		r = vkBindImageMemory(vk->device, src, plane_mem[0], 0);
+		if (r != VK_SUCCESS) {
+			seterr(err, errlen, "vkBindImageMemory import failed", r);
+			goto fail;
+		}
+	}
+
+	VkImageCreateInfo li = {0};
+	li.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	li.imageType = VK_IMAGE_TYPE_2D;
+	li.format = fmt;
+	li.extent.width = width;
+	li.extent.height = height;
+	li.extent.depth = 1;
+	li.mipLevels = 1;
+	li.arrayLayers = 1;
+	li.samples = VK_SAMPLE_COUNT_1_BIT;
+	li.tiling = VK_IMAGE_TILING_LINEAR;
+	li.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	li.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	li.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	VkImage dst = VK_NULL_HANDLE;
+	r = vkCreateImage(vk->device, &li, NULL, &dst);
+	if (r != VK_SUCCESS) {
+		seterr(err, errlen, "vkCreateImage linear readback failed", r);
+		goto fail;
+	}
+	VkMemoryRequirements lmr;
+	vkGetImageMemoryRequirements(vk->device, dst, &lmr);
+	uint32_t lmi = find_memory(vk->phys, lmr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	if (lmi == UINT32_MAX) {
+		seterr(err, errlen, "no host-visible memory for dmabuf readback", VK_SUCCESS);
+		vkDestroyImage(vk->device, dst, NULL);
+		goto fail;
+	}
+	VkDeviceMemory dstmem = VK_NULL_HANDLE;
+	VkMemoryAllocateInfo lai = {0};
+	lai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	lai.allocationSize = lmr.size;
+	lai.memoryTypeIndex = lmi;
+	r = vkAllocateMemory(vk->device, &lai, NULL, &dstmem);
+	if (r != VK_SUCCESS) {
+		vkDestroyImage(vk->device, dst, NULL);
+		seterr(err, errlen, "allocate linear readback failed", r);
+		goto fail;
+	}
+	vkBindImageMemory(vk->device, dst, dstmem, 0);
+
+	VkCommandBufferBeginInfo bi = {0};
+	bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	vkResetCommandBuffer(vk->cmd, 0);
+	if (vkBeginCommandBuffer(vk->cmd, &bi) != VK_SUCCESS) {
+		seterr(err, errlen, "begin dmabuf copy cmd failed", VK_ERROR_UNKNOWN);
+		vkDestroyImage(vk->device, dst, NULL);
+		vkFreeMemory(vk->device, dstmem, NULL);
+		goto fail;
+	}
+	barrier(vk->cmd, src, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		0, VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	barrier(vk->cmd, dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	VkImageCopy cpy = {0};
+	cpy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	cpy.srcSubresource.layerCount = 1;
+	cpy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	cpy.dstSubresource.layerCount = 1;
+	cpy.extent.width = width;
+	cpy.extent.height = height;
+	cpy.extent.depth = 1;
+	vkCmdCopyImage(vk->cmd, src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cpy);
+	barrier(vk->cmd, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+	vkEndCommandBuffer(vk->cmd);
+	if (submit_wait(vk, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, err, errlen) != 0) {
+		vkDestroyImage(vk->device, dst, NULL);
+		vkFreeMemory(vk->device, dstmem, NULL);
+		goto fail;
+	}
+
+	VkImageSubresource sub = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT};
+	VkSubresourceLayout lay;
+	vkGetImageSubresourceLayout(vk->device, dst, &sub, &lay);
+	void *map = NULL;
+	r = vkMapMemory(vk->device, dstmem, 0, VK_WHOLE_SIZE, 0, &map);
+	if (r != VK_SUCCESS || !map) {
+		seterr(err, errlen, "map linear readback failed", r);
+		vkDestroyImage(vk->device, dst, NULL);
+		vkFreeMemory(vk->device, dstmem, NULL);
+		goto fail;
+	}
+	const uint8_t *srcp = (const uint8_t *)map + lay.offset;
+	for (uint32_t y = 0; y < height; y++) {
+		const uint8_t *row = srcp + y * lay.rowPitch;
+		uint8_t *dstp = out_bgra + y * out_stride;
+		if (!swizzle) {
+			memcpy(dstp, row, width * 4);
+		} else {
+			for (uint32_t x = 0; x < width; x++) {
+				dstp[x * 4 + 0] = row[x * 4 + 2];
+				dstp[x * 4 + 1] = row[x * 4 + 1];
+				dstp[x * 4 + 2] = row[x * 4 + 0];
+				dstp[x * 4 + 3] = row[x * 4 + 3];
+			}
+		}
+	}
+	vkUnmapMemory(vk->device, dstmem);
+	vkDestroyImage(vk->device, dst, NULL);
+	vkFreeMemory(vk->device, dstmem, NULL);
+	vkDestroyImage(vk->device, src, NULL);
+	for (int i = 0; i < imported; i++) {
+		if (plane_mem[i]) {
+			vkFreeMemory(vk->device, plane_mem[i], NULL);
+		}
+	}
+	return 0;
+
+fail:
+	vkDestroyImage(vk->device, src, NULL);
+	for (int i = 0; i < 4; i++) {
+		if (plane_mem[i]) {
+			vkFreeMemory(vk->device, plane_mem[i], NULL);
+		}
+	}
+	return -1;
 }
