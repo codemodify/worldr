@@ -1,9 +1,8 @@
 // Package rhi is the owned render-hardware interface.
 //
-// Phase 0 defines interfaces only. A thin Vulkan backend lives in a later
-// phase; cgo/FFI is allowed only at the Vulkan/OS ABI boundary. wgpu is not
-// the foundation (optional tools only). The frame loop must stay
-// allocation-disciplined for Go's GC.
+// Interfaces stay stable. The Phase 1 present path lives in
+// internal/platform/linux/native (cgo at the Vulkan/DRM ABI). wgpu is not
+// the foundation. The frame loop must stay allocation-disciplined for Go's GC.
 package rhi
 
 // Device is the GPU device owned by the shell compositor.

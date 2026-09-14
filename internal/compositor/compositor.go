@@ -1,16 +1,18 @@
-// Package compositor will host the Wayland server and XWayland integration.
+// Package compositor hosts the Wayland server and (later) XWayland.
 //
-// Responsibilities (not implemented in Phase 0):
-//   - Real Wayland compositor from day one (DRM/KMS + Vulkan present), not a
-//     nested Wayland client that draws into another compositor first.
-//   - Accept Wayland clients; map each surface to an engine window actor.
-//   - Run X11 clients via XWayland.
-//   - Apply server-side decorations to foreign and native clients.
-//   - Own input and focus once those land (build step 3).
-//
-// The compositor process owns the GPU device and present path. Isolated
-// experiences/apps (later process model) talk through DMA-BUF + explicit sync.
+// Phase 2: minimal xdg_shell compositor. Surfaces become engine window actors.
+// XWayland is not hooked up. Known gaps are listed in docs/RUN-ABOX.md.
 package compositor
 
-// Server is the compositor core. Unimplemented in Phase 0.
-type Server struct{}
+import (
+	"github.com/codemodify/worldr/internal/compositor/wlsrv"
+	"github.com/codemodify/worldr/internal/engine"
+)
+
+// Server is the compositor core.
+type Server = wlsrv.Server
+
+// Listen starts a Wayland socket.
+func Listen(displayName string, scene *engine.Scene, screenW, screenH int) (*Server, error) {
+	return wlsrv.Listen(displayName, scene, screenW, screenH)
+}

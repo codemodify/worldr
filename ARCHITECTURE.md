@@ -1,7 +1,7 @@
 # worldr architecture
 
-Phase 0 records locked product decisions. Implementation of the compositor and
-Vulkan backend is explicitly out of scope until later build steps.
+Locked product decisions plus the Phase 1–3 implementation notes for the first
+tryable `worldr-shell`.
 
 ## Locked decisions
 
@@ -26,10 +26,10 @@ Vulkan backend is explicitly out of scope until later build steps.
 
 ## Near-term build order
 
-0. This scaffold (docs, license, module layout)
-1. DRM/KMS + Vulkan clear-to-screen in Go
-2. Minimal Wayland server (surface → textured window actor)
-3. SSD borders + input/focus
+0. Scaffold (docs, license, module layout) — done
+1. DRM/KMS + Vulkan clear-to-screen in Go — **this branch**
+2. Minimal Wayland server (surface → textured window actor) — **this branch**
+3. SSD borders + input/focus — **this branch** (simple chrome)
 4. XWayland
 5. Compiz-style effect graph
 6. Revisit UI toolkit
@@ -105,23 +105,49 @@ and explicit sync, not by opening the DRM device themselves.
 | --- | --- |
 | `cmd/worldr-shell` | Compositor binary. Will own device + present + Wayland server + frame loop. |
 | `cmd/worldr-session` | Session manager placeholder. Isolation and session lifecycle come later. |
-| `internal/rhi` | Owned RHI interfaces only: `Device`, `Queue`, `Texture`, `SharedImage`, `Sync`, `Present`. No Vulkan in Phase 0. |
-| `internal/compositor` | Wayland server + XWayland. Maps client surfaces to engine actors. |
-| `internal/engine` | Scene and window-actor model; later Compiz-style effect graph. |
-| `internal/decorations` | Server-side decorations for foreign and native windows. |
-| `internal/platform/linux` | DRM/KMS + Vulkan at the OS ABI boundary. cgo/FFI lives here later. |
-| `internal/version` | Version / phase string for placeholder binaries. |
+| `internal/rhi` | Owned RHI interfaces (`Device`, `Queue`, `Texture`, `SharedImage`, `Sync`, `Present`). |
+| `internal/compositor` / `wlsrv` | Pure-Go Wayland server (core + xdg_shell). Maps shm surfaces to actors. |
+| `internal/engine` | Scene, window actors, CPU BGRA composite. |
+| `internal/decorations` | SSD: colored frame + title hit region. |
+| `internal/platform/linux/native` | **cgo ABI**: `libvulkan` + `libdrm` (owned C session, not a second compositor). |
+| `internal/platform/linux/wlclient` | Debug nested Wayland *client* (wl_shm). Not the primary path. |
+| `internal/shell` | `worldr-shell` flags, safety, present loop. |
+| `internal/input` | Best-effort evdev pointer + Esc/Q. |
+| `internal/wayland` | Wire protocol encode/decode. |
+| `internal/version` | Version / phase string. |
 
-## Non-goals (Phase 0 and near-term)
+## Vulkan binding choice
 
-- Implementing the compositor, Vulkan backend, or DRM/KMS bring-up in this scaffold
-- Nested Wayland-client prototype as the first present path
+Phase 1 uses a **thin owned C wrapper** in `internal/platform/linux/native`
+(`vk_session.c`, `drm_session.c`) linked with `pkg-config: vulkan libdrm`.
+
+Rejected as the foundation:
+
+- `lukem570/vulkan-go` — current, Vulkan 1.4, no cgo, but **does not generate `VK_KHR_display`**, and requires `CGO_ENABLED=0` (incompatible with libdrm cgo).
+- `vkngwrapper` — cgo, heavier, Vulkan 1.2-oriented.
+- wgpu / Unity / Unreal — locked out.
+
+`VK_KHR_display` is the primary GPU present path (`--backend=vk-display`).
+`--backend=drm` is a libdrm dumb-buffer KMS path (CPU blit) if display WSI fails.
+`--backend=wayland-client` is **debug-only** nested convenience.
+`--backend=headless` is for CI / no `/dev/dri`.
+
+## Present / compositor loop
+
+On `vk-display` with no clients: `vkCmdClearColorImage` + present (GPU clear).
+When clients exist (or on `drm` / nested client): CPU BGRA framebuffer → blit
+actors + SSD → upload (`vkCmdCopyBufferToImage`) or dumb-buffer memcpy.
+
+## Non-goals (still)
+
+- Nested Wayland-client as the *primary* compositor path (debug only)
 - Smithay, wlroots, or any Rust/C++ compositor as the core
 - Unity, Unreal, or wgpu as the rendering foundation
-- Shipping a UI toolkit or widget library before compositor + engine exist
+- UI toolkit
 - Client-side decorations as the default chrome
 - Vendoring large dependency trees
 - macOS / Windows as first-class targets
+- XWayland and Compiz effect graph in this push
 
 ## Vendor bring-up
 
