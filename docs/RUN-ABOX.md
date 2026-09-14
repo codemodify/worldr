@@ -63,8 +63,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch:
-git checkout feat/linux-dmabuf-and-clients
+# this branch (stacked on linux-dmabuf):
+git checkout feat/client-harden
 
 export CGO_ENABLED=1
 make build
@@ -88,6 +88,16 @@ List GPUs (no display takeover):
 A 1280×720 (or `--width`/`--height`) window titled `worldr-shell (nested debug)`
 should fill with the cinematic clear color (`--color=#0b1020`). This uses
 **wl_shm**, not Vulkan WSI. It is **not** the compositor path.
+
+The nested client waits for a real `xdg_surface.configure` before the first
+attach, double-buffers shm (never reuses a busy `wl_buffer`), and pongs
+`xdg_wm_base.ping`. That is what KWin/Plasma require; the earlier
+`write unix @: sendmsg: broken pipe` was the host closing the socket after a
+protocol error.
+
+If Plasma/KWin still drops the window, the log should now include the host
+`wl_display.error` (if any) plus this workaround: **do not nest** — use a spare
+TTY (`--backend=vk-display --duration=15s`) for the real compositor path.
 
 Fullscreen nested (still inside your compositor):
 
@@ -136,7 +146,7 @@ wayland compositor: WAYLAND_DISPLAY=wayland-1
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 export WAYLAND_DISPLAY=wayland-1
 weston-simple-shm          # shm path (always)
-foot                       # expected: shm + seat/keyboard + SSD
+foot                       # CONFIRMED on abox: connect + disconnect clean
 kitty                      # GPU path: linux-dmabuf import (needs Vulkan on the shell)
 ```
 
@@ -185,27 +195,59 @@ Vulkan and DRM are a **thin owned C wrapper** (`internal/platform/linux/native`)
 linked against `libvulkan` and `libdrm`. Generated no-cgo bindings
 (`lukem570/vulkan-go`) omit `VK_KHR_display`. wgpu is not used.
 
-## Client matrix (abox expectations)
+## Client matrix (abox)
+
+PR #2 (`feat/linux-dmabuf-and-clients`) **builds** on abox. Headless reports
+`linux-dmabuf: Vulkan import + readback enabled`. **foot connected and
+disconnected cleanly** against the compositor.
 
 | Client | Buffer | Expected now | Notes |
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Likely** | Needs seat + xkb keymap (we send a minimal US map) + xdg_decoration SSD |
+| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + xkb + SSD. Remaining foot warnings should drop for server-side cursors (`wp_cursor_shape` + `wl_pointer.set_cursor`), XDG activation (token `done`), and primary selection (stub). Still expected: fractional scale, `xdg-toplevel-icon`, text-input/IME. |
 | `kitty` | linux-dmabuf (GL) | **Try** | GPU path: Vulkan import + CPU readback. Needs `linux-dmabuf: Vulkan import` in the shell log. LINEAR mmap fallback if the buffer is linear. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Needs clipboard, popups, subsurfaces, idle-inhibit, etc. |
-| X11 apps | XWayland | **No** | Next after dmabuf hardening — not hooked up |
+| X11 apps | XWayland | **No** | Next PR after this unless trivial — not hooked up |
 
 GPU-accelerated path: client dmabuf → `VK_EXT_external_memory_dma_buf` import → copy to linear host image → actor pixels → existing SSD + focus + present. shm remains the fallback.
 
 Start `kitty` only after the shell prints `linux-dmabuf: Vulkan import + readback enabled`.
 
+### Nested `--backend=wayland-client` on Plasma/KWin
+
+abox previously saw `write unix @: sendmsg: broken pipe` when nesting inside
+KWin. That is the host compositor closing the socket (protocol error), not a
+random I/O flake.
+
+This branch:
+
+1. Waits for a **real** `xdg_surface.configure` (never fakes serial `1`).
+2. Acks that serial in the **same commit** as the first buffer attach.
+3. Double-buffers shm and skips a frame instead of attaching a busy buffer.
+4. Always replies to `xdg_wm_base.ping`; surfaces `wl_display.error`.
+
+**Success:** a 1280×720 (or configured) window titled `worldr-shell (nested debug)`
+on the Plasma desktop.
+
+**If it still dies:** the process log should name the protocol error. Workaround:
+leave the desktop on its VT and run the real compositor on **tty2**:
+
+```sh
+# Ctrl+Alt+F2, login, then:
+unset WAYLAND_DISPLAY DISPLAY
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+./bin/worldr-shell --backend=vk-display --duration=15s
+```
+
 ## Known gaps
 
 - No XWayland (next after this if you want legacy X11 apps)
 - No `xdg_popup` / real subsurface stacking
-- No clipboard (data device is a stub so binds succeed)
+- Clipboard / primary selection objects bind; no MIME transfer yet
 - No zero-copy GPU composite (import is readback)
 - SSD is a colored frame + title hit region
+- Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)
 - Pointer/keyboard via evdev (`input` group); keymap is a tiny US map
+- No fractional scaling, `xdg-toplevel-icon`, or IME (`zwp_text_input`)
 - Compiz effects and UI toolkit still deferred

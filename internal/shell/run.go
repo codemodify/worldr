@@ -144,8 +144,12 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		} else if srv != nil {
 			srv.PointerMotion(ptr.X, ptr.Y)
 		}
+		if srv != nil {
+			srv.SetPointerPos(ptr.X, ptr.Y)
+		}
 
-		if scene.HasActors() || p.name == string(BackendWaylandClient) || p.name == string(BackendDRM) {
+		needFB := scene.HasActors() || srv != nil || p.name == string(BackendWaylandClient) || p.name == string(BackendDRM)
+		if needFB {
 			engine.FillBGRA(fb, stride, int(w), int(h), pixel)
 			if opt.SSD {
 				for _, a := range scene.Actors() {
@@ -155,6 +159,12 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			} else {
 				for _, a := range scene.Actors() {
 					engine.BlitBGRA(fb, stride, int(w), int(h), a.X, a.Y, a.Pixels, a.Stride, a.Width, a.Height)
+				}
+			}
+			if srv != nil {
+				cx, cy, hx, hy, pix, cw, ch, cstride, shape, vis := srv.Cursor()
+				if vis {
+					decorations.OverlayCursor(fb, stride, int(w), int(h), cx, cy, hx, hy, pix, cw, ch, cstride, shape)
 				}
 			}
 			if err := p.upload(fb, uint32(stride)); err != nil {
