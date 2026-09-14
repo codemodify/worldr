@@ -17,6 +17,7 @@ const (
 	BackendVKDisplay     Backend = "vk-display"
 	BackendDRM           Backend = "drm"
 	BackendWaylandClient Backend = "wayland-client"
+	BackendNested        Backend = "nested"
 	BackendHeadless      Backend = "headless"
 )
 
@@ -44,12 +45,12 @@ var ErrTakeOverRequired = errors.New("graphical session is active; refusing to t
 func ParseFlags(args []string) (Options, error) {
 	var o Options
 	fs := flag.NewFlagSet("worldr-shell", flag.ContinueOnError)
-	backend := fs.String("backend", string(BackendAuto), "auto|vk-display|drm|wayland-client|headless")
+	backend := fs.String("backend", string(BackendAuto), "auto|vk-display|drm|wayland-client|nested|headless")
 	fs.StringVar(&o.Card, "card", "", "DRM card path (default: first /dev/dri/cardN)")
 	fs.BoolVar(&o.TakeOverDisplay, "take-over-display", false, "allow vk-display/drm while DISPLAY or WAYLAND_DISPLAY is set")
 	fs.DurationVar(&o.Duration, "duration", 0, "exit after this long (0 = until SIGINT). Use 15s for a first TTY test")
 	color := fs.String("color", "#0b1020", "clear color as #RRGGBB")
-	fs.BoolVar(&o.Compositor, "compositor", true, "listen as a Wayland compositor (no-op for wayland-client)")
+	fs.BoolVar(&o.Compositor, "compositor", true, "listen as a Wayland compositor (also inside wayland-client/nested)")
 	fs.StringVar(&o.WaylandDisplay, "wayland-display", "", "WAYLAND_DISPLAY name to advertise (default: first free wayland-N)")
 	fs.BoolVar(&o.ListDevices, "list-devices", false, "print Vulkan devices and exit")
 	ssd := fs.Bool("ssd", true, "draw server-side decoration chrome around client surfaces")
@@ -61,7 +62,7 @@ func ParseFlags(args []string) (Options, error) {
 	}
 	o.Backend = Backend(strings.ToLower(strings.TrimSpace(*backend)))
 	switch o.Backend {
-	case BackendAuto, BackendVKDisplay, BackendDRM, BackendWaylandClient, BackendHeadless:
+	case BackendAuto, BackendVKDisplay, BackendDRM, BackendWaylandClient, BackendNested, BackendHeadless:
 	default:
 		return o, fmt.Errorf("unknown --backend=%s", *backend)
 	}
@@ -82,7 +83,7 @@ func GraphicalSession() (wayland, x11 bool) {
 // CheckTakeover refuses DRM/Vulkan display backends when a session is already
 // attached, unless the user passed --take-over-display.
 func CheckTakeover(backend Backend, takeOver bool) error {
-	if backend == BackendHeadless || backend == BackendWaylandClient || backend == BackendAuto {
+	if backend == BackendHeadless || backend == BackendWaylandClient || backend == BackendNested || backend == BackendAuto {
 		return nil
 	}
 	wl, x11 := GraphicalSession()

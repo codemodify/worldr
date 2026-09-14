@@ -27,13 +27,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const (
-	nSlots = 2
-
-	ifaceCompositor = "wl_compositor"
-	ifaceShm        = "wl_shm"
-	ifaceXdg        = "xdg_wm_base"
-)
+const nSlots = 2
 
 // Window is a nested xdg_toplevel filled with a solid color.
 type Window struct {
@@ -44,7 +38,13 @@ type Window struct {
 	nextID uint32
 
 	reg, comp, shm, xdg, surf, xdgS, top uint32
-	compVer, shmVer, xdgVer              uint32
+	seat, ptrID, kbdID                   uint32
+	compVer, shmVer, xdgVer, seatVer     uint32
+	ptrSerial                            uint32
+	hostX, hostY                         int
+	hostClick, hostRelease               bool
+	hostKeys                             []HostKey
+	hostInside                           bool
 
 	configured bool
 	needAck    bool
@@ -106,6 +106,8 @@ func Open(title string, w, h int, fullscreen bool) (*Window, error) {
 		nextID:         1,
 		w:              w,
 		h:              h,
+		hostX:          w / 2,
+		hostY:          h / 2,
 		frameDone:      true,
 		stop:           make(chan struct{}),
 		readerFinished: make(chan struct{}),
@@ -144,6 +146,9 @@ func (w *Window) setup(title string, fullscreen bool) error {
 		return err
 	}
 	if err := w.bindNeeded(globals); err != nil {
+		return err
+	}
+	if err := w.setupSeat(); err != nil {
 		return err
 	}
 	// Flush host errors (invalid bind shows up as wl_display.error) before
@@ -311,7 +316,26 @@ func (w *Window) bindOne(g registryGlobal, requested uint32) error {
 	case ifaceXdg:
 		w.xdg = id
 		w.xdgVer = requested
+	case ifaceSeat:
+		w.seat = id
+		w.seatVer = requested
 	}
+	return nil
+}
+
+func (w *Window) setupSeat() error {
+	if w.seat == 0 {
+		return nil
+	}
+	w.ptrID = w.alloc()
+	if err := w.send(w.seat, 0, wayland.PutU32(nil, w.ptrID), nil); err != nil { // get_pointer
+		return err
+	}
+	w.kbdID = w.alloc()
+	if err := w.send(w.seat, 1, wayland.PutU32(nil, w.kbdID), nil); err != nil { // get_keyboard
+		return err
+	}
+	logClient("seat get_pointer id=%d get_keyboard id=%d", w.ptrID, w.kbdID)
 	return nil
 }
 
@@ -429,6 +453,9 @@ func (w *Window) handle(msg wayland.Message) error {
 	}
 	if msg.Object == w.top && msg.Opcode == 1 { // close
 		w.closed = true
+	}
+	if err := w.handleSeat(msg); err != nil {
+		return err
 	}
 	for i := range w.slots {
 		if w.slots[i].alive && msg.Object == w.slots[i].id && msg.Opcode == 0 {

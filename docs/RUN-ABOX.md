@@ -3,8 +3,8 @@
 First tryable build: a `worldr-shell` binary that **builds with Go** and either
 
 1. **clears the screen** via Vulkan `VK_KHR_display` or DRM/KMS, or
-2. **shows a compositor seat** waiting for a Wayland client, or
-3. **nests** as a Wayland client inside your existing session (safe debug path).
+2. **nests** as a Wayland client on Plasma **and hosts clients** in that window, or
+3. **shows a compositor seat** on a spare TTY / headless.
 
 This machine: Intel Arrow Lake iGPU, Mesa 26.2.2, Vulkan 1.4, Arch Linux.
 
@@ -14,7 +14,9 @@ This machine: Intel Arrow Lake iGPU, Mesa 26.2.2, Vulkan 1.4, Arch Linux.
 VT. If `WAYLAND_DISPLAY` or `DISPLAY` is set, `worldr-shell` **refuses** those
 backends unless you pass `--take-over-display`.
 
-**Preferred first try (safe):** nested window in your current desktop.
+**Preferred first try (safe):** nested compositor window on your current desktop
+(`--backend=wayland-client` or `--backend=nested`), then `foot` on the printed
+`WAYLAND_DISPLAY`.
 
 **Preferred real-display try:** a **spare TTY** (tty2), not the VT that is
 already running Hyprland/Sway/GNOME/KDE.
@@ -63,8 +65,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on linux-dmabuf):
-git checkout feat/client-harden
+# this branch (stacked on client-harden):
+git checkout feat/nested-compositor-present
 
 export CGO_ENABLED=1
 make build
@@ -79,27 +81,47 @@ List GPUs (no display takeover):
 ./bin/worldr-shell --list-devices
 ```
 
-## Safe nested try (existing session)
+## Recommended safe try (nested compositor on Plasma)
+
+This is the **desktop demo**: a window on your existing session that *is* the
+worldr compositor. Clients you launch against the printed socket appear **inside
+that window** with SSD.
 
 ```sh
-./bin/worldr-shell --backend=wayland-client --duration=20s
+# keep your Plasma/KWin WAYLAND_DISPLAY (usually wayland-0) for this process
+./bin/worldr-shell --backend=wayland-client --duration=60s
+# alias: --backend=nested
 ```
 
-A 1280×720 (or `--width`/`--height`) window titled `worldr-shell (nested debug)`
-should fill with the cinematic clear color (`--color=#0b1020`). This uses
-**wl_shm**, not Vulkan WSI. It is **not** the compositor path.
+The shell prints something like:
 
-The nested client collects `wl_registry.global` events, then binds **only**
-`wl_compositor`, `wl_shm`, and `xdg_wm_base` at `min(our_max, advertised)`
-(never version 0, never above what KWin advertised). Each advertise/bind is
-logged on stderr as `wayland-client: global …` / `wayland-client: bind …`.
-It then waits for a real `xdg_surface.configure` before the first attach,
-double-buffers shm, and pongs `xdg_wm_base.ping`.
+```
+present: backend=wayland-client size=1280x720 …
+wayland compositor: WAYLAND_DISPLAY=wayland-1  (example: WAYLAND_DISPLAY=wayland-1 foot)
+nested compositor: clients appear inside this window. Keep this WAYLAND_DISPLAY=wayland-0 for the host; use WAYLAND_DISPLAY=wayland-1 for foot/weston-simple-shm.
+```
 
-abox on PR #3 hit `wl_display.error … invalid arguments for wl_registry#2.bind`
-then a broken pipe — that is a bad `wl_registry.bind`, not random I/O. If
-Plasma/KWin still drops the window, paste those `wayland-client:` lines.
-Workaround: **do not nest** — spare TTY `--backend=vk-display --duration=15s`.
+**Other terminal** (same user, same `XDG_RUNTIME_DIR`):
+
+```sh
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+export WAYLAND_DISPLAY=wayland-1   # must be the name the shell printed, not wayland-0
+foot
+# or: weston-simple-shm
+```
+
+You should see foot (or the shm client) with a cyan/magenta SSD frame inside the
+`worldr-shell (nested compositor)` window. Pointer and keys while that window is
+focused are forwarded into worldr (title-bar drag still works).
+
+`--compositor=false` restores the old clear-only debug window (no socket).
+
+Host-side bind is still clamped (`min(our_max, advertised)`): compositor, shm,
+`xdg_wm_base`, and `wl_seat` (v≤5) so clicks/keys work. Advertise/bind lines go
+to stderr as `wayland-client: global …` / `bind …`.
+
+If the host window fails to map, paste those lines. Workaround: spare TTY
+`--backend=vk-display --duration=15s`.
 
 Fullscreen nested (still inside your compositor):
 
@@ -181,11 +203,11 @@ without `/dev/dri`.
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--backend` | `auto` | `vk-display` \| `drm` \| `wayland-client` \| `headless` |
+| `--backend` | `auto` | `vk-display` \| `drm` \| `wayland-client` \| `nested` \| `headless` |
 | `--take-over-display` | false | Allow DRM/Vulkan display while a session env is set |
 | `--duration` | 0 (until signal) | Safety timer |
 | `--color` | `#0b1020` | Clear color |
-| `--compositor` | true | Listen as Wayland server (off for `wayland-client`) |
+| `--compositor` | true | Listen as Wayland server (on for `wayland-client`/`nested` too) |
 | `--wayland-display` | first free `wayland-N` | Socket name |
 | `--ssd` | true | Server-side decoration chrome |
 | `--card` | first `/dev/dri/cardN` | DRM device |
@@ -216,33 +238,24 @@ GPU-accelerated path: client dmabuf → `VK_EXT_external_memory_dma_buf` import 
 
 Start `kitty` only after the shell prints `linux-dmabuf: Vulkan import + readback enabled`.
 
-### Nested `--backend=wayland-client` on Plasma/KWin
+### Nested compositor on Plasma/KWin (abox)
 
-abox previously saw `write unix @: sendmsg: broken pipe` when nesting inside
-KWin. That is the host compositor closing the socket (protocol error), not a
-random I/O flake.
+PR #3 (`feat/client-harden`) maps a host window: 514 frames, exit 0, binds
+clamped to compositor/shm/`xdg_wm_base`. This branch **adds the compositor
+into that window**.
 
-This branch:
+`auto` in a graphical session now picks this path (nested + socket), not a
+clear-only debug rectangle.
 
-1. Collects registry globals, then binds only compositor/shm/`xdg_wm_base` at
-   `min(our_max, advertised)` — never v0, never above advertised. Logs each
-   `wayland-client: global` / `bind` (name, iface, advertised vs requested).
-2. Does **not** bind `wl_seat`, `wl_output`, viewporter, linux-dmabuf, or
-   cursor-shape on the nested path (those were common too-high/v0 traps).
-3. Waits for a **real** `xdg_surface.configure` (never fakes serial `1`).
-4. Acks that serial in the **same commit** as the first buffer attach.
-5. Double-buffers shm and skips a frame instead of attaching a busy buffer.
-6. Always replies to `xdg_wm_base.ping`; surfaces `wl_display.error`.
+Host binds (clamped): compositor, shm, `xdg_wm_base`, `wl_seat` ≤ v5 (pointer +
+keyboard forwarded into worldr). Still skipped: output, viewporter, dmabuf,
+cursor-shape.
 
-PR #3 on abox failed immediately with
-`invalid arguments for wl_registry#2.bind` then the broken-pipe note. That
-is the root cause to re-test.
+**Success:** window titled `worldr-shell (nested compositor)` + `foot` visible
+inside it with SSD.
 
-**Success:** a 1280×720 (or configured) window titled `worldr-shell (nested debug)`
-on the Plasma desktop.
-
-**If it still dies:** the process log should name the protocol error. Workaround:
-leave the desktop on its VT and run the real compositor on **tty2**:
+**If the host window dies:** paste `wayland-client: global/bind` lines.
+Workaround — real display on **tty2**:
 
 ```sh
 # Ctrl+Alt+F2, login, then:
@@ -259,6 +272,7 @@ export XDG_RUNTIME_DIR=/run/user/$(id -u)
 - No zero-copy GPU composite (import is readback)
 - SSD is a colored frame + title hit region
 - Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)
-- Pointer/keyboard via evdev (`input` group); keymap is a tiny US map
+- Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY
+- Pointer/keyboard keymap sent to clients is a tiny US map
 - No fractional scaling, `xdg-toplevel-icon`, or IME (`zwp_text_input`)
 - Compiz effects and UI toolkit still deferred
