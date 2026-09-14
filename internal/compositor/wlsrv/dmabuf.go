@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"github.com/codemodify/worldr/internal/wayland"
@@ -21,6 +22,13 @@ const (
 )
 
 const linuxDmabufVersion = 4
+
+func linuxDmabufAdvertiseVersion() uint32 {
+	if _, ok := drmDeviceID(); ok {
+		return linuxDmabufVersion
+	}
+	return 3 // no feedback; Xwayland 23 SEGVs on a zero main_device
+}
 
 type dmaPlane struct {
 	fd     int
@@ -60,6 +68,27 @@ func (c *Client) advertiseLinuxDmabuf(id uint32) error {
 		}
 	}
 	return nil
+}
+
+func drmDeviceID() ([]byte, bool) {
+	matches, _ := filepath.Glob("/dev/dri/card*")
+	if len(matches) == 0 {
+		matches, _ = filepath.Glob("/dev/dri/renderD*")
+	}
+	for _, p := range matches {
+		st, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		sys, ok := st.Sys().(*syscall.Stat_t)
+		if !ok || sys.Rdev == 0 {
+			continue
+		}
+		dev := make([]byte, 8)
+		binary.LittleEndian.PutUint64(dev, uint64(sys.Rdev))
+		return dev, true
+	}
+	return nil, false
 }
 
 func (c *Client) sendDmabufFeedback(id uint32) error {
@@ -110,11 +139,10 @@ func (c *Client) sendDmabufFeedback(id uint32) error {
 	}
 	_ = syscall.Close(fd) // already sent
 
-	dev := make([]byte, 8)
-	if st, err := os.Stat("/dev/dri/card0"); err == nil {
-		if sys, ok := st.Sys().(*syscall.Stat_t); ok {
-			binary.LittleEndian.PutUint64(dev, uint64(sys.Rdev))
-		}
+	dev, ok := drmDeviceID()
+	if !ok {
+		// Zero main_device makes Xwayland 23 crash ("Failed to fetch DRM device").
+		return nil
 	}
 	// main_device
 	if err := c.send(id, 2, wayland.PutArray(nil, dev), nil); err != nil {

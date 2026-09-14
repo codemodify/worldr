@@ -27,10 +27,10 @@ tryable `worldr-shell`.
 ## Near-term build order
 
 0. Scaffold (docs, license, module layout) — done
-1. DRM/KMS + Vulkan clear-to-screen in Go — **this branch**
-2. Minimal Wayland server (surface → textured window actor) — **this branch**
-3. SSD borders + input/focus — **this branch** (simple chrome)
-4. XWayland
+1. DRM/KMS + Vulkan clear-to-screen in Go — done
+2. Minimal Wayland server (surface → textured window actor) — done
+3. SSD borders + input/focus — done (simple chrome)
+4. XWayland — **this branch** (`--xwayland`, tiny XWM + `xwayland_shell_v1`)
 5. Compiz-style effect graph
 6. Revisit UI toolkit
 
@@ -155,7 +155,8 @@ actors + SSD → upload (`vkCmdCopyBufferToImage`) or dumb-buffer memcpy.
 - Client-side decorations as the default chrome
 - Vendoring large dependency trees
 - macOS / Windows as first-class targets
-- XWayland and Compiz effect graph in this push
+- Compiz effect graph in this push
+- Full EWMH / ICCCM XWM (spike maps managed windows + `xwayland_shell_v1` serials)
 
 ## Vendor bring-up
 
