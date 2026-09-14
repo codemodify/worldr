@@ -20,6 +20,17 @@ const (
 	colTitleStripe uint32 = 0xff7cf0e8
 )
 
+// FrameColors is SSD chrome for focused vs idle windows (theater blit uses this).
+func FrameColors(focused bool) (frame, title uint32) {
+	if focused {
+		return colFrameFocus, colTitleFocus
+	}
+	return colFrame, colTitle
+}
+
+// TitleStripe is the thin highlight on the title bar.
+func TitleStripe() uint32 { return colTitleStripe }
+
 // Insets around the client surface (left, right, top, bottom).
 func Insets() (l, r, t, b int) {
 	return Border, Border, TitleH, Border
@@ -30,12 +41,7 @@ func Draw(dst []byte, stride, dW, dH int, a *engine.Actor) {
 	if a == nil {
 		return
 	}
-	frame := colFrame
-	title := colTitle
-	if a.Focused {
-		frame = colFrameFocus
-		title = colTitleFocus
-	}
+	frame, title := FrameColors(a.Focused)
 	x0 := a.X - Border
 	y0 := a.Y - TitleH
 	x1 := a.X + a.Width + Border

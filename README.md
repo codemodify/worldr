@@ -3,10 +3,10 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** XWayland spike on `feat/xwayland-spike` (stacked on nested compositor).
-Safe demo remains `--backend=wayland-client` + `foot`. Add `--xwayland` and run
-`DISPLAY=:N xeyes` / `xterm` so X11 windows appear as SSD actors in that window.
-Not a daily-driver desktop yet. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
+**Status:** window theater v0 on `feat/window-effects-v0` (stacked on XWayland).
+Safe demo remains `--backend=wayland-client` + `foot` — windows scale+fade on
+map/unmap. `--effects=off` disables. `--xwayland` + `DISPLAY=:N xeyes` is
+optional. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
 ## Quick links
 
@@ -21,7 +21,7 @@ Not a daily-driver desktop yet. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 2. Minimal Wayland server (surface → window actor) (**this branch**)
 3. SSD borders + pointer focus (**this branch**, simple)
 4. XWayland — spike (`--xwayland`, rootless Xwayland + tiny XWM → actors)
-5. Compiz-style effect graph — not started
+5. Compiz-style theater v0 — map/unmap scale+fade (`--effects`)
 6. Revisit UI toolkit — deferred
 
 ## Build
@@ -38,6 +38,7 @@ Safe nested compositor (existing Wayland session — recommended first try):
 
 ```sh
 ./bin/worldr-shell --backend=wayland-client --duration=30s
+# window theater on (default). --effects=off to disable.
 # other terminal:
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 export WAYLAND_DISPLAY=wayland-1   # use the name the shell printed

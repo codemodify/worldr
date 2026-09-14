@@ -1,6 +1,7 @@
 package xwayland
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,6 +61,16 @@ func TestStartFakeXwayland(t *testing.T) {
 	case <-done:
 	case <-time.After(3 * time.Second):
 		t.Fatal("Close hung")
+	}
+}
+
+func TestPickFreeXDisplaySkipsBusy(t *testing.T) {
+	n := pickFreeXDisplay()
+	if n < 1 || n > 63 {
+		t.Fatalf("display %d", n)
+	}
+	if _, err := os.Stat(fmt.Sprintf("/tmp/.X11-unix/X%d", n)); !os.IsNotExist(err) {
+		t.Fatalf("picked busy :%d: %v", n, err)
 	}
 }
 
