@@ -89,15 +89,17 @@ A 1280×720 (or `--width`/`--height`) window titled `worldr-shell (nested debug)
 should fill with the cinematic clear color (`--color=#0b1020`). This uses
 **wl_shm**, not Vulkan WSI. It is **not** the compositor path.
 
-The nested client waits for a real `xdg_surface.configure` before the first
-attach, double-buffers shm (never reuses a busy `wl_buffer`), and pongs
-`xdg_wm_base.ping`. That is what KWin/Plasma require; the earlier
-`write unix @: sendmsg: broken pipe` was the host closing the socket after a
-protocol error.
+The nested client collects `wl_registry.global` events, then binds **only**
+`wl_compositor`, `wl_shm`, and `xdg_wm_base` at `min(our_max, advertised)`
+(never version 0, never above what KWin advertised). Each advertise/bind is
+logged on stderr as `wayland-client: global …` / `wayland-client: bind …`.
+It then waits for a real `xdg_surface.configure` before the first attach,
+double-buffers shm, and pongs `xdg_wm_base.ping`.
 
-If Plasma/KWin still drops the window, the log should now include the host
-`wl_display.error` (if any) plus this workaround: **do not nest** — use a spare
-TTY (`--backend=vk-display --duration=15s`) for the real compositor path.
+abox on PR #3 hit `wl_display.error … invalid arguments for wl_registry#2.bind`
+then a broken pipe — that is a bad `wl_registry.bind`, not random I/O. If
+Plasma/KWin still drops the window, paste those `wayland-client:` lines.
+Workaround: **do not nest** — spare TTY `--backend=vk-display --duration=15s`.
 
 Fullscreen nested (still inside your compositor):
 
@@ -222,10 +224,19 @@ random I/O flake.
 
 This branch:
 
-1. Waits for a **real** `xdg_surface.configure` (never fakes serial `1`).
-2. Acks that serial in the **same commit** as the first buffer attach.
-3. Double-buffers shm and skips a frame instead of attaching a busy buffer.
-4. Always replies to `xdg_wm_base.ping`; surfaces `wl_display.error`.
+1. Collects registry globals, then binds only compositor/shm/`xdg_wm_base` at
+   `min(our_max, advertised)` — never v0, never above advertised. Logs each
+   `wayland-client: global` / `bind` (name, iface, advertised vs requested).
+2. Does **not** bind `wl_seat`, `wl_output`, viewporter, linux-dmabuf, or
+   cursor-shape on the nested path (those were common too-high/v0 traps).
+3. Waits for a **real** `xdg_surface.configure` (never fakes serial `1`).
+4. Acks that serial in the **same commit** as the first buffer attach.
+5. Double-buffers shm and skips a frame instead of attaching a busy buffer.
+6. Always replies to `xdg_wm_base.ping`; surfaces `wl_display.error`.
+
+PR #3 on abox failed immediately with
+`invalid arguments for wl_registry#2.bind` then the broken-pipe note. That
+is the root cause to re-test.
 
 **Success:** a 1280×720 (or configured) window titled `worldr-shell (nested debug)`
 on the Plasma desktop.
