@@ -64,7 +64,7 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 git clone https://github.com/codemodify/worldr.git
 cd worldr
 # this branch:
-git checkout cursor/phase0-scaffold-eeef
+git checkout feat/linux-dmabuf-and-clients
 
 export CGO_ENABLED=1
 make build
@@ -135,11 +135,14 @@ wayland compositor: WAYLAND_DISPLAY=wayland-1
 ```sh
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 export WAYLAND_DISPLAY=wayland-1
-weston-simple-shm
-# or: weston-terminal   (may need more protocol than we implement)
+weston-simple-shm          # shm path (always)
+foot                       # expected: shm + seat/keyboard + SSD
+kitty                      # GPU path: linux-dmabuf import (needs Vulkan on the shell)
 ```
 
 A client surface should appear as a window actor with a cyan/magenta SSD frame.
+`linux-dmabuf` is advertised (LINEAR + common Intel modifiers). Tiled GPU buffers
+are imported via Vulkan and read back into the same SSD/composite path as shm.
 
 6. Switch back to your desktop VT (often **Ctrl+Alt+F1** or F7) after the
    process exits.
@@ -182,14 +185,27 @@ Vulkan and DRM are a **thin owned C wrapper** (`internal/platform/linux/native`)
 linked against `libvulkan` and `libdrm`. Generated no-cgo bindings
 (`lukem570/vulkan-go`) omit `VK_KHR_display`. wgpu is not used.
 
-## Known gaps (Phase 2–3)
+## Client matrix (abox expectations)
 
-- No XWayland
-- No `linux-dmabuf` (clients using only DMA-BUF will not show; shm works)
-- No `xdg_popup` / subsurface stacking beyond “one buffer per toplevel”
-- No xkb keymap (keyboard object exists; Esc/Q are evdev-side quit only)
-- No clipboard / data device
-- No GPU texture sampling (CPU blit → upload/present)
-- SSD is a colored frame + title hit region, not a toolkit
-- Pointer focus is evdev-relative; many boxes need `input` group
-- Fancy Compiz effects are not implemented
+| Client | Buffer | Expected now | Notes |
+| --- | --- | --- | --- |
+| `weston-simple-shm` | wl_shm | **Works** | First smoke test |
+| `foot` | wl_shm | **Likely** | Needs seat + xkb keymap (we send a minimal US map) + xdg_decoration SSD |
+| `kitty` | linux-dmabuf (GL) | **Try** | GPU path: Vulkan import + CPU readback. Needs `linux-dmabuf: Vulkan import` in the shell log. LINEAR mmap fallback if the buffer is linear. |
+| `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
+| `firefox` | dmabuf + gtk extras | **Unlikely** | Needs clipboard, popups, subsurfaces, idle-inhibit, etc. |
+| X11 apps | XWayland | **No** | Next after dmabuf hardening — not hooked up |
+
+GPU-accelerated path: client dmabuf → `VK_EXT_external_memory_dma_buf` import → copy to linear host image → actor pixels → existing SSD + focus + present. shm remains the fallback.
+
+Start `kitty` only after the shell prints `linux-dmabuf: Vulkan import + readback enabled`.
+
+## Known gaps
+
+- No XWayland (next after this if you want legacy X11 apps)
+- No `xdg_popup` / real subsurface stacking
+- No clipboard (data device is a stub so binds succeed)
+- No zero-copy GPU composite (import is readback)
+- SSD is a colored frame + title hit region
+- Pointer/keyboard via evdev (`input` group); keymap is a tiny US map
+- Compiz effects and UI toolkit still deferred

@@ -63,7 +63,14 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 
 	var srv *compositor.Server
 	if opt.Compositor && p.name != string(BackendWaylandClient) {
-		s, err := compositor.Listen(opt.WaylandDisplay, scene, int(w), int(h))
+		var imp compositor.DMABufImport
+		if p.vk != nil && p.vk.HasDMABuf() {
+			imp = vkDMABuf{p.vk}
+			fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + readback enabled (shm remains fallback)")
+		} else {
+			fmt.Fprintln(stdout, "linux-dmabuf: advertised; LINEAR mmap works, tiled GPU buffers need Vulkan import (unavailable on this device)")
+		}
+		s, err := compositor.Listen(opt.WaylandDisplay, scene, int(w), int(h), imp)
 		if err != nil {
 			fmt.Fprintf(stderr, "compositor listen failed (continuing as clear-only): %v\n", err)
 		} else {
@@ -108,6 +115,11 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		if ptr.Quit {
 			fmt.Fprintln(stdout, "quit key")
 			return nil
+		}
+		if srv != nil {
+			for _, k := range ptr.Keys {
+				srv.KeyboardKey(k.Code, k.Pressed)
+			}
 		}
 		if ptr.Click {
 			a := scene.FocusAt(ptr.X, ptr.Y, decorations.TitleH, decorations.Border)
@@ -213,6 +225,16 @@ func (p *presenter) upload(bgra []byte, stride uint32) error {
 	}
 }
 
+type vkDMABuf struct{ *native.VK }
+
+func (v vkDMABuf) ImportDMABuf(width, height, fourcc uint32, modifier uint64, planes []compositor.DMABufPlane) ([]byte, int, error) {
+	np := make([]native.DMABufPlane, len(planes))
+	for i, p := range planes {
+		np[i] = native.DMABufPlane{FD: p.FD, Offset: p.Offset, Stride: p.Stride}
+	}
+	return v.VK.ImportDMABuf(width, height, fourcc, modifier, np)
+}
+
 func openPresent(stdout, stderr io.Writer, opt Options) (*presenter, error) {
 	order := []Backend{opt.Backend}
 	if opt.Backend == BackendAuto {
@@ -235,11 +257,19 @@ func openPresent(stdout, stderr io.Writer, opt Options) (*presenter, error) {
 		if err == nil {
 			return p, nil
 		}
-		fmt.Fprintf(stderr, "backend %s: %v\n", b, err)
+		switch b {
+		case BackendVKDisplay:
+			err = hintVKDisplay(err)
+		case BackendWaylandClient:
+			err = hintWaylandClient(err)
+		case BackendDRM:
+			err = hintDRM(err)
+		}
 		errs = append(errs, fmt.Errorf("%s: %w", b, err))
 		if opt.Backend != BackendAuto {
 			return nil, err
 		}
+		fmt.Fprintf(stderr, "backend %s: %v\n", b, err)
 	}
 	return nil, fmt.Errorf("no present backend worked: %v", errs)
 }

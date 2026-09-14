@@ -20,13 +20,14 @@ type Server struct {
 	Scene       *engine.Scene
 	ScreenW     int
 	ScreenH     int
+	Import      DMABufImport
 	mu          sync.Mutex
 	clients     []*Client
 	log         *log.Logger
 }
 
 // Listen opens $XDG_RUNTIME_DIR/<name>. Empty name → first free wayland-N (from 1).
-func Listen(name string, scene *engine.Scene, screenW, screenH int) (*Server, error) {
+func Listen(name string, scene *engine.Scene, screenW, screenH int, imp DMABufImport) (*Server, error) {
 	dir, err := runtimeDir()
 	if err != nil {
 		return nil, err
@@ -62,6 +63,7 @@ func Listen(name string, scene *engine.Scene, screenW, screenH int) (*Server, er
 		Scene:       scene,
 		ScreenW:     screenW,
 		ScreenH:     screenH,
+		Import:      imp,
 		log:         log.New(os.Stderr, "wlsrv: ", 0),
 	}
 	go s.acceptLoop()
@@ -154,5 +156,15 @@ func (s *Server) PointerMotion(sx, sy int) {
 	s.mu.Unlock()
 	for _, c := range cl {
 		c.pointerMotion(sx, sy)
+	}
+}
+
+// KeyboardKey delivers an evdev key to every client (focused surface filters inside).
+func (s *Server) KeyboardKey(code uint32, pressed bool) {
+	s.mu.Lock()
+	cl := append([]*Client(nil), s.clients...)
+	s.mu.Unlock()
+	for _, c := range cl {
+		c.KeyboardKey(code, pressed)
 	}
 }

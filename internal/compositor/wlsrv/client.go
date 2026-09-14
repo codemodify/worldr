@@ -16,6 +16,11 @@ const (
 	globalXdgWm      uint32 = 3
 	globalSeat       uint32 = 4
 	globalOutput     uint32 = 5
+	globalDmabuf     uint32 = 6
+	globalDeco       uint32 = 7
+	globalViewporter uint32 = 8
+	globalDataDev    uint32 = 9
+	globalSubcomp    uint32 = 10
 )
 
 type objectKind int
@@ -40,6 +45,15 @@ const (
 	kindDataDeviceManager
 	kindDataDevice
 	kindPositioner
+	kindDmaParams
+	kindDmaFeedback
+	kindDecoMgr
+	kindDeco
+	kindViewporter
+	kindViewport
+	kindSubcomp
+	kindSubsurface
+	kindLinuxDmabuf
 )
 
 type object struct {
@@ -50,6 +64,7 @@ type object struct {
 	surf *surface
 	xdgS *xdgSurface
 	xdgT *xdgToplevel
+	dma  *dmaBuf
 }
 
 type shmPool struct {
@@ -68,11 +83,13 @@ type shmBuffer struct {
 
 type surface struct {
 	id       uint32
-	pending  *shmBuffer
-	attached *shmBuffer
+	pending  *object
+	attached *object
 	actor    *engine.Actor
 	xdg      *xdgSurface
 	sx, sy   int32
+	destW    int
+	destH    int
 }
 
 type xdgSurface struct {
@@ -93,17 +110,19 @@ type xdgToplevel struct {
 
 // Client is one Wayland connection.
 type Client struct {
-	srv     *Server
-	conn    *net.UnixConn
-	rd      *wayland.Reader
-	wr      *wayland.Writer
-	objs    map[uint32]*object
-	serial  uint32
-	ptrID   uint32
-	kbdID   uint32
-	ptrX    int
-	ptrY    int
-	entered uint32
+	srv      *Server
+	conn     *net.UnixConn
+	rd       *wayland.Reader
+	wr       *wayland.Writer
+	objs     map[uint32]*object
+	serial   uint32
+	ptrID    uint32
+	kbdID    uint32
+	ptrX     int
+	ptrY     int
+	entered  uint32
+	kbdSurf  uint32
+	serverID uint32
 }
 
 func newClient(s *Server, conn *net.UnixConn) *Client {
@@ -216,7 +235,32 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqXdgToplevel(o, msg.Opcode, cur)
 	case kindSeat:
 		return c.reqSeat(o, msg.Opcode, cur)
-	case kindPointer, kindKeyboard, kindOutput, kindDataDeviceManager, kindDataDevice, kindPositioner, kindCallback:
+	case kindLinuxDmabuf:
+		return c.reqLinuxDmabuf(o, msg.Opcode, cur)
+	case kindDmaParams:
+		return c.reqDmaParams(o, msg.Opcode, cur)
+	case kindDecoMgr:
+		return c.reqDecoMgr(o, msg.Opcode, cur)
+	case kindDeco:
+		return c.reqDeco(o, msg.Opcode, cur)
+	case kindViewporter:
+		return c.reqViewporter(o, msg.Opcode, cur)
+	case kindViewport:
+		return c.reqViewport(o, msg.Opcode, cur)
+	case kindSubcomp:
+		id, err := cur.U32()
+		if err == nil {
+			c.objs[id] = &object{id: id, kind: kindSubsurface}
+		}
+		return nil
+	case kindDataDeviceManager:
+		id, err := cur.U32()
+		if err != nil {
+			return nil
+		}
+		c.objs[id] = &object{id: id, kind: kindDataDevice}
+		return nil
+	case kindPointer, kindKeyboard, kindOutput, kindDataDevice, kindPositioner, kindCallback, kindDmaFeedback, kindSubsurface:
 		return nil
 	default:
 		return nil
@@ -250,11 +294,16 @@ func (c *Client) advertise(reg uint32) error {
 		ver   uint32
 	}
 	globals := []g{
-		{globalCompositor, "wl_compositor", 4},
+		{globalCompositor, "wl_compositor", 6},
 		{globalShm, "wl_shm", 1},
-		{globalXdgWm, "xdg_wm_base", 3},
-		{globalSeat, "wl_seat", 7},
-		{globalOutput, "wl_output", 3},
+		{globalXdgWm, "xdg_wm_base", 5},
+		{globalSeat, "wl_seat", 8},
+		{globalOutput, "wl_output", 4},
+		{globalDmabuf, "zwp_linux_dmabuf_v1", linuxDmabufVersion},
+		{globalDeco, "zxdg_decoration_manager_v1", 1},
+		{globalViewporter, "wp_viewporter", 1},
+		{globalDataDev, "wl_data_device_manager", 3},
+		{globalSubcomp, "wl_subcompositor", 1},
 	}
 	for _, gl := range globals {
 		p := wayland.PutU32(nil, gl.name)
@@ -300,6 +349,8 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 		return nil
 	case globalXdgWm:
 		o.kind = kindXdgWm
+		c.objs[id] = o
+		return c.send(id, 0, wayland.PutU32(nil, c.nextSerial()), nil) // ping
 	case globalSeat:
 		o.kind = kindSeat
 		c.objs[id] = o
@@ -310,6 +361,18 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 		o.kind = kindOutput
 		c.objs[id] = o
 		return c.sendOutput(id)
+	case globalDmabuf:
+		o.kind = kindLinuxDmabuf
+		c.objs[id] = o
+		return c.advertiseLinuxDmabuf(id)
+	case globalDeco:
+		o.kind = kindDecoMgr
+	case globalViewporter:
+		o.kind = kindViewporter
+	case globalDataDev:
+		o.kind = kindDataDeviceManager
+	case globalSubcomp:
+		o.kind = kindSubcomp
 	default:
 		switch iface {
 		case "wl_data_device_manager":
@@ -462,7 +525,7 @@ func (c *Client) reqSurface(o *object, op uint16, cur *wayland.Cursor) error {
 			break
 		}
 		if b := c.objs[bufID]; b != nil {
-			s.pending = b.buf
+			s.pending = b
 		}
 	case 3: // frame
 		id, err := cur.U32()
@@ -484,42 +547,57 @@ func (c *Client) commit(s *surface) {
 	if s.pending != nil {
 		s.attached = s.pending
 	}
+	if s.attached != nil && s.attached.dma != nil {
+		if err := c.resolveDma(s.attached.dma); err != nil {
+			c.srv.log.Printf("dmabuf resolve: %v", err)
+		}
+	}
 	if s.xdg != nil && s.xdg.top != nil && s.attached != nil && s.xdg.acked != 0 {
 		c.mapSurface(s)
 	}
 }
 
 func (c *Client) mapSurface(s *surface) {
-	b := s.attached
-	if b == nil || b.pool == nil || b.pool.mem == nil {
+	o := s.attached
+	if o == nil {
 		return
 	}
-	need := b.offset + b.stride*b.h
-	if need > len(b.pool.mem) {
+	var pix []byte
+	var w, h, stride int
+	switch {
+	case o.buf != nil && o.buf.pool != nil && o.buf.pool.mem != nil:
+		b := o.buf
+		need := b.offset + b.stride*b.h
+		if need > len(b.pool.mem) {
+			return
+		}
+		pix = make([]byte, b.stride*b.h)
+		copy(pix, b.pool.mem[b.offset:need])
+		w, h, stride = b.w, b.h, b.stride
+	case o.dma != nil && len(o.dma.pixels) > 0:
+		d := o.dma
+		pix = d.pixels
+		w, h, stride = d.w, d.h, d.stride
+	default:
 		return
 	}
-	pix := make([]byte, b.stride*b.h)
-	copy(pix, b.pool.mem[b.offset:need])
+	if s.destW > 0 && s.destH > 0 {
+		w, h = s.destW, s.destH
+	}
 	if s.actor == nil {
 		s.actor = &engine.Actor{}
 		c.srv.Scene.PlaceNew(s.actor, c.srv.ScreenW, c.srv.ScreenH, 6, 26)
 		c.srv.Scene.Add(s.actor)
 	}
-	s.actor.Width = b.w
-	s.actor.Height = b.h
-	s.actor.Stride = b.stride
+	s.actor.Width = w
+	s.actor.Height = h
+	s.actor.Stride = stride
 	s.actor.Pixels = pix
 	if s.xdg != nil && s.xdg.top != nil {
 		s.actor.Title = s.xdg.top.title
 		s.actor.AppID = s.xdg.top.app
 	}
-	// release buffer
-	for id, o := range c.objs {
-		if o.buf == b {
-			_ = c.send(id, 0, nil, nil)
-			break
-		}
-	}
+	_ = c.send(o.id, 0, nil, nil) // wl_buffer.release
 }
 
 func (c *Client) reqXdgWm(_ *object, op uint16, cur *wayland.Cursor) error {
@@ -586,9 +664,27 @@ func (c *Client) configure(xs *xdgSurface) error {
 	if xs == nil || xs.top == nil {
 		return nil
 	}
-	w, h := 800, 600
-	// toplevel.configure w h states
-	p := wayland.PutI32(nil, int32(w))
+	w, h := c.srv.ScreenW*2/3, c.srv.ScreenH*2/3
+	if w < 800 {
+		w = 800
+	}
+	if h < 600 {
+		h = 600
+	}
+	// wm_capabilities (v5): window_menu=1 maximize=2 fullscreen=3 minimize=4
+	caps := wayland.PutU32(nil, 1)
+	caps = wayland.PutU32(caps, 2)
+	caps = wayland.PutU32(caps, 3)
+	caps = wayland.PutU32(caps, 4)
+	if err := c.send(xs.top.id, 3, wayland.PutArray(nil, caps), nil); err != nil {
+		return err
+	}
+	p := wayland.PutI32(nil, int32(c.srv.ScreenW))
+	p = wayland.PutI32(p, int32(c.srv.ScreenH))
+	if err := c.send(xs.top.id, 2, p, nil); err != nil { // configure_bounds
+		return err
+	}
+	p = wayland.PutI32(nil, int32(w))
 	p = wayland.PutI32(p, int32(h))
 	p = wayland.PutArray(p, nil)
 	if err := c.send(xs.top.id, 0, p, nil); err != nil {
@@ -639,6 +735,66 @@ func (c *Client) reqSeat(_ *object, op uint16, cur *wayland.Cursor) error {
 	case 1:
 		c.kbdID = id
 		c.objs[id] = &object{id: id, kind: kindKeyboard}
+		return c.sendKeymap(id)
+	case 2:
+		c.objs[id] = &object{id: id, kind: kindDataDevice} // get_touch ignored as dummy
+	}
+	return nil
+}
+
+func (c *Client) reqDecoMgr(_ *object, op uint16, cur *wayland.Cursor) error {
+	if op != 1 { // get_toplevel_decoration
+		return nil
+	}
+	id, err := cur.U32()
+	if err != nil {
+		return err
+	}
+	_, _ = cur.U32() // xdg_toplevel
+	c.objs[id] = &object{id: id, kind: kindDeco}
+	return c.send(id, 0, wayland.PutU32(nil, 2), nil) // server-side
+}
+
+func (c *Client) reqDeco(o *object, op uint16, cur *wayland.Cursor) error {
+	switch op {
+	case 0:
+		delete(c.objs, o.id)
+	case 1: // set_mode — we still force SSD
+		_ = c.send(o.id, 0, wayland.PutU32(nil, 2), nil)
+	}
+	return nil
+}
+
+func (c *Client) reqViewporter(_ *object, op uint16, cur *wayland.Cursor) error {
+	if op != 1 {
+		return nil
+	}
+	id, err := cur.U32()
+	if err != nil {
+		return err
+	}
+	sid, err := cur.U32()
+	if err != nil {
+		return err
+	}
+	c.objs[id] = &object{id: id, kind: kindViewport, surf: nil}
+	if so := c.objs[sid]; so != nil {
+		c.objs[id].surf = so.surf
+	}
+	return nil
+}
+
+func (c *Client) reqViewport(o *object, op uint16, cur *wayland.Cursor) error {
+	s := o.surf
+	switch op {
+	case 0:
+		delete(c.objs, o.id)
+	case 2: // set_destination
+		w, _ := cur.I32()
+		h, _ := cur.I32()
+		if s != nil {
+			s.destW, s.destH = int(w), int(h)
+		}
 	}
 	return nil
 }
@@ -687,6 +843,13 @@ func (c *Client) pointerMotion(sx, sy int) {
 		p = wayland.PutI32(p, int32(lx*256)) // wl_fixed
 		p = wayland.PutI32(p, int32(ly*256))
 		_ = c.send(c.ptrID, 0, p, nil) // enter
+		if c.kbdSurf != s.id {
+			if c.kbdSurf != 0 {
+				c.keyboardLeave(c.kbdSurf)
+			}
+			c.keyboardEnter(s)
+			c.kbdSurf = s.id
+		}
 		c.entered = s.id
 	}
 	p := wayland.PutU32(nil, uint32(time.Now().UnixMilli()))
