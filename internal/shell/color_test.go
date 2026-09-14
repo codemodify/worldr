@@ -46,6 +46,16 @@ func TestCheckTakeoverVKDisplayRefusesSession(t *testing.T) {
 	}
 }
 
+func TestParseXWaylandFlag(t *testing.T) {
+	o, err := ParseFlags([]string{"-xwayland", "-backend=nested"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !o.XWayland || o.Backend != BackendNested {
+		t.Fatalf("%+v", o)
+	}
+}
+
 func TestParseBackendNested(t *testing.T) {
 	o, err := ParseFlags([]string{"-backend=nested", "-width=800", "-height=600"})
 	if err != nil {
