@@ -41,14 +41,17 @@ func TestDisplaySocketMissing(t *testing.T) {
 }
 
 func TestBindVersionCaps(t *testing.T) {
-	if v := bindVersion("wl_compositor", 10); v != 6 {
-		t.Fatalf("compositor %d", v)
+	v, ok := clampBindVersion("wl_compositor", 10)
+	if !ok || v != 6 {
+		t.Fatalf("compositor %d %v", v, ok)
 	}
-	if v := bindVersion("xdg_wm_base", 3); v != 3 {
-		t.Fatalf("xdg %d", v)
+	v, ok = clampBindVersion("xdg_wm_base", 3)
+	if !ok || v != 3 {
+		t.Fatalf("xdg %d %v", v, ok)
 	}
-	if v := bindVersion("wl_shm", 1); v != 1 {
-		t.Fatalf("shm %d", v)
+	v, ok = clampBindVersion("wl_shm", 1)
+	if !ok || v != 1 {
+		t.Fatalf("shm %d %v", v, ok)
 	}
 }
 

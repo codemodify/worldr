@@ -166,6 +166,9 @@ func (c *Cursor) I32() (int32, error) {
 	return int32(u), err
 }
 
+// Remaining is unread payload bytes (0 after a well-formed argument list).
+func (c *Cursor) Remaining() int { return len(c.p) }
+
 func (c *Cursor) String() (string, error) {
 	n, err := c.U32()
 	if err != nil {
