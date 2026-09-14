@@ -19,6 +19,18 @@ func TestEncodeDecodeHeader(t *testing.T) {
 	}
 }
 
+func TestCursorRemaining(t *testing.T) {
+	p := PutU32(nil, 9)
+	c := NewCursor(p, nil)
+	if c.Remaining() != 4 {
+		t.Fatalf("before %d", c.Remaining())
+	}
+	_, _ = c.U32()
+	if c.Remaining() != 0 {
+		t.Fatalf("after %d", c.Remaining())
+	}
+}
+
 func TestTakeFDOrder(t *testing.T) {
 	r := &Reader{fds: []int{11, 22}}
 	a, err := r.TakeFD()

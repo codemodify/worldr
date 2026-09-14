@@ -38,9 +38,10 @@ func hintWaylandClient(err error) error {
 	b.WriteString("\n  • WAYLAND_DISPLAY and XDG_RUNTIME_DIR must be set (Hyprland/Sway/GNOME export them).")
 	b.WriteString("\n  • Socket is $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY — connection refused means the compositor is gone.")
 	b.WriteString("\n  • Host must advertise xdg_wm_base + wl_shm + wl_compositor.")
+	b.WriteString("\n  • We bind only compositor/shm/xdg_wm_base at min(our_max, advertised); logs are `wayland-client: bind …`.")
 	b.WriteString("\n  • We wait for a real xdg_surface.configure, double-buffer shm, and pong xdg_wm_base.ping.")
-	b.WriteString("\n  • If KWin/Plasma still closes the socket (broken pipe / sendmsg): protocol error on the host side.")
-	b.WriteString("\n    Workaround: spare TTY `--backend=vk-display --duration=15s` — do not nest on the desktop.")
+	b.WriteString("\n  • If KWin/Plasma still closes the socket: usually `invalid arguments for wl_registry.bind` (bad version/name).")
+	b.WriteString("\n    Paste the wayland-client: global/bind lines. Workaround: spare TTY `--backend=vk-display --duration=15s`.")
 	b.WriteString("\n  • For a real display path use a spare TTY: --backend=vk-display --duration=15s")
 	if os.Getenv("WAYLAND_DISPLAY") == "" {
 		b.WriteString("\n  • WAYLAND_DISPLAY is empty in this environment.")

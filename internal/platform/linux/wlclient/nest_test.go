@@ -43,6 +43,15 @@ func TestNestedClientAgainstWorldr(t *testing.T) {
 	}
 	defer win.Close()
 
+	// worldr advertises wl_compositor v6, wl_shm v1, xdg_wm_base v5
+	cv, sv, xv := win.BoundVersions()
+	if cv == 0 || sv == 0 || xv == 0 {
+		t.Fatalf("missing binds compositor=%d shm=%d xdg=%d", cv, sv, xv)
+	}
+	if cv > 6 || sv > 1 || xv > 5 {
+		t.Fatalf("bound above advertised compositor=%d shm=%d xdg=%d", cv, sv, xv)
+	}
+
 	cw, ch, stride := win.Size()
 	if cw < 1 || ch < 1 || stride < cw*4 {
 		t.Fatalf("size %dx%d stride %d", cw, ch, stride)

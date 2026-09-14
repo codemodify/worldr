@@ -44,7 +44,7 @@ type Window struct {
 	nextID uint32
 
 	reg, comp, shm, xdg, surf, xdgS, top uint32
-	compVer                              uint32
+	compVer, shmVer, xdgVer              uint32
 
 	configured bool
 	needAck    bool
@@ -139,38 +139,19 @@ func (w *Window) setup(title string, fullscreen bool) error {
 	if err := w.send(1, 1, wayland.PutU32(nil, w.reg), nil); err != nil { // get_registry
 		return err
 	}
-	cb := w.alloc()
-	if err := w.send(1, 0, wayland.PutU32(nil, cb), nil); err != nil {
+	globals, err := w.roundtripCollect()
+	if err != nil {
 		return err
 	}
-	deadline := time.Now().Add(3 * time.Second)
-	var bound bool
-	for time.Now().Before(deadline) {
-		_ = w.conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-		msg, err := w.rd.Next()
-		if err != nil {
-			if err == io.EOF {
-				return wrapHostClose(err)
-			}
-			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				continue
-			}
-			return wrapHostClose(err)
-		}
-		if err := w.handle(msg); err != nil {
-			return err
-		}
-		if msg.Object == w.reg && msg.Opcode == 0 {
-			if err := w.bindGlobal(msg); err != nil {
-				return err
-			}
-		}
-		if msg.Object == cb && msg.Opcode == 0 {
-			bound = true
-			break
-		}
+	if err := w.bindNeeded(globals); err != nil {
+		return err
 	}
-	if !bound || w.comp == 0 || w.shm == 0 || w.xdg == 0 {
+	// Flush host errors (invalid bind shows up as wl_display.error) before
+	// creating surfaces — otherwise the next write is a broken pipe.
+	if err := w.roundtrip(); err != nil {
+		return err
+	}
+	if w.comp == 0 || w.shm == 0 || w.xdg == 0 {
 		return fmt.Errorf("nested compositor missing wl_compositor/wl_shm/xdg_wm_base")
 	}
 
@@ -201,7 +182,7 @@ func (w *Window) setup(title string, fullscreen bool) error {
 	if err := w.send(w.surf, 6, nil, nil); err != nil {
 		return err
 	}
-	deadline = time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	_ = w.conn.SetReadDeadline(deadline)
 	for !w.configured && time.Now().Before(deadline) {
 		msg, err := w.rd.Next()
@@ -214,9 +195,6 @@ func (w *Window) setup(title string, fullscreen bool) error {
 		if err := w.handle(msg); err != nil {
 			return err
 		}
-		if msg.Object == w.reg && msg.Opcode == 0 {
-			_ = w.bindGlobal(msg)
-		}
 	}
 	_ = w.conn.SetReadDeadline(time.Time{})
 	if !w.configured {
@@ -228,51 +206,118 @@ func (w *Window) setup(title string, fullscreen bool) error {
 	return w.allocSHM()
 }
 
-func bindVersion(iface string, advertised uint32) uint32 {
-	var max uint32
-	switch iface {
-	case ifaceCompositor:
-		max = 6
-	case ifaceShm:
-		max = 2
-	case ifaceXdg:
-		max = 6
-	default:
-		max = advertised
+func (w *Window) roundtripCollect() ([]registryGlobal, error) {
+	var globals []registryGlobal
+	cb := w.alloc()
+	if err := w.send(1, 0, wayland.PutU32(nil, cb), nil); err != nil {
+		return nil, err
 	}
-	if advertised == 0 {
-		return 1
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = w.conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		msg, err := w.rd.Next()
+		if err != nil {
+			if err == io.EOF {
+				return nil, wrapHostClose(err)
+			}
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				continue
+			}
+			return nil, wrapHostClose(err)
+		}
+		if err := w.handle(msg); err != nil {
+			return nil, err
+		}
+		if msg.Object == w.reg && msg.Opcode == 0 {
+			g, perr := parseRegistryGlobal(msg.Payload)
+			if perr != nil {
+				logClient("bad registry.global: %v", perr)
+				continue
+			}
+			logGlobal(g)
+			globals = append(globals, g)
+		}
+		if msg.Object == cb && msg.Opcode == 0 {
+			return globals, nil
+		}
 	}
-	if advertised < max {
-		return advertised
-	}
-	return max
+	return nil, fmt.Errorf("registry roundtrip timeout")
 }
 
-func (w *Window) bindGlobal(msg wayland.Message) error {
-	cur := wayland.NewCursor(msg.Payload, nil)
-	name, _ := cur.U32()
-	iface, _ := cur.String()
-	ver, _ := cur.U32()
-	ver = bindVersion(iface, ver)
-	id := w.alloc()
-	p := wayland.PutU32(nil, name)
-	p = wayland.PutString(p, iface)
-	p = wayland.PutU32(p, ver)
-	p = wayland.PutU32(p, id)
-	switch iface {
-	case ifaceCompositor:
-		w.comp = id
-		w.compVer = ver
-		return w.send(w.reg, 0, p, nil)
-	case ifaceShm:
-		w.shm = id
-		return w.send(w.reg, 0, p, nil)
-	case ifaceXdg:
-		w.xdg = id
-		return w.send(w.reg, 0, p, nil)
+func (w *Window) roundtrip() error {
+	cb := w.alloc()
+	if err := w.send(1, 0, wayland.PutU32(nil, cb), nil); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = w.conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		msg, err := w.rd.Next()
+		if err != nil {
+			if err == io.EOF {
+				return wrapHostClose(err)
+			}
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				continue
+			}
+			return wrapHostClose(err)
+		}
+		if err := w.handle(msg); err != nil {
+			return err
+		}
+		if msg.Object == cb && msg.Opcode == 0 {
+			return nil
+		}
+	}
+	return fmt.Errorf("display.sync roundtrip timeout")
+}
+
+func (w *Window) bindNeeded(globals []registryGlobal) error {
+	seen := map[string]bool{}
+	for _, g := range globals {
+		req, ok := clampBindVersion(g.iface, g.advertised)
+		if !ok {
+			continue
+		}
+		if seen[g.iface] {
+			logClient("skip extra global name=%d iface=%s advertised=%d (already bound)", g.name, g.iface, g.advertised)
+			continue
+		}
+		if err := w.bindOne(g, req); err != nil {
+			return err
+		}
+		seen[g.iface] = true
 	}
 	return nil
+}
+
+func (w *Window) bindOne(g registryGlobal, requested uint32) error {
+	id := w.alloc()
+	p, err := encodeRegistryBind(g.name, g.iface, requested, id)
+	if err != nil {
+		return err
+	}
+	logBind(g, requested, id)
+	if err := w.send(w.reg, 0, p, nil); err != nil {
+		return err
+	}
+	switch g.iface {
+	case ifaceCompositor:
+		w.comp = id
+		w.compVer = requested
+	case ifaceShm:
+		w.shm = id
+		w.shmVer = requested
+	case ifaceXdg:
+		w.xdg = id
+		w.xdgVer = requested
+	}
+	return nil
+}
+
+// BoundVersions reports the versions actually sent in wl_registry.bind.
+func (w *Window) BoundVersions() (compositor, shm, xdg uint32) {
+	return w.compVer, w.shmVer, w.xdgVer
 }
 
 func (w *Window) allocSHM() error {
@@ -555,5 +600,5 @@ func wrapHostClose(err error) error {
 	if !isBrokenPipe(err) && !errors.Is(err, io.EOF) && !strings.Contains(err.Error(), "wl_display.error") {
 		return err
 	}
-	return fmt.Errorf("%w\n\nKWin/Plasma nested-window note: the host compositor closed the socket. Usual causes are attaching a buffer before xdg_surface.configure or reusing a busy wl_buffer. worldr waits for configure, double-buffers shm, and replies to xdg_wm_base.ping. If this still happens, use a spare TTY: --backend=vk-display --duration=15s (do not nest on the desktop).", err)
+	return fmt.Errorf("%w\n\nKWin/Plasma nested-window note: the host compositor closed the socket. abox saw `invalid arguments for wl_registry#2.bind` — that is a bad bind (version 0, version above advertised, or interface/name mismatch), not a random I/O flake. worldr now collects globals, binds only wl_compositor/wl_shm/xdg_wm_base at min(our_max, advertised), and logs each advertise/bind on stderr. Also waits for xdg_surface.configure and double-buffers shm. If this still happens, paste the wayland-client: global/bind lines and use a spare TTY: --backend=vk-display --duration=15s.", err)
 }
