@@ -34,7 +34,8 @@ func hintWaylandClient(err error) error {
 	var b strings.Builder
 	b.WriteString(msg)
 	b.WriteString("\n\nIntel Mesa (abox) hints for --backend=wayland-client:")
-	b.WriteString("\n  • This is a nested debug window, not the compositor. You need an existing Wayland session.")
+	b.WriteString("\n  • Nested compositor: a host window plus a worldr socket. Run foot on the printed WAYLAND_DISPLAY.")
+	b.WriteString("\n  • You need an existing Wayland session (Plasma/KWin/Hyprland).")
 	b.WriteString("\n  • WAYLAND_DISPLAY and XDG_RUNTIME_DIR must be set (Hyprland/Sway/GNOME export them).")
 	b.WriteString("\n  • Socket is $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY — connection refused means the compositor is gone.")
 	b.WriteString("\n  • Host must advertise xdg_wm_base + wl_shm + wl_compositor.")
