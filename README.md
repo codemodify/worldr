@@ -3,36 +3,47 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** Phase 0 — license, locked decisions, Go module layout. No compositor or Vulkan implementation yet.
+**Status:** Phase 1–3 in progress on this branch — tryable `worldr-shell` (Vulkan
+`VK_KHR_display` / DRM/KMS clear, minimal Wayland seat, SSD chrome). Not a
+daily-driver desktop.
 
 ## Quick links
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — locked product decisions, layers, non-goals
+- [docs/RUN-ABOX.md](docs/RUN-ABOX.md) — **Arch + Intel (abox) build/run, TTY safety**
+- [ARCHITECTURE.md](ARCHITECTURE.md) — locked decisions, layers, binding choice
 - [LICENSE](LICENSE) — The Free License (TFL)
-- [cmd/worldr-shell](cmd/worldr-shell) — future compositor binary
-- [cmd/worldr-session](cmd/worldr-session) — future session manager
 
 ## Build order
 
-0. This scaffold
-1. DRM/KMS + Vulkan clear-to-screen in Go
-2. Minimal Wayland server (surface → textured window actor)
-3. SSD borders + input/focus
-4. XWayland
-5. Compiz-style effect graph
-6. Revisit UI toolkit
+0. Scaffold (done)
+1. DRM/KMS + Vulkan clear-to-screen in Go (**this branch**)
+2. Minimal Wayland server (surface → window actor) (**this branch**)
+3. SSD borders + pointer focus (**this branch**, simple)
+4. XWayland — not started
+5. Compiz-style effect graph — not started
+6. Revisit UI toolkit — deferred
 
 ## Build
 
-Requires Go 1.22 or later. Placeholder binaries print a version and exit.
+Go 1.22+, GCC, `libvulkan`, `libdrm` (CGO). On Arch see [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
 ```sh
+export CGO_ENABLED=1
 make build   # bin/worldr-shell, bin/worldr-session
 make test
-make fmt
 ```
 
-Or: `go build ./cmd/...`
+Safe nested try (existing Wayland session):
+
+```sh
+./bin/worldr-shell --backend=wayland-client --duration=20s
+```
+
+Spare TTY (real display — do not run this on top of your desktop without reading the safety notes):
+
+```sh
+./bin/worldr-shell --backend=vk-display --duration=15s
+```
 
 ## License
 

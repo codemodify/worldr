@@ -1,0 +1,77 @@
+package wlsrv
+
+import (
+	"net"
+	"testing"
+	"time"
+
+	"github.com/codemodify/worldr/internal/engine"
+	"github.com/codemodify/worldr/internal/wayland"
+)
+
+func TestAdvertiseGlobals(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	scene := engine.NewScene()
+	s, err := Listen("wayland-test", scene, 800, 600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	done := make(chan struct{})
+	go func() {
+		tck := time.NewTicker(time.Millisecond)
+		defer tck.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-tck.C:
+				s.Dispatch()
+			}
+		}
+	}()
+	defer close(done)
+
+	c, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: s.SocketPath, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	wr := wayland.NewWriter(c)
+	rd := wayland.NewReader(c)
+	if err := wr.Send(1, 1, wayland.PutU32(nil, 2), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := wr.Send(1, 0, wayland.PutU32(nil, 3), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var sawComp, sawXdg, sawDone bool
+	for time.Now().Before(deadline) && !sawDone {
+		_ = c.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		msg, err := rd.Next()
+		if err != nil {
+			continue
+		}
+		if msg.Object == 2 && msg.Opcode == 0 {
+			cur := wayland.NewCursor(msg.Payload, nil)
+			_, _ = cur.U32()
+			iface, _ := cur.String()
+			if iface == "wl_compositor" {
+				sawComp = true
+			}
+			if iface == "xdg_wm_base" {
+				sawXdg = true
+			}
+		}
+		if msg.Object == 3 && msg.Opcode == 0 {
+			sawDone = true
+		}
+	}
+	if !sawComp || !sawXdg || !sawDone {
+		t.Fatalf("globals compositor=%v xdg=%v done=%v", sawComp, sawXdg, sawDone)
+	}
+}
