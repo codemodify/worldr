@@ -21,6 +21,7 @@ const (
 	globalViewporter uint32 = 8
 	globalDataDev    uint32 = 9
 	globalSubcomp    uint32 = 10
+	// 11–13 are in extras.go (cursor shape, activation, primary selection)
 )
 
 type objectKind int
@@ -54,6 +55,13 @@ const (
 	kindSubcomp
 	kindSubsurface
 	kindLinuxDmabuf
+	kindCursorShapeMgr
+	kindCursorShape
+	kindActivation
+	kindActToken
+	kindPrimMgr
+	kindPrimDevice
+	kindPrimSource
 )
 
 type object struct {
@@ -204,6 +212,7 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return nil
 	}
 	cur := wayland.NewCursor(msg.Payload, msg.FDs)
+	cur.SetTakeFD(c.rd.TakeFD)
 	switch o.kind {
 	case kindDisplay:
 		return c.reqDisplay(o, msg.Opcode, cur)
@@ -260,7 +269,21 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		}
 		c.objs[id] = &object{id: id, kind: kindDataDevice}
 		return nil
-	case kindPointer, kindKeyboard, kindOutput, kindDataDevice, kindPositioner, kindCallback, kindDmaFeedback, kindSubsurface:
+	case kindPointer:
+		return c.reqPointer(o, msg.Opcode, cur)
+	case kindCursorShapeMgr:
+		return c.reqCursorShapeMgr(o, msg.Opcode, cur)
+	case kindCursorShape:
+		return c.reqCursorShape(o, msg.Opcode, cur)
+	case kindActivation:
+		return c.reqActivation(o, msg.Opcode, cur)
+	case kindActToken:
+		return c.reqActToken(o, msg.Opcode, cur)
+	case kindPrimMgr:
+		return c.reqPrimaryMgr(o, msg.Opcode, cur)
+	case kindPrimDevice:
+		return c.reqPrimDevice(o, msg.Opcode, cur)
+	case kindKeyboard, kindOutput, kindDataDevice, kindPositioner, kindCallback, kindDmaFeedback, kindSubsurface, kindPrimSource:
 		return nil
 	default:
 		return nil
@@ -304,6 +327,9 @@ func (c *Client) advertise(reg uint32) error {
 		{globalViewporter, "wp_viewporter", 1},
 		{globalDataDev, "wl_data_device_manager", 3},
 		{globalSubcomp, "wl_subcompositor", 1},
+		{globalCursorShape, "wp_cursor_shape_manager_v1", 1},
+		{globalActivation, "xdg_activation_v1", 1},
+		{globalPrimary, "zwp_primary_selection_device_manager_v1", 1},
 	}
 	for _, gl := range globals {
 		p := wayland.PutU32(nil, gl.name)
@@ -373,6 +399,12 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 		o.kind = kindDataDeviceManager
 	case globalSubcomp:
 		o.kind = kindSubcomp
+	case globalCursorShape:
+		o.kind = kindCursorShapeMgr
+	case globalActivation:
+		o.kind = kindActivation
+	case globalPrimary:
+		o.kind = kindPrimMgr
 	default:
 		switch iface {
 		case "wl_data_device_manager":
@@ -837,6 +869,7 @@ func (c *Client) pointerMotion(sx, sy int) {
 			p := wayland.PutU32(nil, c.nextSerial())
 			p = wayland.PutU32(p, c.entered)
 			_ = c.send(c.ptrID, 1, p, nil) // leave
+			c.pointerFrame()
 		}
 		p := wayland.PutU32(nil, c.nextSerial())
 		p = wayland.PutU32(p, s.id)
@@ -851,11 +884,20 @@ func (c *Client) pointerMotion(sx, sy int) {
 			c.kbdSurf = s.id
 		}
 		c.entered = s.id
+		c.pointerFrame()
 	}
 	p := wayland.PutU32(nil, uint32(time.Now().UnixMilli()))
 	p = wayland.PutI32(p, int32(lx*256))
 	p = wayland.PutI32(p, int32(ly*256))
 	_ = c.send(c.ptrID, 2, p, nil) // motion
+	c.pointerFrame()
+}
+
+func (c *Client) pointerFrame() {
+	if c.ptrID == 0 {
+		return
+	}
+	_ = c.send(c.ptrID, 5, nil, nil) // wl_pointer.frame (v5+)
 }
 
 func (c *Client) pointerButton(sx, sy int, pressed bool) {
@@ -872,4 +914,5 @@ func (c *Client) pointerButton(sx, sy int, pressed bool) {
 	p = wayland.PutU32(p, 0x110) // BTN_LEFT
 	p = wayland.PutU32(p, state)
 	_ = c.send(c.ptrID, 3, p, nil)
+	c.pointerFrame()
 }

@@ -70,15 +70,10 @@ func (r *Reader) Next() (Message, error) {
 				obj, op, _, _ := DecodeHeader(r.buf[:8])
 				payload := append([]byte(nil), r.buf[8:size]...)
 				r.buf = r.buf[size:]
-				var fds []int
-				if n := countFDsNeeded(payload); n > 0 && len(r.fds) >= n {
-					// FDs are not encoded in payload; callers pull via TakeFD.
-				}
-				if len(r.fds) > 0 {
-					fds = r.fds
-					r.fds = nil
-				}
-				return Message{Object: obj, Opcode: op, Payload: payload, FDs: fds}, nil
+				// FDs are a parallel stream (not in the payload). Callers
+				// pull one at a time via TakeFD so batched create_pool /
+				// dmabuf messages do not steal every SCM_RIGHTS fd.
+				return Message{Object: obj, Opcode: op, Payload: payload}, nil
 			}
 		}
 		if err := r.recv(); err != nil {
@@ -87,7 +82,15 @@ func (r *Reader) Next() (Message, error) {
 	}
 }
 
-func countFDsNeeded([]byte) int { return 0 }
+// TakeFD pops the next received file descriptor (Wayland fd arguments).
+func (r *Reader) TakeFD() (int, error) {
+	if r == nil || len(r.fds) == 0 {
+		return -1, errors.New("wayland: missing fd")
+	}
+	fd := r.fds[0]
+	r.fds = r.fds[1:]
+	return fd, nil
+}
 
 func (r *Reader) recv() error {
 	oob := make([]byte, 256)
@@ -133,13 +136,20 @@ func (w *Writer) Send(object uint32, opcode uint16, payload []byte, fds []int) e
 // Payload helpers -----------------------------------------------------------
 
 type Cursor struct {
-	p   []byte
-	fds []int
-	fi  int
+	p    []byte
+	fds  []int
+	fi   int
+	take func() (int, error)
 }
 
 func NewCursor(payload []byte, fds []int) *Cursor {
 	return &Cursor{p: payload, fds: fds}
+}
+
+// SetTakeFD uses a shared fd queue (typically Reader.TakeFD) so several
+// messages that arrived in one recvmsg each get the correct descriptor.
+func (c *Cursor) SetTakeFD(fn func() (int, error)) {
+	c.take = fn
 }
 
 func (c *Cursor) U32() (uint32, error) {
@@ -191,6 +201,9 @@ func (c *Cursor) Array() ([]byte, error) {
 }
 
 func (c *Cursor) FD() (int, error) {
+	if c.take != nil {
+		return c.take()
+	}
 	if c.fi >= len(c.fds) {
 		return -1, errors.New("wayland: missing fd")
 	}

@@ -1,6 +1,10 @@
 package shell
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func TestParseColor(t *testing.T) {
 	c, err := ParseColor("#0b1020")
@@ -43,5 +47,12 @@ func TestParseBackendReject(t *testing.T) {
 	_, err := ParseFlags([]string{"-backend=wgpu"})
 	if err == nil {
 		t.Fatal("expected reject")
+	}
+}
+
+func TestHintWaylandClientMentionsKWin(t *testing.T) {
+	err := hintWaylandClient(fmt.Errorf("write unix @: sendmsg: broken pipe"))
+	if err == nil || !strings.Contains(err.Error(), "KWin/Plasma") {
+		t.Fatalf("expected KWin hint: %v", err)
 	}
 }

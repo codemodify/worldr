@@ -1,0 +1,122 @@
+package wlsrv
+
+import (
+	"fmt"
+
+	"github.com/codemodify/worldr/internal/wayland"
+)
+
+const (
+	globalCursorShape uint32 = 11
+	globalActivation  uint32 = 12
+	globalPrimary     uint32 = 13
+)
+
+// wp_cursor_shape_v1 shapes (enum starts at 1).
+const (
+	cursorShapeDefault = 1
+	cursorShapeText    = 9
+	cursorShapePointer = 4
+)
+
+func (c *Client) reqPointer(o *object, op uint16, cur *wayland.Cursor) error {
+	switch op {
+	case 0: // set_cursor(serial, surface, hx, hy)
+		_, _ = cur.U32()
+		sid, _ := cur.U32()
+		hx, _ := cur.I32()
+		hy, _ := cur.I32()
+		c.srv.setCursorFromSurface(c, sid, int(hx), int(hy))
+	case 1: // release
+		delete(c.objs, o.id)
+		if c.ptrID == o.id {
+			c.ptrID = 0
+		}
+	}
+	return nil
+}
+
+func (c *Client) reqCursorShapeMgr(_ *object, op uint16, cur *wayland.Cursor) error {
+	if op != 1 { // get_pointer
+		return nil
+	}
+	id, err := cur.U32()
+	if err != nil {
+		return err
+	}
+	_, _ = cur.U32() // wl_pointer
+	c.objs[id] = &object{id: id, kind: kindCursorShape}
+	return nil
+}
+
+func (c *Client) reqCursorShape(_ *object, op uint16, cur *wayland.Cursor) error {
+	if op != 1 { // set_shape(serial, shape)
+		return nil
+	}
+	_, _ = cur.U32()
+	shape, _ := cur.U32()
+	c.srv.setCursorShape(shape)
+	return nil
+}
+
+func (c *Client) reqActivation(_ *object, op uint16, cur *wayland.Cursor) error {
+	switch op {
+	case 0: // destroy
+		return nil
+	case 1: // get_activation_token
+		id, err := cur.U32()
+		if err != nil {
+			return err
+		}
+		c.objs[id] = &object{id: id, kind: kindActToken}
+	case 2: // activate(token, surface)
+		_, _ = cur.String()
+		sid, _ := cur.U32()
+		if so := c.objs[sid]; so != nil && so.surf != nil && so.surf.actor != nil {
+			c.srv.Scene.FocusAt(so.surf.actor.X+1, so.surf.actor.Y+1, 26, 6)
+		}
+	}
+	return nil
+}
+
+func (c *Client) reqActToken(o *object, op uint16, cur *wayland.Cursor) error {
+	switch op {
+	case 0:
+		delete(c.objs, o.id)
+	case 1, 2, 3: // set_serial / set_app_id / set_surface
+		return nil
+	case 4: // commit → done(token)
+		tok := fmt.Sprintf("worldr-%d", c.nextSerial())
+		return c.send(o.id, 0, wayland.PutString(nil, tok), nil)
+	}
+	return nil
+}
+
+func (c *Client) reqPrimaryMgr(_ *object, op uint16, cur *wayland.Cursor) error {
+	switch op {
+	case 0: // create_source
+		id, err := cur.U32()
+		if err != nil {
+			return err
+		}
+		c.objs[id] = &object{id: id, kind: kindPrimSource}
+	case 1: // get_device(new_id, seat)
+		id, err := cur.U32()
+		if err != nil {
+			return err
+		}
+		_, _ = cur.U32()
+		c.objs[id] = &object{id: id, kind: kindPrimDevice}
+		// empty clipboard — clients that wait for selection get a null offer
+		return c.send(id, 1, wayland.PutU32(nil, 0), nil)
+	case 2: // destroy
+	}
+	return nil
+}
+
+func (c *Client) reqPrimDevice(o *object, op uint16, _ *wayland.Cursor) error {
+	if op == 1 {
+		delete(c.objs, o.id)
+	}
+	return nil
+}

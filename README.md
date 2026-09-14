@@ -3,9 +3,11 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** linux-dmabuf + real-client protocol on `feat/linux-dmabuf-and-clients`.
+**Status:** client hardening on `feat/client-harden` (stacked on linux-dmabuf).
 Tryable `worldr-shell` (Vulkan/DRM present, shm **and** GPU dmabuf import, SSD).
-Not a daily-driver desktop yet. See the client matrix in [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
+**foot** connected and disconnected cleanly on abox. Nested `--backend=wayland-client`
+is the safe Plasma/KWin demo path. Not a daily-driver desktop yet.
+See the client matrix in [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
 ## Quick links
 

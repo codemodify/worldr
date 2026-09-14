@@ -19,6 +19,27 @@ func TestEncodeDecodeHeader(t *testing.T) {
 	}
 }
 
+func TestTakeFDOrder(t *testing.T) {
+	r := &Reader{fds: []int{11, 22}}
+	a, err := r.TakeFD()
+	if err != nil || a != 11 {
+		t.Fatalf("first %d %v", a, err)
+	}
+	b, err := r.TakeFD()
+	if err != nil || b != 22 {
+		t.Fatalf("second %d %v", b, err)
+	}
+	if _, err := r.TakeFD(); err == nil {
+		t.Fatal("expected missing fd")
+	}
+	c := NewCursor(nil, nil)
+	c.SetTakeFD(func() (int, error) { return 7, nil })
+	fd, err := c.FD()
+	if err != nil || fd != 7 {
+		t.Fatalf("cursor take %d %v", fd, err)
+	}
+}
+
 func TestPutStringRoundtrip(t *testing.T) {
 	p := PutString(nil, "wl_compositor")
 	c := NewCursor(p, nil)
