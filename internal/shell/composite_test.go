@@ -2,6 +2,7 @@ package shell
 
 import (
 	"testing"
+	"time"
 
 	"github.com/codemodify/worldr/internal/engine"
 )
@@ -18,7 +19,7 @@ func TestCompositeDesktopFakeActor(t *testing.T) {
 		},
 		Title: "fake-foot", Focused: true,
 	}
-	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, true, CursorBlit{})
+	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, true, CursorBlit{}, Theater{})
 
 	// Actor pixel at (10,12)
 	i := 12*stride + 10*4
@@ -40,7 +41,7 @@ func TestCompositeDesktopCursor(t *testing.T) {
 	dst := make([]byte, stride*h)
 	CompositeDesktop(dst, stride, w, h, 0xff000000, nil, false, CursorBlit{
 		X: 4, Y: 4, Visible: true,
-	})
+	}, Theater{})
 	var n int
 	for _, b := range dst {
 		if b != 0 {
@@ -49,5 +50,33 @@ func TestCompositeDesktopCursor(t *testing.T) {
 	}
 	if n < 8 {
 		t.Fatalf("expected software cursor pixels, marked %d", n)
+	}
+}
+
+func TestCompositeDesktopMapInFades(t *testing.T) {
+	const w, h, stride = 64, 48, 256
+	clear := PackBGRA([4]float32{0, 0, 0, 1})
+	pix := make([]byte, 16)
+	for i := 0; i < 16; i += 4 {
+		pix[i], pix[i+1], pix[i+2], pix[i+3] = 0xff, 0xff, 0xff, 0xff
+	}
+	now := time.Unix(10, 0)
+	actor := &engine.Actor{
+		X: 20, Y: 20, Width: 4, Height: 1, Stride: 16, Pixels: pix,
+		Born: now,
+	}
+	dst0 := make([]byte, stride*h)
+	CompositeDesktop(dst0, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{},
+		Theater{Now: now, Tier: engine.TierHigh})
+	i := 20*stride + 20*4
+	// t=0 map-in: alpha 0 — pixel stays clear (black)
+	if dst0[i] != 0 || dst0[i+1] != 0 || dst0[i+2] != 0 {
+		t.Fatalf("t0 should be faded out, got %x %x %x", dst0[i], dst0[i+1], dst0[i+2])
+	}
+	dst1 := make([]byte, stride*h)
+	CompositeDesktop(dst1, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{},
+		Theater{Now: now.Add(engine.MapInDuration), Tier: engine.TierHigh})
+	if dst1[i] < 0xf0 {
+		t.Fatalf("settled map-in should be opaque, got %x", dst1[i])
 	}
 }

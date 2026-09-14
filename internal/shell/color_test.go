@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/codemodify/worldr/internal/engine"
 )
 
 func TestParseColor(t *testing.T) {
@@ -43,6 +45,21 @@ func TestCheckTakeoverVKDisplayRefusesSession(t *testing.T) {
 	}
 	if err := CheckTakeover(BackendVKDisplay, true); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestParseEffectsFlag(t *testing.T) {
+	o, err := ParseFlags([]string{"-effects=off"})
+	if err != nil || o.Effects != engine.TierOff {
+		t.Fatalf("%+v %v", o, err)
+	}
+	o, err = ParseFlags([]string{"-effects=low"})
+	if err != nil || o.Effects != engine.TierLow {
+		t.Fatalf("low %+v %v", o, err)
+	}
+	o, err = ParseFlags([]string{})
+	if err != nil || o.Effects != engine.TierHigh {
+		t.Fatalf("default %+v %v", o, err)
 	}
 }
 

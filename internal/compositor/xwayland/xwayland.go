@@ -98,6 +98,9 @@ func Start(waylandDisplay, runtimeDir string, pump func()) (*Instance, error) {
 	native := os.Getenv("WORLDR_XWAYLAND") == ""
 	var wmSrv, wmCli *os.File
 	args := []string{"-rootless", "-noreset", "-ac", "-shm", "-displayfd", "3"}
+	if n := pickFreeXDisplay(); n >= 0 {
+		args = append([]string{fmt.Sprintf(":%d", n)}, args...)
+	}
 	if native {
 		var err2 error
 		wmSrv, wmCli, err2 = socketpairFiles()
@@ -210,6 +213,17 @@ func startXWMIfSocket(displayNum int) *XWM {
 		return nil
 	}
 	return wm
+}
+
+// pickFreeXDisplay skips busy /tmp/.X11-unix/Xn (Plasma is often :0).
+// Starts at :1 so Xwayland does not log "server already running" on :0.
+func pickFreeXDisplay() int {
+	for n := 1; n < 64; n++ {
+		if _, err := os.Stat(fmt.Sprintf("/tmp/.X11-unix/X%d", n)); os.IsNotExist(err) {
+			return n
+		}
+	}
+	return -1
 }
 
 func socketpairFiles() (srv, cli *os.File, err error) {

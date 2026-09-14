@@ -68,8 +68,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on nested compositor):
-git checkout feat/xwayland-spike
+# this branch (stacked on XWayland / nested compositor):
+git checkout feat/window-effects-v0
 
 export CGO_ENABLED=1
 make build
@@ -114,8 +114,17 @@ foot
 ```
 
 You should see foot (or the shm client) with a cyan/magenta SSD frame inside the
-`worldr-shell (nested compositor)` window. Pointer and keys while that window is
-focused are forwarded into worldr (title-bar drag still works).
+`worldr-shell (nested compositor)` window. On map it **scale+fades in** (~260ms);
+on close it scale+fades out (~220ms). Clicking another window gives a short
+lift/shadow pulse. Pointer and keys while that window is focused are forwarded
+into worldr (title-bar drag still works).
+
+```sh
+./bin/worldr-shell --backend=wayland-client --effects=off --duration=60s   # no theater
+./bin/worldr-shell --backend=wayland-client --effects=low --duration=60s   # fade only
+```
+
+The same `CompositeDesktop` path is used on `--backend=vk-display` / `drm`.
 
 `--compositor=false` restores the old clear-only debug window (no socket).
 
@@ -149,9 +158,12 @@ xeyes
 Do **not** set `WAYLAND_DISPLAY` for xeyes/xterm (they are X11 clients).
 Do **not** use the host `DISPLAY=:0` — that is Plasma, not worldr.
 
-If `Xwayland` is missing: `pacman -S xorg-xwayland`. The compositor still hosts
-foot. Known spike limits: no full EWMH (no `_NET_WM_*` desktop, no reparenting),
-override-redirect / popups may mis-size, titles default to `X11`.
+If `Xwayland` is missing: `pacman -S xorg-xwayland`. X11 clients are **not** on
+a stock Arch desktop — also `sudo pacman -S xorg-xeyes xterm`. The compositor
+still hosts foot. Known spike limits: no full EWMH (no `_NET_WM_*` desktop, no
+reparenting), override-redirect / popups may mis-size, titles default to `X11`.
+worldr now requests a free `DISPLAY` starting at `:1` so it does not clash with
+Plasma’s `:0` (avoids `_XSERVTransSocketUNIXCreateListener: server already running`).
 
 Fullscreen nested (still inside your compositor):
 
@@ -239,6 +251,7 @@ without `/dev/dri`.
 | `--color` | `#0b1020` | Clear color |
 | `--compositor` | true | Listen as Wayland server (on for `wayland-client`/`nested` too) |
 | `--xwayland` | false | Launch rootless Xwayland on the worldr socket |
+| `--effects` | `high` | Window theater: `high` (scale+fade+focus pulse) \| `low` (fade) \| `off` |
 | `--wayland-display` | first free `wayland-N` | Socket name |
 | `--ssd` | true | Server-side decoration chrome |
 | `--card` | first `/dev/dri/cardN` | DRM device |
@@ -306,4 +319,5 @@ export XDG_RUNTIME_DIR=/run/user/$(id -u)
 - Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY
 - Pointer/keyboard keymap sent to clients is a tiny US map
 - No fractional scaling, `xdg-toplevel-icon`, or IME (`zwp_text_input`)
-- Compiz effects and UI toolkit still deferred
+- Compiz theater v0 is hardcoded (no plugin graph); `--effects=off` disables
+- UI toolkit still deferred
