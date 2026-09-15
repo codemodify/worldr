@@ -25,9 +25,40 @@ func ApplyX11Hints(scene *engine.Scene, h X11MapHints) *engine.Actor {
 	return wlsrv.ApplyX11Hints(scene, h)
 }
 
+// Output is one logical wl_output.
+type Output = wlsrv.Output
+
+// MaxOutputs is the number of logical wl_output globals we advertise.
+const MaxOutputs = wlsrv.MaxOutputs
+
 // ScaleTo120ths converts a display scale to wp_fractional_scale units.
 func ScaleTo120ths(scale float64) uint32 {
 	return wlsrv.ScaleTo120ths(scale)
+}
+
+// ScaleFrom120ths is the floating scale encoded by n.
+func ScaleFrom120ths(n uint32) float64 {
+	return wlsrv.ScaleFrom120ths(n)
+}
+
+// LayoutOutputs tiles n logical outputs across the present size.
+func LayoutOutputs(screenW, screenH, n int, scales []float64) []Output {
+	return wlsrv.LayoutOutputs(screenW, screenH, n, scales)
+}
+
+// ParseOutputScales reads a comma list of per-output scales.
+func ParseOutputScales(s string) ([]float64, error) {
+	return wlsrv.ParseOutputScales(s)
+}
+
+// OutputSeams are interior X edges between tiled outputs.
+func OutputSeams(outs []Output) []int {
+	return wlsrv.OutputSeams(outs)
+}
+
+// OutputSeamsInto appends interior X edges into dst (reuses dst).
+func OutputSeamsInto(dst []int, outs []Output) []int {
+	return wlsrv.OutputSeamsInto(dst, outs)
 }
 
 // Listen starts a Wayland socket. imp may be nil (shm-only).

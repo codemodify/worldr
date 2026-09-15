@@ -307,21 +307,35 @@ func (s *Scene) FocusActor(a *Actor) {
 
 // PlaceNew puts a newly mapped window in an empty-ish slot.
 func (s *Scene) PlaceNew(a *Actor, screenW, screenH, border, titleH int) {
+	s.PlaceNewIn(a, 0, 0, screenW, screenH, border, titleH)
+}
+
+// PlaceNewIn places a window inside the given output rect.
+func (s *Scene) PlaceNewIn(a *Actor, ox, oy, ow, oh, border, titleH int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if a == nil {
+		return
+	}
 	n := 0
 	for _, x := range s.actors {
 		if x != nil && x.Workspace == s.wsActive && !x.NoChrome {
 			n++
 		}
 	}
-	a.X = 48 + (n*32)%max(1, screenW/3)
-	a.Y = titleH + 48 + (n*32)%max(1, screenH/3)
-	if a.X+a.Width+border > screenW {
-		a.X = border + 16
+	if ow < 1 {
+		ow = 1
 	}
-	if a.Y+a.Height+border > screenH {
-		a.Y = titleH + 16
+	if oh < 1 {
+		oh = 1
+	}
+	a.X = ox + 48 + (n*32)%max(1, ow/3)
+	a.Y = oy + titleH + 48 + (n*32)%max(1, oh/3)
+	if a.X+a.Width+border > ox+ow {
+		a.X = ox + border + 16
+	}
+	if a.Y+a.Height+border > oy+oh {
+		a.Y = oy + titleH + 16
 	}
 }
 

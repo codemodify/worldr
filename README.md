@@ -3,7 +3,7 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** 0.9.32-dev. Richer Compiz theater (wobbly / cube / expose); **Ctrl+Q** quits.
+**Status:** 0.9.33-dev. Logical multi-monitor + per-output scale; **Ctrl+Q** quits.
 Nested compositor is the safe demo. Real display: spare TTY via `scripts/try-tty.sh`.
 Human history: [CHANGELOG.md](CHANGELOG.md). Abox notes: [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
@@ -37,7 +37,7 @@ export WAYLAND_DISPLAY=wayland-1   # name the shell printed
 foot
 # F12 or panel grid = expose; Ctrl+Alt+←/→ switch desktop; Ctrl+Alt+Shift+←/→ move window
 # quit: Ctrl+Q (bare Q/Esc do not quit while a client is open)
-# HiDPI: nest follows Plasma scale; --scale=1.5 overrides. vk-display/drm stay 1.0 unless set.
+# HiDPI: nest follows Plasma scale; --scale=1.5 overrides. --outputs=2 tiles two logical monitors; --output-scales=1,1.5 sets per-output scale. vk-display/drm stay 1.0 unless --scale/--output-scales.
 # optional X11:
 ./bin/worldr-shell --backend=wayland-client --xwayland --duration=60s
 DISPLAY=:N xeyes    # N from the shell's "xwayland: DISPLAY=" line

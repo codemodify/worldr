@@ -97,6 +97,24 @@ func TestParseScaleFlag(t *testing.T) {
 	}
 }
 
+func TestParseOutputsFlags(t *testing.T) {
+	o, err := ParseFlags([]string{})
+	if err != nil || o.Outputs != 1 || len(o.OutputScales) != 0 {
+		t.Fatalf("default %+v %v", o, err)
+	}
+	o, err = ParseFlags([]string{"-outputs=2", "-output-scales=1,1.5"})
+	if err != nil || o.Outputs != 2 || len(o.OutputScales) != 2 || o.OutputScales[1] != 1.5 {
+		t.Fatalf("two %+v %v", o, err)
+	}
+	o, err = ParseFlags([]string{"-outputs=9"})
+	if err != nil || o.Outputs != 4 {
+		t.Fatalf("clamp %+v %v", o, err)
+	}
+	if _, err := ParseFlags([]string{"-output-scales=nope"}); err == nil {
+		t.Fatal("bad scales")
+	}
+}
+
 func TestParseXWaylandFlag(t *testing.T) {
 	o, err := ParseFlags([]string{"-xwayland", "-backend=nested"})
 	if err != nil {

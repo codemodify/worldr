@@ -274,6 +274,23 @@ func TestMoveActorTakesOwnerChildren(t *testing.T) {
 	}
 }
 
+func TestPlaceNewInStaysInOutput(t *testing.T) {
+	s := NewScene()
+	a := &Actor{Width: 80, Height: 60}
+	s.PlaceNewIn(a, 400, 0, 400, 600, 4, 28)
+	if a.X < 400 || a.X >= 800 {
+		t.Fatalf("x %d", a.X)
+	}
+	if a.Y < 0 || a.Y >= 600 {
+		t.Fatalf("y %d", a.Y)
+	}
+	b := &Actor{Width: 80, Height: 60}
+	s.PlaceNew(b, 800, 600, 4, 28)
+	if b.X < 0 || b.X >= 800 {
+		t.Fatalf("placeNew x %d", b.X)
+	}
+}
+
 func TestMoveFocusedNoWindowStillSwitches(t *testing.T) {
 	s := NewScene()
 	s.SetWorkspaces(3)

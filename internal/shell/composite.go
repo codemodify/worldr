@@ -23,6 +23,7 @@ type Theater struct {
 	Tier   engine.Tier
 	PanelH int // minimize-to-panel target
 	Grid   *[]engine.GridCell
+	Seams  []int // interior X edges between logical outputs
 }
 
 // CompositeDesktop draws the cinematic clear, window actors, optional SSD,
@@ -73,6 +74,12 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 			}
 			drawActor(dst, stride, w, h, a, ssd, fx, ox, gpuOverlay)
 		}
+	}
+	for _, x := range fx.Seams {
+		if x <= 0 || x >= w {
+			continue
+		}
+		engine.FillRectAlpha(dst, stride, w, h, x, 0, 1, deskH, 0xff3a4a6a, 0.72)
 	}
 	if ch.Launcher != nil {
 		drawLauncher(dst, stride, w, h, ch.PanelH, *ch.Launcher)

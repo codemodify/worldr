@@ -43,6 +43,7 @@ type Server struct {
 	drag       *dragSession
 
 	scale120 uint32 // wp_fractional_scale preferred_scale; 0 = 120 (1.0)
+	outputs  []Output
 
 	// X11OnMap is set by the shell when a tiny XWM is running.
 	X11OnMap func(bufW, bufH int) (X11MapHints, bool)
@@ -285,6 +286,11 @@ func (s *Server) SetOutputScale(scale float64) {
 		prev = PreferredScale120ths
 	}
 	s.scale120 = n
+	if len(s.outputs) > 0 {
+		for i := range s.outputs {
+			s.outputs[i].Scale120 = n
+		}
+	}
 	s.mu.Unlock()
 	if n != prev {
 		s.BroadcastScale()
