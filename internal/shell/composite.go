@@ -27,7 +27,7 @@ type Theater struct {
 // and software cursor into a BGRA framebuffer. This is the present path
 // used by vk-display, drm, headless (when compositing), and nested
 // wayland-client.
-func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engine.Actor, ssd bool, cursor CursorBlit, fx Theater, ov OverviewDraw, ch ChromeDraw) {
+func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engine.Actor, ssd bool, cursor CursorBlit, fx Theater, ov OverviewDraw, ch ChromeDraw, gpuOverlay bool) {
 	engine.FillBGRA(dst, stride, w, h, clear)
 	deskH := usableHeight(h, ch.PanelH)
 	if ov.T > 0 {
@@ -53,7 +53,7 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 			if !show {
 				continue
 			}
-			drawActor(dst, stride, w, h, a, ssd, fx, ox)
+			drawActor(dst, stride, w, h, a, ssd, fx, ox, gpuOverlay)
 		}
 	}
 	if ch.Launcher != nil {
@@ -88,7 +88,7 @@ func filterChromeActors(actors []*engine.Actor) []*engine.Actor {
 	return out
 }
 
-func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theater, ox int) {
+func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theater, ox int, gpuOverlay bool) {
 	if a == nil {
 		return
 	}
@@ -105,6 +105,9 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 	if v.Identity() {
 		if ssd {
 			decorations.Draw(dst, stride, w, h, a)
+		}
+		if gpuOverlay && a.GPUSlot > 0 {
+			return
 		}
 		engine.BlitBGRA(dst, stride, w, h, a.X, a.Y, a.Pixels, a.Stride, a.Width, a.Height)
 		return

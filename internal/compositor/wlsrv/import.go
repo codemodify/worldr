@@ -12,3 +12,11 @@ type DMABufPlane struct {
 type DMABufImport interface {
 	ImportDMABuf(width, height, fourcc uint32, modifier uint64, planes []DMABufPlane) (bgra []byte, stride int, err error)
 }
+
+// DMABufGPU optionally retains a Vulkan image for compositor-pass sampling.
+// Nested/drm present still uses ImportDMABuf / LINEAR mmap (CPU fallback).
+type DMABufGPU interface {
+	RetainDMABuf(width, height, fourcc uint32, modifier uint64, planes []DMABufPlane) (slot int, err error)
+	ReleaseDMABuf(slot int)
+	CanGPUComposite() bool
+}

@@ -200,6 +200,9 @@ func (c *Client) close() {
 		if o.surf != nil && o.surf.actor != nil {
 			c.srv.Scene.Remove(o.surf.actor)
 		}
+		if o.dma != nil {
+			c.releaseDma(o.dma)
+		}
 		if o.pool != nil && o.pool.fd > 0 {
 			_ = syscall.Close(o.pool.fd)
 			o.pool.fd = -1
@@ -270,6 +273,10 @@ func (c *Client) dispatch(msg wayland.Message) error {
 			if o.buf != nil && o.buf.pool != nil {
 				o.buf.pool.live--
 				releasePool(o.buf.pool)
+			}
+			if o.dma != nil {
+				c.releaseDma(o.dma)
+				o.dma.closeFDs()
 			}
 			delete(c.objs, o.id)
 		}
@@ -713,10 +720,13 @@ func (c *Client) mapSurface(s *surface) {
 			break
 		}
 		return
-	case o.dma != nil && len(o.dma.pixels) > 0:
+	case o.dma != nil && (len(o.dma.pixels) > 0 || o.dma.gpuSlot > 0):
 		d := o.dma
 		pix = d.pixels
 		w, h, stride = d.w, d.h, d.stride
+		if stride <= 0 {
+			stride = w * 4
+		}
 	default:
 		return
 	}
@@ -743,6 +753,10 @@ func (c *Client) mapSurface(s *surface) {
 	s.actor.Stride = stride
 	s.actor.Pixels = pix
 	s.actor.NoChrome = child
+	s.actor.GPUSlot = 0
+	if o.dma != nil {
+		s.actor.GPUSlot = o.dma.gpuSlot
+	}
 	if s.xdg != nil && s.xdg.top != nil {
 		s.actor.Title = s.xdg.top.title
 		s.actor.AppID = s.xdg.top.app

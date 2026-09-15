@@ -19,7 +19,7 @@ func TestCompositeDesktopFakeActor(t *testing.T) {
 		},
 		Title: "fake-foot", Focused: true,
 	}
-	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, true, CursorBlit{}, Theater{}, OverviewDraw{}, ChromeDraw{})
+	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, true, CursorBlit{}, Theater{}, OverviewDraw{}, ChromeDraw{}, false)
 
 	// Actor pixel at (10,12)
 	i := 12*stride + 10*4
@@ -48,11 +48,41 @@ func TestCompositeDesktopNoChromeSkipsSSD(t *testing.T) {
 		},
 		NoChrome: true, Focused: true,
 	}
-	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, true, CursorBlit{}, Theater{}, OverviewDraw{}, ChromeDraw{})
+	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, true, CursorBlit{}, Theater{}, OverviewDraw{}, ChromeDraw{}, false)
 	cy := actor.Y - 2
 	ci := cy*stride + actor.X*4
 	if cy >= 0 && (dst[ci] != dst[0] || dst[ci+1] != dst[1] || dst[ci+2] != dst[2]) {
 		t.Fatal("popup must not paint SSD above the buffer")
+	}
+}
+
+func TestCompositeDesktopGPUOverlaySkipsPixels(t *testing.T) {
+	const w, h, stride = 64, 48, 256
+	dst := make([]byte, stride*h)
+	clear := PackBGRA([4]float32{0.04, 0.06, 0.12, 1})
+	actor := &engine.Actor{
+		X: 10, Y: 12, Width: 4, Height: 2, Stride: 16,
+		Pixels: []byte{
+			0x11, 0x22, 0x33, 0xff, 0x11, 0x22, 0x33, 0xff, 0x11, 0x22, 0x33, 0xff, 0x11, 0x22, 0x33, 0xff,
+			0x44, 0x55, 0x66, 0xff, 0x44, 0x55, 0x66, 0xff, 0x44, 0x55, 0x66, 0xff, 0x44, 0x55, 0x66, 0xff,
+		},
+		GPUSlot: 1,
+	}
+	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{}, Theater{}, OverviewDraw{}, ChromeDraw{}, true)
+	i := 12*stride + 10*4
+	if dst[i] == 0x11 && dst[i+1] == 0x22 && dst[i+2] == 0x33 {
+		t.Fatal("gpu overlay must skip CPU blit of client pixels")
+	}
+}
+
+func TestGPULayersCollectsSlots(t *testing.T) {
+	a := &engine.Actor{X: 4, Y: 5, Width: 10, Height: 8, GPUSlot: 2, Workspace: 0}
+	got := gpuLayers([]*engine.Actor{a}, ChromeDraw{WS: engine.WorkspaceDraw{Count: 1, Active: 0, From: 0, To: 0, T: 1}}, 800, true)
+	if len(got) != 1 || got[0].Slot != 2 || got[0].X != 4 || got[0].Y != 5 {
+		t.Fatalf("%+v", got)
+	}
+	if gpuLayers([]*engine.Actor{a}, ChromeDraw{}, 800, false) != nil {
+		t.Fatal("off")
 	}
 }
 
@@ -61,7 +91,7 @@ func TestCompositeDesktopCursor(t *testing.T) {
 	dst := make([]byte, stride*h)
 	CompositeDesktop(dst, stride, w, h, 0xff000000, nil, false, CursorBlit{
 		X: 4, Y: 4, Visible: true,
-	}, Theater{}, OverviewDraw{}, ChromeDraw{})
+	}, Theater{}, OverviewDraw{}, ChromeDraw{}, false)
 	var n int
 	for _, b := range dst {
 		if b != 0 {
@@ -87,7 +117,7 @@ func TestCompositeDesktopMapInFades(t *testing.T) {
 	}
 	dst0 := make([]byte, stride*h)
 	CompositeDesktop(dst0, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{},
-		Theater{Now: now, Tier: engine.TierHigh}, OverviewDraw{}, ChromeDraw{})
+		Theater{Now: now, Tier: engine.TierHigh}, OverviewDraw{}, ChromeDraw{}, false)
 	i := 20*stride + 20*4
 	// t=0 map-in: alpha 0 — pixel stays clear (black)
 	if dst0[i] != 0 || dst0[i+1] != 0 || dst0[i+2] != 0 {
@@ -95,7 +125,7 @@ func TestCompositeDesktopMapInFades(t *testing.T) {
 	}
 	dst1 := make([]byte, stride*h)
 	CompositeDesktop(dst1, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{},
-		Theater{Now: now.Add(engine.MapInDuration), Tier: engine.TierHigh}, OverviewDraw{}, ChromeDraw{})
+		Theater{Now: now.Add(engine.MapInDuration), Tier: engine.TierHigh}, OverviewDraw{}, ChromeDraw{}, false)
 	if dst1[i] < 0xf0 {
 		t.Fatalf("settled map-in should be opaque, got %x", dst1[i])
 	}
@@ -108,7 +138,7 @@ func TestCompositeDesktopOverviewMovesActor(t *testing.T) {
 	actor := &engine.Actor{X: 4, Y: 4, Width: 1, Height: 1, Stride: 4, Pixels: pix}
 	dst := make([]byte, stride*h)
 	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{},
-		Theater{}, OverviewDraw{T: 1}, ChromeDraw{})
+		Theater{}, OverviewDraw{T: 1}, ChromeDraw{}, false)
 	// Home pixel should no longer be the actor (grid letterboxes toward center).
 	home := 4*stride + 4*4
 	if dst[home] == 0x10 && dst[home+1] == 0x20 && dst[home+2] == 0x30 {
@@ -136,7 +166,7 @@ func TestCompositeDesktopHidesOtherWorkspace(t *testing.T) {
 	b := &engine.Actor{X: 20, Y: 8, Width: 1, Height: 1, Stride: 4, Pixels: pix, Workspace: 1}
 	dst := make([]byte, stride*h)
 	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{a, b}, false, CursorBlit{},
-		Theater{}, OverviewDraw{}, ChromeDraw{WS: engine.WorkspaceDraw{Count: 3, Active: 1, From: 1, To: 1, T: 1}})
+		Theater{}, OverviewDraw{}, ChromeDraw{WS: engine.WorkspaceDraw{Count: 3, Active: 1, From: 1, To: 1, T: 1}}, false)
 	homeA := 8*stride + 8*4
 	if dst[homeA] == 0x10 {
 		t.Fatal("desktop 0 actor should be hidden")

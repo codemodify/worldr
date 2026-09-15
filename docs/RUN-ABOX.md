@@ -403,12 +403,12 @@ disconnected cleanly** against the compositor.
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
 | `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.9): Ctrl+Shift+C / Ctrl+Shift+V between worldr clients (`text/plain`); mouse-select + middle-click uses primary. Not bridged to Plasma’s clipboard yet. Cursors, activation, fractional-scale 120. Still expected: `xdg-toplevel-icon`, text-input/IME. |
-| `kitty` | linux-dmabuf (GL) | **Try** | GPU path: Vulkan import + CPU readback. Needs `linux-dmabuf: Vulkan import` in the shell log. LINEAR mmap fallback if the buffer is linear. |
+| `kitty` | linux-dmabuf (GL) | **Try** | On **vk-display** (0.9.10): Vulkan import + GPU blit into the compositor pass (ARGB/XRGB). Nested/drm still readback or LINEAR mmap. Log: `linux-dmabuf: Vulkan import + GPU sample`. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
 | X11 apps | XWayland | **Try (`--xwayland`)** | Rootless `Xwayland` + tiny XWM on the worldr socket. `DISPLAY=:N xeyes` / `xterm` should map as SSD actors. |
 
-GPU-accelerated path: client dmabuf → `VK_EXT_external_memory_dma_buf` import → copy to linear host image → actor pixels → existing SSD + focus + present. shm remains the fallback.
+GPU-accelerated path (vk-display, 0.9.10): client dmabuf → Vulkan import → **sample/blit in the compositor pass**. Nested/drm: import → linear readback or mmap → CPU composite. shm remains the fallback.
 
 Start `kitty` only after the shell prints `linux-dmabuf: Vulkan import + readback enabled`.
 
@@ -442,7 +442,7 @@ Workaround — real display on **tty3**:
 - XWayland spike: `--xwayland` rootless + tiny XWM + `xwayland_shell_v1` (not a full EWMH WM)
 - `xdg_popup` + `wl_subsurface` stacking (0.9.8): menus/tooltips/dropdowns. Positioner uses size + anchor + offset (no constraint/flip). Foot right-click menu is the abox check.
 - Clipboard (0.9.9): `text/plain` between worldr clients. Nested host clipboard (Plasma ↔ worldr) is a follow-up — the nest client does not bind host `wl_data_device`.
-- No zero-copy GPU composite (import is readback)
+- dmabuf (0.9.10): GPU sample on vk-display only. No KMS scanout bypass, no explicit `linux-drm-syncobj` (Intel implicit sync via image layout). Nested host still CPU-composites.
 - SSD is thicker accent + title gradient + focused glow (still not a toolkit)
 - Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)
 - Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY. Unmatched host `wl_pointer.button` releases are dropped (foot stray-release warning should be gone).

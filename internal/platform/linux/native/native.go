@@ -115,6 +115,18 @@ func (v *VK) HasDMABuf() bool {
 	return v != nil && v.ptr != nil && C.worldr_vk_has_dmabuf(v.ptr) != 0
 }
 
+// IsDisplay is true for a VK_KHR_display session (GPU overlay present).
+func (v *VK) IsDisplay() bool {
+	return v != nil && v.ptr != nil && C.worldr_vk_is_display(v.ptr) != 0
+}
+
+// GPULayer is one retained dmabuf blit onto the swapchain (1-based slot).
+type GPULayer struct {
+	Slot int
+	X, Y int
+	W, H int
+}
+
 // DMABufPlane is one linux-dmabuf plane (compositor owns the fd until Import returns).
 type DMABufPlane struct {
 	FD     int
@@ -147,6 +159,68 @@ func (v *VK) ImportDMABuf(width, height, fourcc uint32, modifier uint64, planes 
 		return nil, 0, cErr(errb)
 	}
 	return out, stride, nil
+}
+
+// RetainDMABuf imports a client dma-buf as a GPU image and returns a 1-based slot.
+func (v *VK) RetainDMABuf(width, height, fourcc uint32, modifier uint64, planes []DMABufPlane) (int, error) {
+	if v == nil || v.ptr == nil {
+		return 0, fmt.Errorf("vulkan session closed")
+	}
+	if len(planes) == 0 || len(planes) > 4 {
+		return 0, fmt.Errorf("dmabuf plane count %d", len(planes))
+	}
+	fds := make([]C.int, len(planes))
+	offs := make([]C.uint32_t, len(planes))
+	pits := make([]C.uint32_t, len(planes))
+	for i, p := range planes {
+		fds[i] = C.int(p.FD)
+		offs[i] = C.uint32_t(p.Offset)
+		pits[i] = C.uint32_t(p.Stride)
+	}
+	errb := make([]C.char, errBuf)
+	var slot C.int
+	if C.worldr_vk_dmabuf_retain(v.ptr, C.uint32_t(width), C.uint32_t(height), C.uint32_t(fourcc), C.uint64_t(modifier),
+		C.int(len(planes)), &fds[0], &offs[0], &pits[0], &slot, &errb[0], C.int(len(errb))) != 0 {
+		return 0, cErr(errb)
+	}
+	return int(slot), nil
+}
+
+// ReleaseDMABuf drops a retained GPU slot (0 is a no-op).
+func (v *VK) ReleaseDMABuf(slot int) {
+	if v == nil || v.ptr == nil || slot <= 0 {
+		return
+	}
+	C.worldr_vk_dmabuf_release(v.ptr, C.int(slot))
+}
+
+// UploadPresentLayers uploads the CPU desktop then blits retained dmabuf layers.
+func (v *VK) UploadPresentLayers(bgra []byte, stride uint32, layers []GPULayer) error {
+	if len(layers) == 0 {
+		return v.UploadPresent(bgra, stride)
+	}
+	if v == nil || v.ptr == nil {
+		return fmt.Errorf("vulkan session closed")
+	}
+	if len(bgra) == 0 {
+		return fmt.Errorf("empty framebuffer")
+	}
+	cl := make([]C.worldr_vk_layer, len(layers))
+	for i, l := range layers {
+		cl[i] = C.worldr_vk_layer{
+			slot: C.int(l.Slot),
+			x:    C.int32_t(l.X),
+			y:    C.int32_t(l.Y),
+			w:    C.int32_t(l.W),
+			h:    C.int32_t(l.H),
+		}
+	}
+	errb := make([]C.char, errBuf)
+	if C.worldr_vk_upload_present_layers(v.ptr, (*C.uint8_t)(unsafe.Pointer(&bgra[0])), C.uint32_t(stride),
+		&cl[0], C.int(len(cl)), &errb[0], C.int(len(errb))) != 0 {
+		return cErr(errb)
+	}
+	return nil
 }
 
 func (v *VK) HeadlessClear(r, g, b, a float32) (pixel uint32, err error) {
