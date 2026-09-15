@@ -217,6 +217,7 @@ func newClient(s *Server, conn *net.UnixConn) *Client {
 func (c *Client) close() {
 	if c.srv != nil {
 		c.srv.dropClientSelection(c)
+		c.srv.cancelDragFromClient(c)
 	}
 	if c.conn != nil {
 		_ = c.conn.Close()

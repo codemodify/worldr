@@ -14,15 +14,24 @@ const (
 
 const (
 	wlDataDevDataOffer uint16 = 0
+	wlDataDevEnter     uint16 = 1
+	wlDataDevLeave     uint16 = 2
+	wlDataDevMotion    uint16 = 3
+	wlDataDevDrop      uint16 = 4
 	wlDataDevSelection uint16 = 5
 	wlDataOfferOffer   uint16 = 0
+	wlDataOfferSrcActs uint16 = 1
+	wlDataOfferAction  uint16 = 2
 	wlDataSrcSend      uint16 = 1
 	wlDataSrcCancelled uint16 = 2
-
-	primDevDataOffer uint16 = 0
-	primDevSelection uint16 = 1
-	primSrcSend      uint16 = 0
-	primSrcCancelled uint16 = 1
+	wlDataSrcDndDrop   uint16 = 3
+	wlDataSrcDndDone   uint16 = 4
+	wlDataSrcAction    uint16 = 5
+	dndActionCopy      uint32 = 1
+	primDevDataOffer   uint16 = 0
+	primDevSelection   uint16 = 1
+	primSrcSend        uint16 = 0
+	primSrcCancelled   uint16 = 1
 )
 
 type dataSource struct {
@@ -129,14 +138,33 @@ func (c *Client) reqDataSource(o *object, op uint16, cur *wayland.Cursor) error 
 	case 1: // destroy
 		if c.srv != nil {
 			c.srv.clearIfCurrent(src)
+			c.srv.cancelDragIfSource(src)
 		}
 		delete(c.objs, o.id)
+	case 2: // set_actions (v3) — copy only
 	}
 	return nil
 }
 
 func (c *Client) reqDataDevice(o *object, op uint16, cur *wayland.Cursor) error {
 	switch op {
+	case 0: // start_drag(source, origin, icon, serial)
+		sid, err := cur.U32()
+		if err != nil {
+			return err
+		}
+		_, _ = cur.U32() // origin surface
+		_, _ = cur.U32() // icon
+		_, _ = cur.U32() // serial
+		var src *dataSource
+		if sid != 0 {
+			if so := c.objs[sid]; so != nil {
+				src = so.src
+			}
+		}
+		if c.srv != nil && src != nil {
+			c.srv.startDrag(c, src)
+		}
 	case 1: // set_selection(source, serial)
 		sid, err := cur.U32()
 		if err != nil {
@@ -167,7 +195,27 @@ func (c *Client) reqDataOffer(o *object, op uint16, cur *wayland.Cursor) error {
 		recv, dest = 0, 1 // zwp_primary_selection_offer_v1
 	}
 	switch op {
-	case recv: // receive(mime, fd)
+	case 0: // accept (clipboard unused; dnd target ack)
+		if o.offer != nil && o.offer.prim {
+			// zwp_primary receive is opcode 0
+			mime, err := cur.String()
+			if err != nil {
+				return err
+			}
+			fd, err := cur.FD()
+			if err != nil {
+				return err
+			}
+			if c.srv != nil {
+				c.srv.transfer(o.offer, mime, fd)
+			} else if fd > 0 {
+				_ = syscall.Close(fd)
+			}
+		}
+	case recv: // receive(mime, fd) — wl_data_offer
+		if o.offer != nil && o.offer.prim {
+			break
+		}
 		mime, err := cur.String()
 		if err != nil {
 			return err
@@ -183,6 +231,11 @@ func (c *Client) reqDataOffer(o *object, op uint16, cur *wayland.Cursor) error {
 		}
 	case dest: // destroy
 		delete(c.objs, o.id)
+	case 3: // finish (dnd)
+		if c.srv != nil {
+			c.srv.finishDrag(o.offer)
+		}
+	case 4: // set_actions
 	}
 	return nil
 }

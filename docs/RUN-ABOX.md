@@ -182,6 +182,10 @@ should reach the popup surface.
 
 **Clipboard (0.9.19 / 0.9.25):** in foot, select text, Ctrl+Shift+C, then Ctrl+Shift+V
 (or another worldr client). Middle-click pastes the primary selection.
+
+**Drag-and-drop (0.9.29):** drag text or a supported image (`png`/`jpeg`/`webp`/`bmp`)
+from one worldr client onto another (copy action). Drop on empty desktop/panel
+cancels — no icon-canvas target yet.
 **Images:** copy `image/png`, `image/jpeg`, `image/webp`, or `image/bmp` between
 worldr clients (exact MIME). Nested under Plasma: `text/plain` still works;
 those image types are forwarded both ways when the host advertises them.
@@ -496,6 +500,7 @@ Workaround — real display on **tty3**:
 - XWayland (0.9.11): `--xwayland` rootless + tiny XWM + `xwayland_shell_v1`. EWMH basics (`_NET_SUPPORTED`, active window, titles/class, delete/take-focus). Not a full ICCCM WM (no reparenting/pager). Overlay menus skip SSD.
 - `xdg_popup` + `wl_subsurface` stacking (0.9.8): menus/tooltips/dropdowns. Positioner uses size + anchor + offset (no constraint/flip). Foot right-click menu is the abox check.
 - Clipboard (0.9.19 / **0.9.25**): `text/plain` + `image/png` / `image/jpeg` / `image/webp` / `image/bmp` between worldr clients. Nested: Plasma ↔ worldr for text and those images when the host advertises them. Primary bridged if advertised. vk-display/drm have no host to bind.
+- Drag-and-drop (**0.9.29**): `wl_data_device.start_drag` between worldr clients for those same MIME types (copy). Empty-desktop drop cancels (no icon canvas — follow-up). No nest-host DND bridge.
 - dmabuf (0.9.17+ / **0.9.23**): GPU sample on vk-display; **KMS primary scanout** for one fullscreen ARGB/XRGB on `--backend=drm`; **overlay** for one windowed dmabuf when the card has an overlay plane; **cursor plane** for a small ARGB cursor. **0.9.20 / 0.9.23:** `wp_linux_drm_syncobj_manager_v1` when `DRM_CAP_SYNCOBJ_TIMELINE` (log `linux-drm-syncobj: … advertised`). Acquire waits on a Vulkan timeline (`vkWaitSemaphores`) before blit/sample/scanout; DRM ioctl is the fallback. Release is signaled after present. Miss → implicit sync. vk-display extra planes are eligible but usually compose (`VK_KHR_display` holds master). Nested host still CPU-composites. Soak: spare TTY, `kitty` — look for the syncobj line plus `kms scanout` / `kms overlay` / blit.
 - SSD is thicker accent + title gradient + focused glow (still not a toolkit)
 - Software cursor (0.9.21 / **0.9.22** / **0.9.23**): nest binds host `wp_cursor_shape_manager_v1` and `set_shape(default)` on enter (shm arrow fallback) using the enter serial, **without taking `Window.mu` again** (0.9.21 deadlocked `TakeInput` vs `readLoop` — frozen nest, no click/key). Client `set_cursor` / cursor-shape still draw the software overlay; null `set_cursor` keeps the default arrow. `--backend=drm` tries a hardware cursor plane when the image is ≤256×256; miss stays software. vk-display / nested stay software (no DRM master for extra planes).

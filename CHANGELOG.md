@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.29-dev — drag-and-drop between clients
+
+- `wl_data_device.start_drag` → `data_offer` / `enter` / `motion` / `drop` / `leave` for text and image MIME we already support (`text/plain`, png/jpeg/webp/bmp). Copy action only. Dest `receive` + `finish` completes `data_source.send` / `dnd_finished`.
+- Drop on empty desktop / panel cancels the source (`cancelled`). No icon-canvas drop target yet (follow-up).
+- No IME. No nest-host DND bridge.
+
 ## 0.9.28-dev — icon theme Inherits= + librsvg
 
 - `index.theme` `[Icon Theme] Inherits=` is walked (comma list, recursive, cycle-safe) before hicolor. PNG still wins over SVG in each theme.
