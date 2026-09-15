@@ -34,6 +34,13 @@ func (w *Window) handlePointer(msg wayland.Message) error {
 		w.hideHostCursor()
 	case 1: // leave
 		w.hostInside = false
+		// Host implicit grab usually delivers the real release; if the
+		// host only sends leave, synthesize a matching release so worldr
+		// clients are not left with a button down.
+		if w.hostBtnDown {
+			w.hostRelease = true
+			w.hostBtnDown = false
+		}
 	case 2: // motion
 		_, _ = cur.U32()
 		x, _ := cur.I32()
@@ -47,9 +54,12 @@ func (w *Window) handlePointer(msg wayland.Message) error {
 		if btn == 0x110 { // BTN_LEFT
 			if state == 1 {
 				w.hostClick = true
-			} else {
+				w.hostBtnDown = true
+			} else if w.hostBtnDown {
 				w.hostRelease = true
+				w.hostBtnDown = false
 			}
+			// Unmatched host release (click started on Plasma chrome) is dropped.
 		}
 	}
 	return nil

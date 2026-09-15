@@ -38,6 +38,8 @@ func (c *Client) reqPointer(o *object, op uint16, cur *wayland.Cursor) error {
 		delete(c.objs, o.id)
 		if c.ptrID == o.id {
 			c.ptrID = 0
+			c.entered = 0
+			c.ptrBtns.takeAll()
 		}
 	}
 	return nil

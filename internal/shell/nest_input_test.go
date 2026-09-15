@@ -38,3 +38,44 @@ func TestApplyNestedPointerIgnoresEvdevClick(t *testing.T) {
 		t.Fatal("wl Esc must not set Quit; handleQuitKeys owns the chord")
 	}
 }
+
+func TestFilterNestedButtonsPressThenRelease(t *testing.T) {
+	ptr := &input.Pointer{Click: true}
+	down := false
+	filterNestedButtons(ptr, &down)
+	if !down || !ptr.Click {
+		t.Fatal("press arms host button")
+	}
+	ptr.Click = false
+	ptr.Release = true
+	filterNestedButtons(ptr, &down)
+	if !ptr.Release || down {
+		t.Fatal("matching release")
+	}
+}
+
+func TestFilterNestedButtonsReleaseOnlySuppressed(t *testing.T) {
+	ptr := &input.Pointer{Release: true}
+	down := false
+	filterNestedButtons(ptr, &down)
+	if ptr.Release {
+		t.Fatal("unmatched host release must not reach the shell")
+	}
+	if down {
+		t.Fatal("still up")
+	}
+}
+
+func TestClientButtonGate(t *testing.T) {
+	var g clientButtonGate
+	if g.onRelease() {
+		t.Fatal("release without press")
+	}
+	g.onClientPress()
+	if !g.onRelease() {
+		t.Fatal("matching release")
+	}
+	if g.onRelease() {
+		t.Fatal("second release")
+	}
+}

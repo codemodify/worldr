@@ -149,7 +149,9 @@ func (s *Server) dropClient(c *Client) {
 	s.log.Printf("client disconnected")
 }
 
-// PointerButton delivers a pointer click in screen space (Phase 3).
+// PointerButton delivers a pointer click in screen space.
+// Each client only receives wl_pointer.button release if it previously
+// received the matching press while focused (see pointerButtons).
 func (s *Server) PointerButton(sx, sy int, pressed bool) {
 	s.mu.Lock()
 	cl := append([]*Client(nil), s.clients...)

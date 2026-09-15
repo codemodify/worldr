@@ -131,7 +131,8 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	dragging := false
 	var drag *engine.Actor
 	dx, dy := 0, 0
-	clientBtn := false
+	var clientBtn clientButtonGate
+	hostBtnDown := false
 
 	switch opt.Effects {
 	case engine.TierOff:
@@ -197,6 +198,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			// OR-merging evdev Click with wl Click toggled the launcher
 			// open then shut on one physical press.
 			applyNestedPointer(ptr, p.wl.TakeInput())
+			filterNestedButtons(ptr, &hostBtnDown)
 		}
 		now := time.Now()
 		if demoArmed && scene.HasActors() && frames > 40 {
@@ -287,17 +289,16 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				dx, dy = ptr.X-a.X, ptr.Y-a.Y
 			} else if srv != nil {
 				srv.PointerButton(ptr.X, ptr.Y, true)
-				clientBtn = true
+				clientBtn.onClientPress()
 			}
 		}
 		if ptr.Release {
 			lnGate.onRelease()
 			dragging = false
 			drag = nil
-			if srv != nil && clientBtn {
+			if srv != nil && clientBtn.onRelease() {
 				srv.PointerButton(ptr.X, ptr.Y, false)
 			}
-			clientBtn = false
 		}
 		if dragging && drag != nil && !ov.Want && !ln.Open {
 			drag.X = ptr.X - dx
