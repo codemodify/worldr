@@ -28,6 +28,7 @@ already running Hyprland/Sway/GNOME/KDE.
 | Esc or Q | Quit if evdev can open a keyboard (`input` group). In overview, Esc leaves the grid first. |
 | F12 | Toggle expose/overview (nested window must be focused). Super+Tab if the host does not steal Super. Also the panel **grid** button. |
 | F1 | Open the in-shell launcher (Super+Space if the host does not steal Super). Also the panel **apps** button. |
+| Ctrl+Alt+←/→ | Switch virtual desktop (pager dots if the host steals this combo). |
 | `--duration=15s` | Always exits — use this the first time on a TTY. |
 
 If the TTY appears wedged: another TTY (`Ctrl+Alt+F3`), `pkill worldr-shell`,
@@ -70,8 +71,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on overview / theater):
-git checkout feat/panel-launcher-v0
+# this branch (stacked on panel / launcher):
+git checkout feat/workspaces-v0
 
 export CGO_ENABLED=1
 make build
@@ -131,9 +132,10 @@ The same `CompositeDesktop` path is used on `--backend=vk-display` / `drm`.
 
 ### Expose / overview (v0)
 
-With **two or more** clients on the worldr socket, focus the
-`worldr-shell (nested compositor)` window and press **F12**. Actors animate
-into a grid. Click a tile (or ←/→ / Tab, then Enter) to focus and leave.
+With **two or more** clients on the **active desktop**, focus the
+`worldr-shell (nested compositor)` window and press **F12**. Actors on that
+desktop animate into a grid (other workspaces stay hidden). Click a tile
+(or ←/→ / Tab, then Enter) to focus and leave.
 **Esc** leaves overview without quitting. **Esc** or **Q** outside overview
 still quits.
 
@@ -179,6 +181,29 @@ is the same bind when KWin does not steal Super.
 Hardcoded list (no `.desktop` scan): `foot`, `weston-simple-shm`, and
 `xeyes` / `xterm` when `--xwayland` is on. Missing binaries log
 `launcher: … not on PATH` and the shell keeps running.
+
+### Workspaces (v0)
+
+**2–4** virtual desktops, default **3** (`--workspaces=N`). New clients
+(launcher or an external `foot`) spawn on the **active** desktop. F12
+overview lists **only that desktop**.
+
+Switch with **Ctrl+Alt+←/→** (evdev or evdev+8) or click the panel **pager
+dots**. The desktop layer slides horizontally (~260ms). Plasma often steals
+Ctrl+Alt+arrows — use the dots in the nested window.
+
+```sh
+./bin/worldr-shell --backend=wayland-client --duration=60s
+# F1 → foot on desktop 0
+# click the second pager dot (or Ctrl+Alt+→)
+# F1 → foot on desktop 1
+```
+
+| Key / click | Action |
+| --- | --- |
+| Ctrl+Alt+→ | Next desktop (wraps) |
+| Ctrl+Alt+← | Previous desktop (wraps) |
+| Pager dot | Jump to that desktop |
 
 `--compositor=false` restores the old clear-only debug window (no socket).
 
@@ -307,6 +332,7 @@ without `/dev/dri`.
 | `--xwayland` | false | Launch rootless Xwayland on the worldr socket |
 | `--effects` | `high` | Window theater: `high` (scale+fade+focus pulse) \| `low` (fade) \| `off` |
 | `--overview-demo` | false | Auto-enter expose after the first window maps |
+| `--workspaces` | `3` | Virtual desktops (clamped 2–4) |
 | `--wayland-display` | first free `wayland-N` | Socket name |
 | `--ssd` | true | Server-side decoration chrome |
 | `--card` | first `/dev/dri/cardN` | DRM device |
@@ -351,7 +377,8 @@ keyboard forwarded into worldr). Still skipped: output, viewporter, dmabuf,
 cursor-shape.
 
 **Success:** window titled `worldr-shell (nested compositor)` + bottom panel
-visible. **F1 → foot** maps a client without a second terminal.
+with pager dots. **F1 → foot** on desktop 0, switch desktop, **F1 → foot**
+on desktop 1.
 
 **If the host window dies:** paste `wayland-client: global/bind` lines.
 Workaround — real display on **tty2**:
@@ -377,4 +404,5 @@ export XDG_RUNTIME_DIR=/run/user/$(id -u)
 - Compiz theater v0 is hardcoded (no plugin graph); `--effects=off` disables
 - Launcher is a hardcoded list (no `.desktop` / menu scan)
 - Panel is CPU-composited chrome (not a toolkit)
+- Workspaces v0: no drag-to-desktop, no per-output set, overview is current-desktop only
 - UI toolkit still deferred

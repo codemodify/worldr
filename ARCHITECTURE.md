@@ -33,8 +33,9 @@ tryable `worldr-shell`.
 4. XWayland — done (`--xwayland`, tiny XWM + `xwayland_shell_v1`)
 5. Compiz-style theater v0 — done (hardcoded map/unmap scale+fade)
 6. Expose/overview v0 — done (F12 grid)
-7. Panel + launcher v0 — **this branch** (bottom bar, F1 spawn)
-8. Revisit UI toolkit
+7. Panel + launcher v0 — done (bottom bar, F1 spawn)
+8. Workspaces v0 — **this branch** (2–4 desktops, pager, slide)
+9. Revisit UI toolkit
 
 ## Layers
 
@@ -109,7 +110,7 @@ and explicit sync, not by opening the DRM device themselves.
 | `cmd/worldr-session` | Session manager placeholder. Isolation and session lifecycle come later. |
 | `internal/rhi` | Owned RHI interfaces (`Device`, `Queue`, `Texture`, `SharedImage`, `Sync`, `Present`). |
 | `internal/compositor` / `wlsrv` | Pure-Go Wayland server: xdg_shell, seat/keyboard, linux-dmabuf, SSD decoration, viewporter stub. shm + dmabuf → actors. |
-| `internal/engine` | Scene, window actors, CPU BGRA composite. |
+| `internal/engine` | Scene, window actors, workspaces, CPU BGRA composite. |
 | `internal/decorations` | SSD: thicker accent bar, title gradient, focused glow + title hit region. |
 | `internal/platform/linux/native` | **cgo ABI**: `libvulkan` + `libdrm` (owned C session, not a second compositor). |
 | `internal/platform/linux/wlclient` | Debug nested Wayland *client* (wl_shm). Not the primary path. |
