@@ -9,8 +9,18 @@
 #include <drm_fourcc.h>
 
 #define WORLDR_MAX_IMAGES 8
+#define WORLDR_DMABUF_SLOTS 32
 /* Finite GPU wait so a lost DRM master / hung KMS does not wedge the TTY. */
 #define WORLDR_VK_WAIT_NS 2000000000ull
+
+typedef struct {
+	int used;
+	VkImage image;
+	VkDeviceMemory mem[4];
+	int nmem;
+	uint32_t w, h;
+	VkFormat fmt;
+} worldr_dma_slot;
 
 struct worldr_vk {
 	int mode;
@@ -41,6 +51,7 @@ struct worldr_vk {
 	char device_name[256];
 	VkFormat format;
 	int dmabuf_ok;
+	worldr_dma_slot dma[WORLDR_DMABUF_SLOTS];
 };
 
 static void seterr(char *err, int errlen, const char *fmt, VkResult r)
@@ -726,6 +737,22 @@ void worldr_vk_destroy(worldr_vk *vk)
 	if (vk->fence) {
 		vkDestroyFence(vk->device, vk->fence, NULL);
 	}
+	if (vk->device) {
+		for (int i = 0; i < WORLDR_DMABUF_SLOTS; i++) {
+			if (!vk->dma[i].used) {
+				continue;
+			}
+			if (vk->dma[i].image) {
+				vkDestroyImage(vk->device, vk->dma[i].image, NULL);
+			}
+			for (int m = 0; m < 4; m++) {
+				if (vk->dma[i].mem[m]) {
+					vkFreeMemory(vk->device, vk->dma[i].mem[m], NULL);
+				}
+			}
+			memset(&vk->dma[i], 0, sizeof(vk->dma[i]));
+		}
+	}
 	if (vk->cmd_pool) {
 		vkDestroyCommandPool(vk->device, vk->cmd_pool, NULL);
 	}
@@ -886,70 +913,7 @@ int worldr_vk_clear_present(worldr_vk *vk, float r, float g, float b, float a, c
 
 int worldr_vk_upload_present(worldr_vk *vk, const uint8_t *bgra, uint32_t stride, char *err, int errlen)
 {
-	if (!vk || vk->mode != WORLDR_VK_DISPLAY || !bgra) {
-		seterr(err, errlen, "upload_present requires vk-display + pixels", VK_SUCCESS);
-		return -1;
-	}
-	VkDeviceSize size = (VkDeviceSize)stride * vk->height;
-	if (ensure_staging(vk, size, err, errlen) != 0) {
-		return -1;
-	}
-	memcpy(vk->staging_map, bgra, (size_t)size);
-	if (vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, WORLDR_VK_WAIT_NS) == VK_TIMEOUT) {
-		seterr(err, errlen, "GPU wait timed out (2s) before upload — lost DRM master? Spare TTY: pkill worldr-shell, Ctrl+Alt+F1", VK_TIMEOUT);
-		return -1;
-	}
-	vkResetFences(vk->device, 1, &vk->fence);
-	uint32_t idx = 0;
-	VkResult ar = vkAcquireNextImageKHR(vk->device, vk->swapchain, WORLDR_VK_WAIT_NS, vk->img_avail, VK_NULL_HANDLE, &idx);
-	if (ar == VK_TIMEOUT) {
-		seterr(err, errlen, "vkAcquireNextImageKHR timed out (2s) — not DRM master or display gone. Spare TTY: scripts/try-tty.sh", ar);
-		return -1;
-	}
-	if (ar != VK_SUCCESS && ar != VK_SUBOPTIMAL_KHR) {
-		seterr(err, errlen, "vkAcquireNextImageKHR failed", ar);
-		return -1;
-	}
-	VkCommandBufferBeginInfo bi = {0};
-	bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	vkResetCommandBuffer(vk->cmd, 0);
-	if (vkBeginCommandBuffer(vk->cmd, &bi) != VK_SUCCESS) {
-		seterr(err, errlen, "begin cmd failed", VK_ERROR_UNKNOWN);
-		return -1;
-	}
-	barrier(vk->cmd, vk->images[idx], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-	VkBufferImageCopy cpy = {0};
-	cpy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	cpy.imageSubresource.layerCount = 1;
-	cpy.imageExtent.width = vk->width;
-	cpy.imageExtent.height = vk->height;
-	cpy.imageExtent.depth = 1;
-	cpy.bufferRowLength = stride / 4;
-	vkCmdCopyBufferToImage(vk->cmd, vk->staging, vk->images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cpy);
-	barrier(vk->cmd, vk->images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-		VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
-	if (vkEndCommandBuffer(vk->cmd) != VK_SUCCESS) {
-		seterr(err, errlen, "end cmd failed", VK_ERROR_UNKNOWN);
-		return -1;
-	}
-	if (submit_wait(vk, vk->img_avail, VK_PIPELINE_STAGE_TRANSFER_BIT, vk->done, err, errlen) != 0) {
-		return -1;
-	}
-	VkPresentInfoKHR pi = {0};
-	pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	pi.waitSemaphoreCount = 1;
-	pi.pWaitSemaphores = &vk->done;
-	pi.swapchainCount = 1;
-	pi.pSwapchains = &vk->swapchain;
-	pi.pImageIndices = &idx;
-	VkResult pr = vkQueuePresentKHR(vk->queue, &pi);
-	if (pr != VK_SUCCESS && pr != VK_SUBOPTIMAL_KHR) {
-		seterr(err, errlen, "vkQueuePresentKHR failed", pr);
-		return -1;
-	}
-	return 0;
+	return worldr_vk_upload_present_layers(vk, bgra, stride, NULL, 0, err, errlen);
 }
 
 int worldr_vk_headless_clear(worldr_vk *vk, float r, float g, float b, float a, uint32_t *out_pixel, char *err, int errlen)
@@ -981,6 +945,11 @@ int worldr_vk_has_dmabuf(const worldr_vk *vk)
 	return vk && vk->dmabuf_ok && vk->device;
 }
 
+int worldr_vk_is_display(const worldr_vk *vk)
+{
+	return vk && vk->mode == WORLDR_VK_DISPLAY && vk->device;
+}
+
 static VkFormat fourcc_to_vk(uint32_t fourcc, int *swizzle_rb)
 {
 	*swizzle_rb = 0;
@@ -997,38 +966,37 @@ static VkFormat fourcc_to_vk(uint32_t fourcc, int *swizzle_rb)
 	}
 }
 
-int worldr_vk_dmabuf_import(worldr_vk *vk, uint32_t width, uint32_t height, uint32_t fourcc, uint64_t modifier,
-			    int nplanes, const int *fds, const uint32_t *offsets, const uint32_t *pitches,
-			    uint8_t *out_bgra, uint32_t out_stride, char *err, int errlen)
+static void dma_slot_reset(worldr_vk *vk, worldr_dma_slot *s)
 {
-	if (!vk || !vk->device || !out_bgra || nplanes < 1 || nplanes > 4 || !fds) {
-		seterr(err, errlen, "dmabuf import: bad args", VK_SUCCESS);
-		return -1;
+	if (!vk || !s || !s->used) {
+		return;
 	}
-	if (!vk->dmabuf_ok) {
-		seterr(err, errlen, "device lacks VK_EXT_external_memory_dma_buf + VK_KHR_external_memory_fd", VK_SUCCESS);
-		return -1;
+	if (s->image) {
+		vkDestroyImage(vk->device, s->image, NULL);
 	}
-	if (vk->fence) {
-		if (vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, WORLDR_VK_WAIT_NS) == VK_TIMEOUT) {
-			seterr(err, errlen, "GPU wait timed out (2s) before dmabuf import", VK_TIMEOUT);
-			return -1;
+	for (int i = 0; i < 4; i++) {
+		if (s->mem[i]) {
+			vkFreeMemory(vk->device, s->mem[i], NULL);
 		}
-		vkResetFences(vk->device, 1, &vk->fence);
 	}
+	memset(s, 0, sizeof(*s));
+}
 
+/* Import dma-buf as a TRANSFER_SRC VkImage. Caller owns image + mem[0..nmem). */
+static int dma_bind_image(worldr_vk *vk, uint32_t width, uint32_t height, uint32_t fourcc, uint64_t modifier,
+			  int nplanes, const int *fds, const uint32_t *offsets, const uint32_t *pitches,
+			  VkImage *out_img, VkDeviceMemory mem[4], int *out_nmem, VkFormat *out_fmt, char *err, int errlen)
+{
 	int swizzle = 0;
 	VkFormat fmt = fourcc_to_vk(fourcc, &swizzle);
 	if (fmt == VK_FORMAT_UNDEFINED) {
 		seterr(err, errlen, "unsupported dmabuf fourcc (want ARGB/XRGB/ABGR/XBGR8888)", VK_SUCCESS);
 		return -1;
 	}
-
 	int use_mod = has_dev_ext(vk->phys, VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME) &&
 		      modifier != DRM_FORMAT_MOD_INVALID;
 	if (modifier == DRM_FORMAT_MOD_LINEAR) {
-		use_mod = use_mod && modifier != 0; /* linear can use TILING_LINEAR */
-		use_mod = 0;			    /* prefer LINEAR tiling for modifier 0 */
+		use_mod = 0;
 	}
 
 	VkImageDrmFormatModifierExplicitCreateInfoEXT expl = {0};
@@ -1073,7 +1041,6 @@ int worldr_vk_dmabuf_import(worldr_vk *vk, uint32_t width, uint32_t height, uint
 		return -1;
 	}
 
-	VkDeviceMemory plane_mem[4] = {0};
 	int imported = 0;
 	if (use_mod && nplanes > 1) {
 		for (int i = 0; i < nplanes; i++) {
@@ -1108,7 +1075,7 @@ int worldr_vk_dmabuf_import(worldr_vk *vk, uint32_t width, uint32_t height, uint
 			ai.pNext = &ded;
 			ai.allocationSize = mr2.memoryRequirements.size;
 			ai.memoryTypeIndex = mi;
-			r = vkAllocateMemory(vk->device, &ai, NULL, &plane_mem[i]);
+			r = vkAllocateMemory(vk->device, &ai, NULL, &mem[i]);
 			if (r != VK_SUCCESS) {
 				close(dfd);
 				seterr(err, errlen, "vkAllocateMemory import plane failed", r);
@@ -1122,7 +1089,7 @@ int worldr_vk_dmabuf_import(worldr_vk *vk, uint32_t width, uint32_t height, uint
 			bi.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
 			bi.pNext = &bp;
 			bi.image = src;
-			bi.memory = plane_mem[i];
+			bi.memory = mem[i];
 			r = vkBindImageMemory2(vk->device, 1, &bi);
 			if (r != VK_SUCCESS) {
 				seterr(err, errlen, "vkBindImageMemory2 plane failed", r);
@@ -1154,19 +1121,67 @@ int worldr_vk_dmabuf_import(worldr_vk *vk, uint32_t width, uint32_t height, uint
 		ai.pNext = &ded;
 		ai.allocationSize = mr.size;
 		ai.memoryTypeIndex = mi;
-		r = vkAllocateMemory(vk->device, &ai, NULL, &plane_mem[0]);
+		r = vkAllocateMemory(vk->device, &ai, NULL, &mem[0]);
 		if (r != VK_SUCCESS) {
 			close(dfd);
 			seterr(err, errlen, "vkAllocateMemory import failed", r);
 			goto fail;
 		}
 		imported = 1;
-		r = vkBindImageMemory(vk->device, src, plane_mem[0], 0);
+		r = vkBindImageMemory(vk->device, src, mem[0], 0);
 		if (r != VK_SUCCESS) {
 			seterr(err, errlen, "vkBindImageMemory import failed", r);
 			goto fail;
 		}
 	}
+	*out_img = src;
+	*out_nmem = imported;
+	*out_fmt = fmt;
+	(void)swizzle;
+	return 0;
+
+fail:
+	vkDestroyImage(vk->device, src, NULL);
+	for (int i = 0; i < 4; i++) {
+		if (mem[i]) {
+			vkFreeMemory(vk->device, mem[i], NULL);
+			mem[i] = VK_NULL_HANDLE;
+		}
+	}
+	return -1;
+}
+
+int worldr_vk_dmabuf_import(worldr_vk *vk, uint32_t width, uint32_t height, uint32_t fourcc, uint64_t modifier,
+			    int nplanes, const int *fds, const uint32_t *offsets, const uint32_t *pitches,
+			    uint8_t *out_bgra, uint32_t out_stride, char *err, int errlen)
+{
+	if (!vk || !vk->device || !out_bgra || nplanes < 1 || nplanes > 4 || !fds) {
+		seterr(err, errlen, "dmabuf import: bad args", VK_SUCCESS);
+		return -1;
+	}
+	if (!vk->dmabuf_ok) {
+		seterr(err, errlen, "device lacks VK_EXT_external_memory_dma_buf + VK_KHR_external_memory_fd", VK_SUCCESS);
+		return -1;
+	}
+	if (vk->fence) {
+		if (vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, WORLDR_VK_WAIT_NS) == VK_TIMEOUT) {
+			seterr(err, errlen, "GPU wait timed out (2s) before dmabuf import", VK_TIMEOUT);
+			return -1;
+		}
+		vkResetFences(vk->device, 1, &vk->fence);
+	}
+
+	int swizzle = 0;
+	VkFormat fmt = fourcc_to_vk(fourcc, &swizzle);
+	VkImage src = VK_NULL_HANDLE;
+	VkDeviceMemory plane_mem[4] = {0};
+	int imported = 0;
+	if (dma_bind_image(vk, width, height, fourcc, modifier, nplanes, fds, offsets, pitches,
+			   &src, plane_mem, &imported, &fmt, err, errlen) != 0) {
+		return -1;
+	}
+	(void)fourcc_to_vk(fourcc, &swizzle);
+	VkResult r;
 
 	VkImageCreateInfo li = {0};
 	li.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1286,4 +1301,152 @@ fail:
 		}
 	}
 	return -1;
+}
+
+int worldr_vk_dmabuf_retain(worldr_vk *vk, uint32_t width, uint32_t height, uint32_t fourcc, uint64_t modifier,
+			    int nplanes, const int *fds, const uint32_t *offsets, const uint32_t *pitches,
+			    int *out_slot, char *err, int errlen)
+{
+	if (!vk || !vk->device || !out_slot || nplanes < 1 || nplanes > 4 || !fds) {
+		seterr(err, errlen, "dmabuf retain: bad args", VK_SUCCESS);
+		return -1;
+	}
+	if (!vk->dmabuf_ok) {
+		seterr(err, errlen, "device lacks VK_EXT_external_memory_dma_buf + VK_KHR_external_memory_fd", VK_SUCCESS);
+		return -1;
+	}
+	int idx = -1;
+	for (int i = 0; i < WORLDR_DMABUF_SLOTS; i++) {
+		if (!vk->dma[i].used) {
+			idx = i;
+			break;
+		}
+	}
+	if (idx < 0) {
+		seterr(err, errlen, "dmabuf retain: no free GPU slots", VK_SUCCESS);
+		return -1;
+	}
+	worldr_dma_slot *s = &vk->dma[idx];
+	memset(s, 0, sizeof(*s));
+	if (dma_bind_image(vk, width, height, fourcc, modifier, nplanes, fds, offsets, pitches,
+			   &s->image, s->mem, &s->nmem, &s->fmt, err, errlen) != 0) {
+		memset(s, 0, sizeof(*s));
+		return -1;
+	}
+	s->used = 1;
+	s->w = width;
+	s->h = height;
+	*out_slot = idx + 1;
+	return 0;
+}
+
+void worldr_vk_dmabuf_release(worldr_vk *vk, int slot)
+{
+	if (!vk || slot < 1 || slot > WORLDR_DMABUF_SLOTS) {
+		return;
+	}
+	dma_slot_reset(vk, &vk->dma[slot - 1]);
+}
+
+int worldr_vk_upload_present_layers(worldr_vk *vk, const uint8_t *bgra, uint32_t stride,
+				    const worldr_vk_layer *layers, int nlayers, char *err, int errlen)
+{
+	if (!vk || vk->mode != WORLDR_VK_DISPLAY || !bgra) {
+		seterr(err, errlen, "upload_present requires vk-display + pixels", VK_SUCCESS);
+		return -1;
+	}
+	VkDeviceSize size = (VkDeviceSize)stride * vk->height;
+	if (ensure_staging(vk, size, err, errlen) != 0) {
+		return -1;
+	}
+	memcpy(vk->staging_map, bgra, (size_t)size);
+	if (vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, WORLDR_VK_WAIT_NS) == VK_TIMEOUT) {
+		seterr(err, errlen, "GPU wait timed out (2s) before upload — lost DRM master? Spare TTY: pkill worldr-shell, Ctrl+Alt+F1", VK_TIMEOUT);
+		return -1;
+	}
+	vkResetFences(vk->device, 1, &vk->fence);
+	uint32_t idx = 0;
+	VkResult ar = vkAcquireNextImageKHR(vk->device, vk->swapchain, WORLDR_VK_WAIT_NS, vk->img_avail, VK_NULL_HANDLE, &idx);
+	if (ar == VK_TIMEOUT) {
+		seterr(err, errlen, "vkAcquireNextImageKHR timed out (2s) — not DRM master or display gone. Spare TTY: scripts/try-tty.sh", ar);
+		return -1;
+	}
+	if (ar != VK_SUCCESS && ar != VK_SUBOPTIMAL_KHR) {
+		seterr(err, errlen, "vkAcquireNextImageKHR failed", ar);
+		return -1;
+	}
+	VkCommandBufferBeginInfo bi = {0};
+	bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	vkResetCommandBuffer(vk->cmd, 0);
+	if (vkBeginCommandBuffer(vk->cmd, &bi) != VK_SUCCESS) {
+		seterr(err, errlen, "begin cmd failed", VK_ERROR_UNKNOWN);
+		return -1;
+	}
+	barrier(vk->cmd, vk->images[idx], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	VkBufferImageCopy cpy = {0};
+	cpy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	cpy.imageSubresource.layerCount = 1;
+	cpy.imageExtent.width = vk->width;
+	cpy.imageExtent.height = vk->height;
+	cpy.imageExtent.depth = 1;
+	cpy.bufferRowLength = stride / 4;
+	vkCmdCopyBufferToImage(vk->cmd, vk->staging, vk->images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cpy);
+	/* Implicit sync on Intel: layout transition waits on the dma-buf reservation. */
+	if (layers && nlayers > 0) {
+		for (int i = 0; i < nlayers; i++) {
+			int slot = layers[i].slot;
+			if (slot < 1 || slot > WORLDR_DMABUF_SLOTS || !vk->dma[slot - 1].used) {
+				continue;
+			}
+			worldr_dma_slot *s = &vk->dma[slot - 1];
+			if (s->fmt != VK_FORMAT_B8G8R8A8_UNORM && s->fmt != vk->format) {
+				continue; /* ABGR sampled only via CPU readback */
+			}
+			int32_t dx = layers[i].x, dy = layers[i].y, dw = layers[i].w, dh = layers[i].h;
+			if (dw <= 0 || dh <= 0) {
+				continue;
+			}
+			barrier(vk->cmd, s->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				0, VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+			VkImageBlit bl = {0};
+			bl.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			bl.srcSubresource.layerCount = 1;
+			bl.srcOffsets[1].x = (int32_t)s->w;
+			bl.srcOffsets[1].y = (int32_t)s->h;
+			bl.srcOffsets[1].z = 1;
+			bl.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			bl.dstSubresource.layerCount = 1;
+			bl.dstOffsets[0].x = dx;
+			bl.dstOffsets[0].y = dy;
+			bl.dstOffsets[1].x = dx + dw;
+			bl.dstOffsets[1].y = dy + dh;
+			bl.dstOffsets[1].z = 1;
+			vkCmdBlitImage(vk->cmd, s->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				       vk->images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bl, VK_FILTER_NEAREST);
+		}
+	}
+	barrier(vk->cmd, vk->images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+		VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+	if (vkEndCommandBuffer(vk->cmd) != VK_SUCCESS) {
+		seterr(err, errlen, "end cmd failed", VK_ERROR_UNKNOWN);
+		return -1;
+	}
+	if (submit_wait(vk, vk->img_avail, VK_PIPELINE_STAGE_TRANSFER_BIT, vk->done, err, errlen) != 0) {
+		return -1;
+	}
+	VkPresentInfoKHR pi = {0};
+	pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	pi.waitSemaphoreCount = 1;
+	pi.pWaitSemaphores = &vk->done;
+	pi.swapchainCount = 1;
+	pi.pSwapchains = &vk->swapchain;
+	pi.pImageIndices = &idx;
+	VkResult pr = vkQueuePresentKHR(vk->queue, &pi);
+	if (pr != VK_SUCCESS && pr != VK_SUBOPTIMAL_KHR) {
+		seterr(err, errlen, "vkQueuePresentKHR failed", pr);
+		return -1;
+	}
+	return 0;
 }

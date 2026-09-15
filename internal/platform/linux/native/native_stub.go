@@ -24,6 +24,7 @@ func (v *VK) UploadPresent(bgra []byte, stride uint32) error {
 	return ErrUnavailable
 }
 func (v *VK) HasDMABuf() bool { return false }
+func (v *VK) IsDisplay() bool { return false }
 
 type DMABufPlane struct {
 	FD     int
@@ -31,8 +32,24 @@ type DMABufPlane struct {
 	Stride uint32
 }
 
+type GPULayer struct {
+	Slot int
+	X, Y int
+	W, H int
+}
+
 func (v *VK) ImportDMABuf(width, height, fourcc uint32, modifier uint64, planes []DMABufPlane) ([]byte, int, error) {
 	return nil, 0, ErrUnavailable
+}
+
+func (v *VK) RetainDMABuf(width, height, fourcc uint32, modifier uint64, planes []DMABufPlane) (int, error) {
+	return 0, ErrUnavailable
+}
+
+func (v *VK) ReleaseDMABuf(slot int) {}
+
+func (v *VK) UploadPresentLayers(bgra []byte, stride uint32, layers []GPULayer) error {
+	return ErrUnavailable
 }
 
 func (v *VK) HeadlessClear(r, g, b, a float32) (uint32, error) { return 0, ErrUnavailable }

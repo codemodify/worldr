@@ -106,7 +106,7 @@ func TestCompositeDesktopPanelAlwaysOnBottom(t *testing.T) {
 	dst := make([]byte, stride*h)
 	clear := PackBGRA([4]float32{0, 0, 0, 1})
 	CompositeDesktop(dst, stride, w, h, clear, nil, false, CursorBlit{}, Theater{}, OverviewDraw{},
-		ChromeDraw{PanelH: PanelH, Clock: "12:00:00", Brand: "worldr"})
+		ChromeDraw{PanelH: PanelH, Clock: "12:00:00", Brand: "worldr"}, false)
 	// Top of the panel (accent line) is cyan, not clear.
 	y := h - PanelH
 	i := y*stride + 8*4

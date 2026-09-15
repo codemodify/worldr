@@ -76,7 +76,11 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		var imp compositor.DMABufImport
 		if p.vk != nil && p.vk.HasDMABuf() {
 			imp = vkDMABuf{p.vk}
-			fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + readback enabled (shm remains fallback)")
+			if p.vk.IsDisplay() {
+				fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + GPU sample on vk-display (shm/readback fallback; no KMS scanout bypass)")
+			} else {
+				fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + readback enabled (shm remains fallback)")
+			}
 		} else {
 			fmt.Fprintln(stdout, "linux-dmabuf: advertised; LINEAR mmap works, tiled GPU buffers need Vulkan import (unavailable on this device)")
 		}
@@ -324,21 +328,24 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			if ln.Open {
 				ld = &LauncherDraw{Items: ln.labels(), Select: ln.Select}
 			}
+			gpuOverlay := p.vk != nil && p.name == string(BackendVKDisplay) && ov.Progress(now) == 0
+			ch := ChromeDraw{
+				PanelH:     PanelH,
+				Clock:      ClockString(now),
+				Brand:      "worldr",
+				Title:      FocusedTitle(desk),
+				LaunchOn:   ln.Open,
+				OverviewOn: ov.Want,
+				Launcher:   ld,
+				WS:         scene.WorkspacePose(now),
+				Occupied:   scene.Occupied(),
+			}
 			CompositeDesktop(fb, stride, int(w), int(h), pixel, actors, opt.SSD, cur,
 				Theater{Now: now, Tier: opt.Effects},
 				OverviewDraw{T: ov.Progress(now), Select: ov.Select},
-				ChromeDraw{
-					PanelH:     PanelH,
-					Clock:      ClockString(now),
-					Brand:      "worldr",
-					Title:      FocusedTitle(desk),
-					LaunchOn:   ln.Open,
-					OverviewOn: ov.Want,
-					Launcher:   ld,
-					WS:         scene.WorkspacePose(now),
-					Occupied:   scene.Occupied(),
-				})
-			if err := p.upload(fb, uint32(stride)); err != nil {
+				ch, gpuOverlay)
+			layers := gpuLayers(actors, ch, int(w), gpuOverlay)
+			if err := p.upload(fb, uint32(stride), layers); err != nil {
 				return err
 			}
 		} else {
@@ -398,13 +405,34 @@ func (p *presenter) clear(c [4]float32) error {
 		w, h := int(p.w), int(p.h)
 		fb := make([]byte, w*h*4)
 		engine.FillBGRA(fb, w*4, w, h, PackBGRA(c))
-		return p.upload(fb, uint32(w*4))
+		return p.upload(fb, uint32(w*4), nil)
 	}
 }
 
-func (p *presenter) upload(bgra []byte, stride uint32) error {
+func gpuLayers(actors []*engine.Actor, ch ChromeDraw, screenW int, on bool) []native.GPULayer {
+	if !on {
+		return nil
+	}
+	var out []native.GPULayer
+	for _, a := range actors {
+		if a == nil || a.GPUSlot <= 0 {
+			continue
+		}
+		ox, show := ch.WS.OffsetFor(a.Workspace, screenW)
+		if !show {
+			continue
+		}
+		out = append(out, native.GPULayer{Slot: a.GPUSlot, X: a.X + ox, Y: a.Y, W: a.Width, H: a.Height})
+	}
+	return out
+}
+
+func (p *presenter) upload(bgra []byte, stride uint32, layers []native.GPULayer) error {
 	switch {
 	case p.vk != nil && p.name == string(BackendVKDisplay):
+		if len(layers) > 0 {
+			return p.vk.UploadPresentLayers(bgra, stride, layers)
+		}
 		return p.vk.UploadPresent(bgra, stride)
 	case p.drm != nil:
 		return p.drm.PresentBGRA(bgra, stride)
@@ -426,6 +454,22 @@ func (v vkDMABuf) ImportDMABuf(width, height, fourcc uint32, modifier uint64, pl
 		np[i] = native.DMABufPlane{FD: p.FD, Offset: p.Offset, Stride: p.Stride}
 	}
 	return v.VK.ImportDMABuf(width, height, fourcc, modifier, np)
+}
+
+func (v vkDMABuf) RetainDMABuf(width, height, fourcc uint32, modifier uint64, planes []compositor.DMABufPlane) (int, error) {
+	np := make([]native.DMABufPlane, len(planes))
+	for i, p := range planes {
+		np[i] = native.DMABufPlane{FD: p.FD, Offset: p.Offset, Stride: p.Stride}
+	}
+	return v.VK.RetainDMABuf(width, height, fourcc, modifier, np)
+}
+
+func (v vkDMABuf) ReleaseDMABuf(slot int) {
+	v.VK.ReleaseDMABuf(slot)
+}
+
+func (v vkDMABuf) CanGPUComposite() bool {
+	return v.VK != nil && v.VK.IsDisplay()
 }
 
 func openPresent(stdout, stderr io.Writer, opt Options, seat Seat) (*presenter, error) {

@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.10-dev — dmabuf GPU sample (no scanout bypass)
+
+- `zwp_linux_dmabuf_v1` still advertised. LINEAR mmap and Vulkan readback remain the CPU fallback (nested, drm, ABGR, theater).
+- On `vk-display`, ARGB/XRGB client buffers are retained as `VkImage` and **blitted in the compositor pass** after the CPU desktop upload. Intel implicit sync via layout transition. No linux-drm-syncobj; no KMS plane scanout (TODO).
+- Bad fourcc / empty / tiled-without-import refuse. shm path unchanged.
+- No IME.
+
 ## 0.9.9-dev — clipboard MIME (text/plain)
 
 - `wl_data_device_manager` now does real selection: `wl_data_source.offer`, `set_selection`, `data_offer` / `selection`, `data_offer.receive` → `data_source.send` (UTF-8 bytes on the fd).

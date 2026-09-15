@@ -43,6 +43,36 @@ type dmaBuf struct {
 	planes   []dmaPlane
 	pixels   []byte
 	stride   int
+	gpuSlot  int
+	resolved bool
+}
+
+// ValidateDMABuf rejects empty / unsupported client buffers before import.
+func ValidateDMABuf(w, h int, fourcc uint32, nplanes int) error {
+	if w <= 0 || h <= 0 {
+		return fmt.Errorf("empty dmabuf")
+	}
+	if nplanes < 1 || nplanes > 4 {
+		return fmt.Errorf("dmabuf plane count %d", nplanes)
+	}
+	if !SupportedDMABufFourcc(fourcc) {
+		return fmt.Errorf("unsupported dmabuf fourcc 0x%x (want ARGB/XRGB/ABGR/XBGR8888)", fourcc)
+	}
+	return nil
+}
+
+// SupportedDMABufFourcc is the 8888 set advertised to clients.
+func SupportedDMABufFourcc(fourcc uint32) bool {
+	switch fourcc {
+	case drmFormatARGB8888, drmFormatXRGB8888, drmFormatABGR8888, drmFormatXBGR8888:
+		return true
+	}
+	return false
+}
+
+// GPUSampleFourcc is true when the compositor can blit the import onto a BGRA swapchain.
+func GPUSampleFourcc(fourcc uint32) bool {
+	return fourcc == drmFormatARGB8888 || fourcc == drmFormatXRGB8888
 }
 
 func (d *dmaBuf) closeFDs() {
@@ -277,29 +307,63 @@ func (c *Client) finishDmaBuffer(id uint32, d *dmaBuf) error {
 }
 
 func (c *Client) resolveDma(d *dmaBuf) error {
-	if d.w <= 0 || d.h <= 0 || len(d.planes) == 0 {
+	if d == nil {
 		return fmt.Errorf("empty dmabuf")
+	}
+	if d.resolved {
+		return nil
+	}
+	if err := ValidateDMABuf(d.w, d.h, d.fourcc, len(d.planes)); err != nil {
+		return err
+	}
+	if c == nil || c.srv == nil {
+		return fmt.Errorf("no compositor for dmabuf import")
 	}
 	linear := d.modifier == drmModLinear || d.modifier == 0 || d.modifier == drmModInvalid
 	if linear && len(d.planes) >= 1 && d.planes[0].fd > 0 && d.planes[0].stride > 0 {
 		if pix, stride, err := mmapLinear(d); err == nil {
 			d.pixels, d.stride = pix, stride
-			return nil
 		}
 	}
-	if c.srv.Import != nil {
-		planes := make([]DMABufPlane, len(d.planes))
-		for i, p := range d.planes {
-			planes[i] = DMABufPlane{FD: p.fd, Offset: p.offset, Stride: p.stride}
+	planes := make([]DMABufPlane, len(d.planes))
+	for i, p := range d.planes {
+		planes[i] = DMABufPlane{FD: p.fd, Offset: p.offset, Stride: p.stride}
+	}
+	if gpu, ok := c.srv.Import.(DMABufGPU); ok && gpu.CanGPUComposite() && GPUSampleFourcc(d.fourcc) {
+		slot, err := gpu.RetainDMABuf(uint32(d.w), uint32(d.h), d.fourcc, d.modifier, planes)
+		if err == nil && slot > 0 {
+			d.gpuSlot = slot
+			d.resolved = true
+			return nil
 		}
+		if d.pixels == nil && err != nil {
+			c.srv.log.Printf("dmabuf retain failed, trying readback: %v", err)
+		}
+	}
+	if d.pixels != nil {
+		d.resolved = true
+		return nil
+	}
+	if c.srv.Import != nil {
 		pix, stride, err := c.srv.Import.ImportDMABuf(uint32(d.w), uint32(d.h), d.fourcc, d.modifier, planes)
 		if err != nil {
 			return err
 		}
 		d.pixels, d.stride = pix, stride
+		d.resolved = true
 		return nil
 	}
 	return fmt.Errorf("no Vulkan dmabuf import (tiled buffer, shm fallback not possible)")
+}
+
+func (c *Client) releaseDma(d *dmaBuf) {
+	if d == nil || d.gpuSlot <= 0 || c.srv == nil {
+		return
+	}
+	if gpu, ok := c.srv.Import.(DMABufGPU); ok {
+		gpu.ReleaseDMABuf(d.gpuSlot)
+	}
+	d.gpuSlot = 0
 }
 
 func mmapLinear(d *dmaBuf) ([]byte, int, error) {

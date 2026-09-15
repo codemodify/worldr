@@ -141,9 +141,11 @@ is the real-display path on a spare TTY (`scripts/try-tty.sh`).
 
 `zwp_linux_dmabuf_v1` (v4 feedback + v3 format/modifier events) is advertised.
 LINEAR buffers mmap on the compositor. Tiled Intel modifiers
-(`X/Y/Yf/4_TILED`) are imported with `VK_EXT_external_memory_dma_buf` and
-copied to a linear host image so the existing SSD/focus CPU composite still
-works. shm remains the fallback. Zero-copy GPU composite is later.
+(`X/Y/Yf/4_TILED`) are imported with `VK_EXT_external_memory_dma_buf`.
+On `vk-display`, ARGB/XRGB imports are retained as `VkImage` and blitted
+onto the swapchain after the CPU desktop upload (implicit dma-buf sync).
+Readback / mmap remain for nested, drm, ABGR, and theater. shm is the
+fallback. KMS scanout bypass and `linux-drm-syncobj` are later.
 
 ## Present / compositor loop
 
