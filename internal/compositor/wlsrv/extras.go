@@ -7,11 +7,17 @@ import (
 )
 
 const (
-	globalCursorShape uint32 = 11
-	globalActivation  uint32 = 12
-	globalPrimary     uint32 = 13
-	globalXwayland    uint32 = 14
+	globalCursorShape     uint32 = 11
+	globalActivation      uint32 = 12
+	globalPrimary         uint32 = 13
+	globalXwayland        uint32 = 14
+	globalFractionalScale uint32 = 15
 )
+
+// PreferredScale120ths is 1.0 in wp_fractional_scale_v1 units (scale / 120).
+// v0 reports this so clients stop warning; the shell still composites at
+// integer buffer scale.
+const PreferredScale120ths uint32 = 120
 
 // wp_cursor_shape_v1 shapes (enum starts at 1).
 const (
@@ -161,5 +167,32 @@ func (c *Client) reqXwaylandSurface(o *object, op uint16, cur *wayland.Cursor) e
 		return nil
 	}
 	delete(c.objs, o.id)
+	return nil
+}
+
+func (c *Client) reqFracScaleMgr(_ *object, op uint16, cur *wayland.Cursor) error {
+	switch op {
+	case 0: // destroy
+		return nil
+	case 1: // get_fractional_scale(id, surface)
+		id, err := cur.U32()
+		if err != nil {
+			return err
+		}
+		sid, _ := cur.U32()
+		var surf *surface
+		if so := c.objs[sid]; so != nil {
+			surf = so.surf
+		}
+		c.objs[id] = &object{id: id, kind: kindFracScale, surf: surf}
+		return c.send(id, 0, wayland.PutU32(nil, PreferredScale120ths), nil)
+	}
+	return nil
+}
+
+func (c *Client) reqFracScale(o *object, op uint16, _ *wayland.Cursor) error {
+	if op == 0 {
+		delete(c.objs, o.id)
+	}
 	return nil
 }
