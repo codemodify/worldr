@@ -120,6 +120,35 @@ func (v *VK) IsDisplay() bool {
 	return v != nil && v.ptr != nil && C.worldr_vk_is_display(v.ptr) != 0
 }
 
+// HasTimeline is true when the device can import a DRM syncobj as a Vulkan timeline.
+func (v *VK) HasTimeline() bool {
+	return v != nil && v.ptr != nil && C.worldr_vk_has_timeline(v.ptr) != 0
+}
+
+// DisplayPlanes is the VK_KHR_display plane count (0 if unknown / not display).
+func (v *VK) DisplayPlanes() int {
+	if v == nil || v.ptr == nil {
+		return 0
+	}
+	return int(C.worldr_vk_display_planes(v.ptr))
+}
+
+// WaitTimeline imports fd as a timeline semaphore and vkWaitSemaphores(point).
+func (v *VK) WaitTimeline(fd int, point uint64, timeoutNS uint64) error {
+	if v == nil || v.ptr == nil {
+		return fmt.Errorf("vulkan session closed")
+	}
+	if fd < 0 {
+		return fmt.Errorf("syncobj fd")
+	}
+	errb := make([]C.char, errBuf)
+	if C.worldr_vk_wait_timeline_fd(v.ptr, C.int(fd), C.uint64_t(point), C.uint64_t(timeoutNS),
+		&errb[0], C.int(len(errb))) != 0 {
+		return cErr(errb)
+	}
+	return nil
+}
+
 // GPULayer is one retained dmabuf blit onto the swapchain (1-based slot).
 type GPULayer struct {
 	Slot int
@@ -316,6 +345,76 @@ func (d *DRM) RestoreScanout() error {
 // ScanoutActive is true while a client dmabuf is on the primary plane.
 func (d *DRM) ScanoutActive() bool {
 	return d != nil && d.ptr != nil && C.worldr_drm_scanout_active(d.ptr) != 0
+}
+
+// PlaneCaps reports whether the card has an overlay and/or cursor plane.
+func (d *DRM) PlaneCaps() (overlay, cursor bool, cursorW, cursorH uint32) {
+	if d == nil || d.ptr == nil {
+		return false, false, 0, 0
+	}
+	var ov, cu C.int
+	var cw, ch C.uint32_t
+	if C.worldr_drm_plane_caps(d.ptr, &ov, &cu, &cw, &ch) != 0 {
+		return false, false, 0, 0
+	}
+	return ov != 0, cu != 0, uint32(cw), uint32(ch)
+}
+
+// OverlayDMABuf places a windowed client dmabuf on an overlay plane.
+func (d *DRM) OverlayDMABuf(fd int, width, height, fourcc uint32, modifier uint64, offset, pitch uint32, x, y int) error {
+	if d == nil || d.ptr == nil {
+		return fmt.Errorf("drm session closed")
+	}
+	if fd < 0 {
+		return fmt.Errorf("dmabuf fd")
+	}
+	errb := make([]C.char, errBuf)
+	if C.worldr_drm_overlay_dmabuf(d.ptr, C.int(fd), C.uint32_t(width), C.uint32_t(height),
+		C.uint32_t(fourcc), C.uint64_t(modifier), C.uint32_t(offset), C.uint32_t(pitch),
+		C.int32_t(x), C.int32_t(y), &errb[0], C.int(len(errb))) != 0 {
+		return cErr(errb)
+	}
+	return nil
+}
+
+// OverlayDisable turns the overlay plane off (compose fallback).
+func (d *DRM) OverlayDisable() error {
+	if d == nil || d.ptr == nil {
+		return fmt.Errorf("drm session closed")
+	}
+	errb := make([]C.char, errBuf)
+	if C.worldr_drm_overlay_disable(d.ptr, &errb[0], C.int(len(errb))) != 0 {
+		return cErr(errb)
+	}
+	return nil
+}
+
+// CursorARGB commits a software cursor image onto the hardware cursor plane.
+func (d *DRM) CursorARGB(x, y int, width, height uint32, bgra []byte, stride uint32) error {
+	if d == nil || d.ptr == nil {
+		return fmt.Errorf("drm session closed")
+	}
+	if len(bgra) == 0 {
+		return fmt.Errorf("empty cursor")
+	}
+	errb := make([]C.char, errBuf)
+	if C.worldr_drm_cursor_argb(d.ptr, C.int32_t(x), C.int32_t(y), C.uint32_t(width), C.uint32_t(height),
+		(*C.uint8_t)(unsafe.Pointer(&bgra[0])), C.uint32_t(stride), &errb[0], C.int(len(errb))) != 0 {
+		return cErr(errb)
+	}
+	return nil
+}
+
+// CursorDisable turns the hardware cursor plane off.
+func (d *DRM) CursorDisable() error {
+	if d == nil || d.ptr == nil {
+		return fmt.Errorf("drm session closed")
+	}
+	errb := make([]C.char, errBuf)
+	if C.worldr_drm_cursor_disable(d.ptr, &errb[0], C.int(len(errb))) != 0 {
+		return cErr(errb)
+	}
+	return nil
 }
 
 // SummarizeDevices is a one-line helper for logs.

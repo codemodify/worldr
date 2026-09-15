@@ -18,3 +18,12 @@ int worldr_drm_scanout_dmabuf(worldr_drm *d, int dmabuf_fd, uint32_t width, uint
 			      char *err, int errlen);
 int worldr_drm_scanout_restore(worldr_drm *d, char *err, int errlen);
 int worldr_drm_scanout_active(const worldr_drm *d);
+/* Overlay / cursor plane caps (Intel first). 0/0 when the card has none. */
+int worldr_drm_plane_caps(worldr_drm *d, int *overlay, int *cursor, uint32_t *cursor_w, uint32_t *cursor_h);
+int worldr_drm_overlay_dmabuf(worldr_drm *d, int dmabuf_fd, uint32_t width, uint32_t height,
+			     uint32_t fourcc, uint64_t modifier, uint32_t offset, uint32_t pitch,
+			     int32_t x, int32_t y, char *err, int errlen);
+int worldr_drm_overlay_disable(worldr_drm *d, char *err, int errlen);
+int worldr_drm_cursor_argb(worldr_drm *d, int32_t x, int32_t y, uint32_t width, uint32_t height,
+			  const uint8_t *bgra, uint32_t stride, char *err, int errlen);
+int worldr_drm_cursor_disable(worldr_drm *d, char *err, int errlen);

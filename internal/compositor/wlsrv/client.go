@@ -221,6 +221,7 @@ func (c *Client) close() {
 	}
 	for _, o := range c.objs {
 		if o.surf != nil && o.surf.actor != nil {
+			releaseActorSync(o.surf.actor)
 			c.srv.Scene.Remove(o.surf.actor)
 		}
 		if o.dma != nil {
@@ -696,6 +697,7 @@ func (c *Client) reqSurface(o *object, op uint16, cur *wayland.Cursor) error {
 		}
 		c.unmapSubsOf(s)
 		if s.actor != nil {
+			releaseActorSync(s.actor)
 			c.srv.Scene.Remove(s.actor)
 		}
 		delete(c.objs, o.id)
@@ -881,6 +883,7 @@ func (c *Client) mapSurface(s *surface) {
 		s.actor.GPUSlot = o.dma.gpuSlot
 		applyDmaScan(s.actor, o.dma)
 	}
+	applyActorSync(s.actor, s.sync)
 	if s.xdg != nil && s.xdg.top != nil {
 		s.actor.Title = s.xdg.top.title
 		s.actor.AppID = s.xdg.top.app

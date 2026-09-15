@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.23-dev — Vulkan timeline wait + overlay/cursor planes
+
+- `wp_linux_drm_syncobj` acquire points wait on a Vulkan timeline semaphore (`VK_KHR_external_semaphore_fd` + `vkWaitSemaphores`) before dmabuf sample, `vkCmdBlit`, and KMS scanout. DRM `SYNCOBJ_TIMELINE` ioctl remains the fallback. Release is signaled after present, not at commit.
+- Overlay and cursor plane eligibility (`scanout.EvaluatePlanes`): windowed ARGB/XRGB dmabuf → overlay; small visible cursor → cursor plane; fullscreen still primary. Nested/shm/headless stay compose. vk-display is eligible (Intel first) but `NeedDRM` — `VK_KHR_display` usually holds master, so we compose.
+- `--backend=drm` tries overlay + hardware cursor atomic commits; failure prints `kms overlay fallback` / `kms cursor fallback` and uses the existing blit path.
+- No IME. No Brave/Ark work.
+
 ## 0.9.22-dev — nest input deadlock
 
 - P0: 0.9.21 froze the nested Plasma window (visible, ~0% CPU, no click/key). `readLoop` holds `Window.mu` across `handle()`; pointer enter called `EnsureHostCursor` which locked the same mutex. `TakeInput` then waited forever.

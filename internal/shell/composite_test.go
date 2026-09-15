@@ -56,6 +56,25 @@ func TestCompositeDesktopNoChromeSkipsSSD(t *testing.T) {
 	}
 }
 
+func TestCompositeDesktopPlaneSkipSkipsPixels(t *testing.T) {
+	const w, h, stride = 64, 48, 256
+	dst := make([]byte, stride*h)
+	clear := PackBGRA([4]float32{0.04, 0.06, 0.12, 1})
+	actor := &engine.Actor{
+		X: 10, Y: 12, Width: 4, Height: 2, Stride: 16,
+		Pixels: []byte{
+			0x11, 0x22, 0x33, 0xff, 0x11, 0x22, 0x33, 0xff, 0x11, 0x22, 0x33, 0xff, 0x11, 0x22, 0x33, 0xff,
+			0x44, 0x55, 0x66, 0xff, 0x44, 0x55, 0x66, 0xff, 0x44, 0x55, 0x66, 0xff, 0x44, 0x55, 0x66, 0xff,
+		},
+		PlaneSkip: true,
+	}
+	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{}, Theater{}, OverviewDraw{}, ChromeDraw{}, false)
+	i := 12*stride + 10*4
+	if dst[i] == 0x11 && dst[i+1] == 0x22 && dst[i+2] == 0x33 {
+		t.Fatal("overlay plane skip must not CPU-blit client pixels")
+	}
+}
+
 func TestCompositeDesktopGPUOverlaySkipsPixels(t *testing.T) {
 	const w, h, stride = 64, 48, 256
 	dst := make([]byte, stride*h)

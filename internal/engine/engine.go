@@ -28,6 +28,11 @@ type Actor struct {
 	ScanMod       uint64
 	ScanOff       uint32
 	ScanStride    uint32
+	AcqFD         int // drm-syncobj acquire fd (dup); 0 = none
+	AcqPoint      uint64
+	RelFD         int // drm-syncobj release fd (dup); signaled after present
+	RelPoint      uint64
+	PlaneSkip     bool      // this frame: pixels on an overlay plane; still draw SSD
 	Born          time.Time // map-in start (zero = already settled)
 	UnmapAt       time.Time // map-out start (zero = mapped)
 	FocusPulse    time.Time // last focus-gain

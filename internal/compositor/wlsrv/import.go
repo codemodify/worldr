@@ -20,3 +20,10 @@ type DMABufGPU interface {
 	ReleaseDMABuf(slot int)
 	CanGPUComposite() bool
 }
+
+// TimelineWaiter is an optional Vulkan wait for wp_linux_drm_syncobj acquire
+// points (VK_KHR_external_semaphore_fd). Same shape as syncobj.Waiter.
+type TimelineWaiter interface {
+	HasTimeline() bool
+	WaitTimeline(fd int, point uint64, timeoutNS uint64) error
+}

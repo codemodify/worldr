@@ -26,6 +26,10 @@ typedef struct {
 
 int worldr_vk_has_dmabuf(const worldr_vk *vk);
 int worldr_vk_is_display(const worldr_vk *vk);
+int worldr_vk_has_timeline(const worldr_vk *vk);
+uint32_t worldr_vk_display_planes(const worldr_vk *vk);
+/* Import a DRM syncobj timeline fd and vkWaitSemaphores before blit/sample. */
+int worldr_vk_wait_timeline_fd(worldr_vk *vk, int fd, uint64_t point, uint64_t timeout_ns, char *err, int errlen);
 int worldr_vk_dmabuf_import(worldr_vk *vk, uint32_t width, uint32_t height, uint32_t fourcc, uint64_t modifier,
 			    int nplanes, const int *fds, const uint32_t *offsets, const uint32_t *pitches,
 			    uint8_t *out_bgra, uint32_t out_stride, char *err, int errlen);

@@ -90,7 +90,11 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			fmt.Fprintln(stdout, "linux-dmabuf: advertised; LINEAR mmap works, tiled GPU buffers need Vulkan import (unavailable on this device)")
 		}
 		if syncobj.TimelineAvailable() {
-			fmt.Fprintln(stdout, "linux-drm-syncobj: wp_linux_drm_syncobj_manager_v1 advertised (acquire wait + release signal; implicit sync fallback). Vulkan timeline wait TODO.")
+			if p.vk != nil && p.vk.HasTimeline() {
+				fmt.Fprintln(stdout, "linux-drm-syncobj: wp_linux_drm_syncobj_manager_v1 advertised (Vulkan timeline wait before blit/sample/scanout; DRM ioctl fallback).")
+			} else {
+				fmt.Fprintln(stdout, "linux-drm-syncobj: wp_linux_drm_syncobj_manager_v1 advertised (DRM ioctl wait; Vulkan timeline unavailable on this device).")
+			}
 		} else {
 			fmt.Fprintln(stdout, "linux-drm-syncobj: not advertised (no DRM SYNCOBJ_TIMELINE); implicit sync only")
 		}
@@ -383,19 +387,32 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			if p.vk != nil {
 				vendor = p.vk.VendorID()
 			}
-			if cand := scanout.Evaluate(scanout.Frame{
-				Backend:  p.name,
-				ScreenW:  int(w),
-				ScreenH:  int(h),
-				Actors:   actors,
-				WS:       scene.WorkspacePose(now),
-				Overview: ov.Want || ov.Progress(now) > 0,
-				Launcher: ln.Open,
-				Theater:  opt.Effects,
-				Now:      now,
-				VendorID: vendor,
-			}); cand.OK {
-				if err := p.tryScanout(cand.Actor); err == nil {
+			dispPlanes := 0
+			if p.vk != nil {
+				dispPlanes = p.vk.DisplayPlanes()
+			}
+			assign := scanout.EvaluatePlanes(scanout.PlaneFrame{
+				Frame: scanout.Frame{
+					Backend:  p.name,
+					ScreenW:  int(w),
+					ScreenH:  int(h),
+					Actors:   actors,
+					WS:       scene.WorkspacePose(now),
+					Overview: ov.Want || ov.Progress(now) > 0,
+					Launcher: ln.Open,
+					Theater:  opt.Effects,
+					Now:      now,
+					VendorID: vendor,
+				},
+				CursorVisible: cur.Visible,
+				CursorW:       cur.W,
+				CursorH:       cur.H,
+				DisplayPlanes: dispPlanes,
+			})
+			if assign.Primary != nil {
+				p.waitActorSync(assign.Primary)
+				if err := p.tryScanout(assign.Primary); err == nil {
+					p.signalActorRelease(assign.Primary)
 					if !p.scanoutOn {
 						fmt.Fprintln(stdout, "kms scanout: primary dmabuf (atomic/SetCrtc); panel/cursor skipped while fullscreen")
 						p.scanoutOn = true
@@ -410,6 +427,47 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			if p.scanoutOn {
 				p.restoreScanout()
 				p.scanoutOn = false
+			}
+			overlay := assign.Overlay
+			if overlay != nil {
+				p.waitActorSync(overlay)
+				if err := p.tryOverlay(overlay); err != nil {
+					if !p.overlayMiss {
+						fmt.Fprintf(stdout, "kms overlay fallback: %v\n", err)
+						p.overlayMiss = true
+					}
+					overlay = nil
+				} else if !p.overlayOn {
+					fmt.Fprintln(stdout, "kms overlay: windowed dmabuf on overlay plane; primary keeps desktop")
+					p.overlayOn = true
+				}
+			}
+			if overlay == nil && p.overlayOn {
+				p.disableOverlay()
+				p.overlayOn = false
+			}
+			if overlay != nil {
+				overlay.PlaneSkip = true
+			}
+			hwCursor := assign.Cursor && p.drm != nil
+			if hwCursor {
+				if err := p.tryCursor(cur); err != nil {
+					if !p.cursorMiss {
+						fmt.Fprintf(stdout, "kms cursor fallback: %v\n", err)
+						p.cursorMiss = true
+					}
+					hwCursor = false
+				} else {
+					if !p.cursorOn {
+						fmt.Fprintln(stdout, "kms cursor: hardware cursor plane")
+						p.cursorOn = true
+					}
+					cur.Visible = false
+				}
+			}
+			if !hwCursor && p.cursorOn {
+				p.disableCursor()
+				p.cursorOn = false
 			}
 			gpuOverlay := p.vk != nil && p.name == string(BackendVKDisplay) && ov.Progress(now) == 0
 			ch := ChromeDraw{
@@ -426,6 +484,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			if fa := focusedActor(desk); fa != nil {
 				ch.Icon, ch.IconW, ch.IconH, ch.IconStride = fa.IconPix, fa.IconW, fa.IconH, fa.IconStride
 			}
+			p.waitActorsSync(actors)
 			CompositeDesktop(fb, stride, int(w), int(h), pixel, actors, opt.SSD, cur,
 				Theater{Now: now, Tier: opt.Effects},
 				OverviewDraw{T: ov.Progress(now), Select: ov.Select},
@@ -433,6 +492,10 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			layers := gpuLayers(actors, ch, int(w), gpuOverlay)
 			if err := p.upload(fb, uint32(stride), layers); err != nil {
 				return err
+			}
+			p.signalActorsRelease(actors)
+			if overlay != nil {
+				overlay.PlaneSkip = false
 			}
 		} else {
 			if err := p.clear(opt.Color); err != nil {
@@ -454,6 +517,10 @@ type presenter struct {
 	color       [4]float32
 	scanoutOn   bool
 	scanoutMiss bool
+	overlayOn   bool
+	overlayMiss bool
+	cursorOn    bool
+	cursorMiss  bool
 }
 
 func nestedPresent(name string) bool {
@@ -504,7 +571,7 @@ func gpuLayers(actors []*engine.Actor, ch ChromeDraw, screenW int, on bool) []na
 	}
 	var out []native.GPULayer
 	for _, a := range actors {
-		if a == nil || a.GPUSlot <= 0 || a.ScaledBuffer() {
+		if a == nil || a.GPUSlot <= 0 || a.ScaledBuffer() || a.PlaneSkip {
 			continue
 		}
 		ox, show := ch.WS.OffsetFor(a.Workspace, screenW)
@@ -538,6 +605,80 @@ func (p *presenter) tryScanout(a *engine.Actor) error {
 func (p *presenter) restoreScanout() {
 	if p != nil && p.drm != nil && p.drm.ScanoutActive() {
 		_ = p.drm.RestoreScanout()
+	}
+	p.disableOverlay()
+	p.disableCursor()
+}
+
+func (p *presenter) tryOverlay(a *engine.Actor) error {
+	if p == nil || a == nil || a.ScanFD <= 0 {
+		return fmt.Errorf("no overlay fd")
+	}
+	if p.drm == nil {
+		if p.name == string(BackendVKDisplay) {
+			return fmt.Errorf("VK_KHR_display holds DRM master; compose fallback")
+		}
+		return fmt.Errorf("no KMS session")
+	}
+	bw, bh := a.PixelSize()
+	return p.drm.OverlayDMABuf(a.ScanFD, uint32(bw), uint32(bh), a.ScanFourcc, a.ScanMod, a.ScanOff, a.ScanStride, a.X, a.Y)
+}
+
+func (p *presenter) disableOverlay() {
+	if p != nil && p.drm != nil {
+		_ = p.drm.OverlayDisable()
+	}
+}
+
+func (p *presenter) tryCursor(cur CursorBlit) error {
+	if p == nil || p.drm == nil {
+		return fmt.Errorf("no KMS session")
+	}
+	if !cur.Visible || cur.W < 1 || cur.H < 1 || len(cur.Pix) == 0 {
+		return fmt.Errorf("no cursor pixels")
+	}
+	x := cur.X - cur.HX
+	y := cur.Y - cur.HY
+	return p.drm.CursorARGB(x, y, uint32(cur.W), uint32(cur.H), cur.Pix, uint32(cur.Stride))
+}
+
+func (p *presenter) disableCursor() {
+	if p != nil && p.drm != nil {
+		_ = p.drm.CursorDisable()
+	}
+}
+
+func (p *presenter) waitActorSync(a *engine.Actor) {
+	if p == nil || a == nil || a.AcqFD <= 0 {
+		return
+	}
+	f := syncobj.Fence{FD: a.AcqFD, Point: a.AcqPoint}
+	var w syncobj.Waiter
+	if p.vk != nil {
+		w = p.vk
+	}
+	_ = syncobj.WaitAcquire(f, 100*time.Millisecond, w)
+}
+
+func (p *presenter) waitActorsSync(actors []*engine.Actor) {
+	for _, a := range actors {
+		p.waitActorSync(a)
+	}
+}
+
+func (p *presenter) signalActorRelease(a *engine.Actor) {
+	if a == nil || a.RelFD <= 0 {
+		return
+	}
+	_ = syncobj.SignalFence(syncobj.Fence{FD: a.RelFD, Point: a.RelPoint})
+	f := syncobj.Fence{FD: a.RelFD}
+	f.CloseFD()
+	a.RelFD, a.RelPoint = 0, 0
+}
+
+func (p *presenter) signalActorsRelease(actors []*engine.Actor) {
+	for _, a := range actors {
+		p.signalActorRelease(a)
 	}
 }
 
@@ -584,6 +725,17 @@ func (v vkDMABuf) ReleaseDMABuf(slot int) {
 
 func (v vkDMABuf) CanGPUComposite() bool {
 	return v.VK != nil && v.VK.IsDisplay()
+}
+
+func (v vkDMABuf) HasTimeline() bool {
+	return v.VK != nil && v.VK.HasTimeline()
+}
+
+func (v vkDMABuf) WaitTimeline(fd int, point uint64, timeoutNS uint64) error {
+	if v.VK == nil {
+		return fmt.Errorf("vulkan session closed")
+	}
+	return v.VK.WaitTimeline(fd, point, timeoutNS)
 }
 
 func openPresent(stdout, stderr io.Writer, opt Options, seat Seat) (*presenter, error) {

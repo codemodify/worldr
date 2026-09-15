@@ -51,6 +51,9 @@ struct worldr_vk {
 	char device_name[256];
 	VkFormat format;
 	int dmabuf_ok;
+	int timeline_ok;
+	int ext_sem_fd;
+	uint32_t display_planes;
 	worldr_dma_slot dma[WORLDR_DMABUF_SLOTS];
 };
 
@@ -222,8 +225,9 @@ static int create_device(worldr_vk *vk, int need_swapchain, char *err, int errle
 		VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
 		VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
 		VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME,
+		VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
 	};
-	const char *have[8];
+	const char *have[10];
 	uint32_t nh = 0;
 	for (uint32_t i = 0; i < sizeof(want) / sizeof(want[0]); i++) {
 		if (strcmp(want[i], VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0 && !need_swapchain) {
@@ -235,6 +239,16 @@ static int create_device(worldr_vk *vk, int need_swapchain, char *err, int errle
 	}
 	vk->dmabuf_ok = has_dev_ext(vk->phys, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME) &&
 			has_dev_ext(vk->phys, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+	vk->ext_sem_fd = has_dev_ext(vk->phys, VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
+
+	VkPhysicalDeviceTimelineSemaphoreFeatures ts = {0};
+	ts.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+	VkPhysicalDeviceFeatures2 f2 = {0};
+	f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	f2.pNext = &ts;
+	vkGetPhysicalDeviceFeatures2(vk->phys, &f2);
+	vk->timeline_ok = ts.timelineSemaphore && vk->ext_sem_fd;
+	ts.timelineSemaphore = VK_TRUE;
 
 	VkDeviceCreateInfo dci = {0};
 	dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -242,6 +256,9 @@ static int create_device(worldr_vk *vk, int need_swapchain, char *err, int errle
 	dci.pQueueCreateInfos = &qci;
 	dci.enabledExtensionCount = nh;
 	dci.ppEnabledExtensionNames = nh ? have : NULL;
+	if (vk->timeline_ok) {
+		dci.pNext = &ts;
+	}
 
 	VkResult r = vkCreateDevice(vk->phys, &dci, NULL, &vk->device);
 	if (r != VK_SUCCESS) {
@@ -269,6 +286,7 @@ static int create_display_surface(worldr_vk *vk, uint32_t prefer_w, uint32_t pre
 
 	uint32_t nplanes = 0;
 	vkGetPhysicalDeviceDisplayPlanePropertiesKHR(vk->phys, &nplanes, NULL);
+	vk->display_planes = nplanes;
 	VkDisplayPlanePropertiesKHR *planes = NULL;
 	if (nplanes) {
 		planes = (VkDisplayPlanePropertiesKHR *)calloc(nplanes, sizeof(*planes));
@@ -948,6 +966,87 @@ int worldr_vk_has_dmabuf(const worldr_vk *vk)
 int worldr_vk_is_display(const worldr_vk *vk)
 {
 	return vk && vk->mode == WORLDR_VK_DISPLAY && vk->device;
+}
+
+int worldr_vk_has_timeline(const worldr_vk *vk)
+{
+	return vk && vk->device && vk->timeline_ok && vk->ext_sem_fd;
+}
+
+uint32_t worldr_vk_display_planes(const worldr_vk *vk)
+{
+	return vk ? vk->display_planes : 0;
+}
+
+int worldr_vk_wait_timeline_fd(worldr_vk *vk, int fd, uint64_t point, uint64_t timeout_ns, char *err, int errlen)
+{
+	if (!vk || !vk->device || fd < 0 || !worldr_vk_has_timeline(vk)) {
+		seterr(err, errlen, "vulkan timeline wait unavailable", VK_SUCCESS);
+		return -1;
+	}
+	int dupfd = dup(fd);
+	if (dupfd < 0) {
+		seterr(err, errlen, "dup syncobj fd", VK_SUCCESS);
+		return -1;
+	}
+
+	VkSemaphoreTypeCreateInfo tci = {0};
+	tci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+	tci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+	tci.initialValue = 0;
+	VkSemaphoreCreateInfo sci = {0};
+	sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	sci.pNext = &tci;
+	VkSemaphore sem = VK_NULL_HANDLE;
+	VkResult r = vkCreateSemaphore(vk->device, &sci, NULL, &sem);
+	if (r != VK_SUCCESS) {
+		close(dupfd);
+		seterr(err, errlen, "vkCreateSemaphore timeline", r);
+		return -1;
+	}
+
+	PFN_vkImportSemaphoreFdKHR import_fd =
+		(PFN_vkImportSemaphoreFdKHR)vkGetDeviceProcAddr(vk->device, "vkImportSemaphoreFdKHR");
+	if (!import_fd) {
+		vkDestroySemaphore(vk->device, sem, NULL);
+		close(dupfd);
+		seterr(err, errlen, "vkImportSemaphoreFdKHR missing", VK_SUCCESS);
+		return -1;
+	}
+	VkImportSemaphoreFdInfoKHR imp = {0};
+	imp.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
+	imp.semaphore = sem;
+	imp.flags = VK_SEMAPHORE_IMPORT_TEMPORARY_BIT;
+	imp.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+	imp.fd = dupfd;
+	r = import_fd(vk->device, &imp);
+	if (r != VK_SUCCESS) {
+		/* Import takes the fd only on success. */
+		close(dupfd);
+		vkDestroySemaphore(vk->device, sem, NULL);
+		seterr(err, errlen, "vkImportSemaphoreFdKHR", r);
+		return -1;
+	}
+
+	if (timeout_ns == 0) {
+		timeout_ns = 100000000ull;
+	}
+	VkSemaphoreWaitInfo wi = {0};
+	wi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
+	wi.semaphoreCount = 1;
+	wi.pSemaphores = &sem;
+	wi.pValues = &point;
+	r = vkWaitSemaphores(vk->device, &wi, timeout_ns);
+	vkDestroySemaphore(vk->device, sem, NULL);
+	if (r == VK_TIMEOUT) {
+		seterr(err, errlen, "vkWaitSemaphores timeline timeout", r);
+		return -1;
+	}
+	if (r != VK_SUCCESS) {
+		seterr(err, errlen, "vkWaitSemaphores timeline", r);
+		return -1;
+	}
+	return 0;
 }
 
 static VkFormat fourcc_to_vk(uint32_t fourcc, int *swizzle_rb)
