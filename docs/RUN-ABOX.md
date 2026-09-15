@@ -72,8 +72,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on workspaces):
-git checkout feat/tty-seat-harden
+# this branch (stacked on tty-seat-harden):
+git checkout feat/v0.9-changelog-fractional-scale
 
 export CGO_ENABLED=1
 make build
@@ -360,7 +360,7 @@ disconnected cleanly** against the compositor.
 | Client | Buffer | Expected now | Notes |
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + xkb + SSD. Remaining foot warnings should drop for server-side cursors (`wp_cursor_shape` + `wl_pointer.set_cursor`), XDG activation (token `done`), and primary selection (stub). Still expected: fractional scale, `xdg-toplevel-icon`, text-input/IME. |
+| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + xkb + SSD. Cursors (`wp_cursor_shape`), activation token `done`, primary-selection stub, and `wp_fractional_scale_manager_v1` (`preferred_scale` 120 = 1.0). Still expected: `xdg-toplevel-icon`, text-input/IME. Composite stays integer buffer scale for v0. |
 | `kitty` | linux-dmabuf (GL) | **Try** | GPU path: Vulkan import + CPU readback. Needs `linux-dmabuf: Vulkan import` in the shell log. LINEAR mmap fallback if the buffer is linear. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Needs clipboard, popups, subsurfaces, idle-inhibit, etc. |
@@ -405,7 +405,7 @@ Workaround — real display on **tty3**:
 - Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)
 - Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY
 - Pointer/keyboard keymap sent to clients is a tiny US map
-- No fractional scaling, `xdg-toplevel-icon`, or IME (`zwp_text_input`)
+- Fractional scale stub: `preferred_scale` 120 (1.0); still integer composite. No `xdg-toplevel-icon` or IME (`zwp_text_input`)
 - Compiz theater v0 is hardcoded (no plugin graph); `--effects=off` disables
 - Launcher is a hardcoded list (no `.desktop` / menu scan)
 - Panel is CPU-composited chrome (not a toolkit)
