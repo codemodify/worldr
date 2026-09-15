@@ -1,6 +1,6 @@
 // Package clipbridge is the clipboard MIME helper between a nested
 // host compositor (Plasma/KWin) and worldr’s in-compositor selection
-// (text/plain plus image/png, image/bmp).
+// (text/plain plus image/png, image/jpeg, image/webp, image/bmp).
 package clipbridge
 
 import (
@@ -12,6 +12,8 @@ const (
 	MimeTextPlain = "text/plain"
 	MimeTextUTF8  = "text/plain;charset=utf-8"
 	MimePNG       = "image/png"
+	MimeJPEG      = "image/jpeg"
+	MimeWebP      = "image/webp"
 	MimeBMP       = "image/bmp"
 	MaxTextBytes  = 1 << 20
 	MaxImageBytes = 8 << 20
@@ -22,9 +24,9 @@ func TextMimes() []string {
 	return []string{MimeTextPlain, MimeTextUTF8}
 }
 
-// ImageMimes are the raster types we bridge (png first; bmp if offered).
+// ImageMimes are the raster types we bridge (png first, then jpeg/webp/bmp).
 func ImageMimes() []string {
-	return []string{MimePNG, MimeBMP}
+	return []string{MimePNG, MimeJPEG, MimeWebP, MimeBMP}
 }
 
 // IsPlainText reports a text/plain family MIME (including UTF-8 aliases).
@@ -52,26 +54,35 @@ func PickPlainMime(offered []string) string {
 	return ""
 }
 
-// IsImage reports image/png or image/bmp (plus a few aliases).
+// IsImage reports a bridged raster MIME (png/jpeg/webp/bmp + aliases).
 func IsImage(m string) bool {
-	m = strings.ToLower(strings.TrimSpace(m))
-	switch m {
-	case MimePNG, MimeBMP, "image/x-bmp", "image/x-ms-bmp":
-		return true
-	}
-	return strings.HasPrefix(m, "image/png")
+	return CanonicalImage(m) != ""
 }
 
-// PickImageMime prefers image/png, then bmp.
-func PickImageMime(offered []string) string {
-	for _, m := range offered {
-		if strings.EqualFold(strings.TrimSpace(m), MimePNG) {
-			return m
-		}
+// CanonicalImage maps a MIME (or alias) to png/jpeg/webp/bmp, or "".
+func CanonicalImage(m string) string {
+	m = strings.ToLower(strings.TrimSpace(m))
+	switch {
+	case m == MimePNG || strings.HasPrefix(m, "image/png"):
+		return MimePNG
+	case m == MimeJPEG || m == "image/jpg" || strings.HasPrefix(m, "image/jpeg"):
+		return MimeJPEG
+	case m == MimeWebP || strings.HasPrefix(m, "image/webp"):
+		return MimeWebP
+	case m == MimeBMP || m == "image/x-bmp" || m == "image/x-ms-bmp":
+		return MimeBMP
 	}
-	for _, m := range offered {
-		if IsImage(m) {
-			return m
+	return ""
+}
+
+// PickImageMime prefers png, then jpeg, webp, bmp.
+func PickImageMime(offered []string) string {
+	pref := []string{MimePNG, MimeJPEG, MimeWebP, MimeBMP}
+	for _, want := range pref {
+		for _, m := range offered {
+			if CanonicalImage(m) == want {
+				return m
+			}
 		}
 	}
 	return ""
@@ -88,29 +99,14 @@ func HostOfferMimes(src []string) []string {
 	if PickPlainMime(src) != "" {
 		out = append(out, TextMimes()...)
 	}
-	if m := PickImageMime(src); m != "" {
-		out = append(out, normalizeImage(m))
-		if hasFold(src, MimeBMP) && normalizeImage(m) != MimeBMP {
-			out = append(out, MimeBMP)
+	seen := map[string]bool{}
+	for _, m := range src {
+		if c := CanonicalImage(m); c != "" && !seen[c] {
+			seen[c] = true
+			out = append(out, c)
 		}
 	}
 	return out
-}
-
-func normalizeImage(m string) string {
-	if strings.EqualFold(strings.TrimSpace(m), MimeBMP) || strings.EqualFold(m, "image/x-bmp") || strings.EqualFold(m, "image/x-ms-bmp") {
-		return MimeBMP
-	}
-	return MimePNG
-}
-
-func hasFold(all []string, want string) bool {
-	for _, m := range all {
-		if strings.EqualFold(strings.TrimSpace(m), want) {
-			return true
-		}
-	}
-	return false
 }
 
 // CapFor MIME size limit.

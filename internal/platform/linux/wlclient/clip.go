@@ -106,7 +106,7 @@ func (w *Window) SetClipFulfill(fn func(primary bool, mime string, fd int)) {
 }
 
 // OfferHostText publishes worldr’s selection on the host data device
-// (text/plain and image/png when the source offered them).
+// (text/plain and image/png|jpeg|webp|bmp when the source offered them).
 func (w *Window) OfferHostText(primary bool, mimes []string) {
 	if w == nil {
 		return

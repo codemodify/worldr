@@ -128,6 +128,34 @@ func TestImportHostPNGOffersToClient(t *testing.T) {
 	}
 }
 
+func TestImportHostJPEGOffersToClient(t *testing.T) {
+	_, _, _, dst, dstRD, dstConn := newClipboardPair(t)
+	dst.dataDev = 31
+	dst.objs[31] = &object{id: 31, kind: kindDataDevice}
+	jpg := []byte{0xff, 0xd8, 0xff, 1, 2, 3}
+	dst.srv.ImportHostPayload(false, "image/jpeg", jpg)
+	got := drainDataDev(t, dstConn, dstRD, 31)
+	if !got.mimes["image/jpeg"] {
+		t.Fatalf("mimes %v", got.mimes)
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	wfd, err := syscall.Dup(int(w.Fd()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	if err := dst.reqDataOffer(dst.objs[got.offerID], 1, wayland.NewCursor(wayland.PutString(nil, "image/jpg"), []int{wfd})); err != nil {
+		t.Fatal(err)
+	}
+	if string(readAll(t, r)) != string(jpg) {
+		t.Fatal("host jpeg paste via image/jpg alias")
+	}
+}
+
 func TestWorldrSetSelectionExportsPNG(t *testing.T) {
 	src, _, _, _, _, _ := newClipboardPair(t)
 	src.objs[20] = &object{id: 20, kind: kindDataSource, src: &dataSource{id: 20, client: src}}

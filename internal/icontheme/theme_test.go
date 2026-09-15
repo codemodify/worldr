@@ -102,6 +102,66 @@ func TestLoadBGRAAndLookup(t *testing.T) {
 	}
 }
 
+func TestResolveAndRasterSVG(t *testing.T) {
+	root := t.TempDir()
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="0" y="0" width="16" height="16" fill="#ff0000"/></svg>`
+	p := filepath.Join(root, "icons/hicolor/scalable/apps/red.svg")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(svg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := Search{Theme: "hicolor", Dirs: []string{root}, Want: 16}
+	got, ok := Resolve("red", s)
+	if !ok || !strings.HasSuffix(got, "red.svg") {
+		t.Fatalf("svg resolve %q %v", got, ok)
+	}
+	pix, w, h, st, ok := Lookup("red", s)
+	if !ok || w != 16 || h != 16 || st != 64 {
+		t.Fatalf("raster %v %d %d %d", ok, w, h, st)
+	}
+	// center pixel is red → BGRA
+	i := 8*st + 8*4
+	if pix[i+2] < 200 || pix[i+0] > 40 {
+		t.Fatalf("center BGRA %v", pix[i:i+4])
+	}
+}
+
+func TestRasterSVGPath(t *testing.T) {
+	raw := []byte(`<svg viewBox="0 0 8 8"><path d="M0 0 L8 0 L8 8 L0 8 Z" fill="#00ff00"/></svg>`)
+	pix, w, h, _, err := rasterSVGBytes(raw, 8)
+	if err != nil || w != 8 || h != 8 {
+		t.Fatalf("%v %d %d", err, w, h)
+	}
+	if pix[1] < 200 || pix[2] > 40 {
+		t.Fatalf("path fill %v", pix[:4])
+	}
+}
+
+func TestRasterSVGEmptyFails(t *testing.T) {
+	if _, _, _, _, err := rasterSVGBytes([]byte(`<svg viewBox="0 0 8 8"></svg>`), 8); err == nil {
+		t.Fatal("empty svg")
+	}
+}
+
+func TestPNGWinsOverSVG(t *testing.T) {
+	root := t.TempDir()
+	writePNG(t, filepath.Join(root, "icons/hicolor/16x16/apps/both.png"), 0, 0, 255, 255)
+	svg := `<svg viewBox="0 0 16 16"><rect width="16" height="16" fill="#00ff00"/></svg>`
+	p := filepath.Join(root, "icons/hicolor/scalable/apps/both.svg")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(svg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := Resolve("both", Search{Theme: "hicolor", Dirs: []string{root}, Want: 16})
+	if !ok || !strings.HasSuffix(got, "both.png") {
+		t.Fatalf("png first %q", got)
+	}
+}
+
 func TestThemeName(t *testing.T) {
 	t.Setenv("XDG_ICON_THEME", "breeze")
 	t.Setenv("XDG_CURRENT_DESKTOP", "GNOME")

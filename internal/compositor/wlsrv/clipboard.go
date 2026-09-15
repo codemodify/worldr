@@ -76,6 +76,13 @@ func matchMime(offered []string, want string) string {
 			}
 		}
 	}
+	if c := clipbridge.CanonicalImage(want); c != "" {
+		for _, m := range offered {
+			if clipbridge.CanonicalImage(m) == c {
+				return m
+			}
+		}
+	}
 	return ""
 }
 

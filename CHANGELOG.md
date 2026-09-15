@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.25-dev — SVG icons + JPEG/WebP clipboard
+
+- XDG `Icon=` / theme lookup rasters simple SVG (rect/circle/ellipse/polygon/path) when no PNG exists (`scalable/` and sized `.svg`). PNG still wins. Cached like PNG.
+- Clipboard offers/receives `image/jpeg` and `image/webp` alongside png/bmp (exact MIME in-compositor; nest host forwards when advertised). `image/jpg` aliases jpeg.
+- No IME. No full SVG filters/text. No toolkit rsvg.
+
 ## 0.9.24-dev — Compiz theater polish
 
 - Map-in: slightly longer ease-out scale+fade, plus a short rise on `--effects=high`. Map-out scales/fades toward the panel title slot (cheap minimize-to-panel). Focus pulse adds a magenta glow ring (lift+shadow kept).
