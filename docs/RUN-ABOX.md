@@ -185,6 +185,10 @@ This stays inside worldr — it does not copy into the Plasma/KWin clipboard.
 `wl_output`). On a HiDPI panel: `--scale=1.5` (or `1.25` / `2`). Foot should
 get `preferred_scale` 180 and render via viewport into the logical window.
 
+**Icons (0.9.13):** `xdg_toplevel_icon_manager_v1` is advertised. A client that
+sets a shm icon shows it on the SSD title bar and next to the panel title.
+Unset windows get a default glyph. Foot does not set this protocol yet.
+
 | Key / click | Action |
 | --- | --- |
 | F1 | Toggle launcher |
@@ -413,7 +417,7 @@ disconnected cleanly** against the compositor.
 | Client | Buffer | Expected now | Notes |
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.9): Ctrl+Shift+C / Ctrl+Shift+V between worldr clients (`text/plain`); mouse-select + middle-click uses primary. Not bridged to Plasma’s clipboard yet. Cursors, activation, **fractional-scale** (0.9.12: `preferred_scale` from `--scale`, default 120 / 1.0). Still expected: `xdg-toplevel-icon`, text-input/IME. |
+| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.9): Ctrl+Shift+C / Ctrl+Shift+V between worldr clients (`text/plain`); mouse-select + middle-click uses primary. Not bridged to Plasma’s clipboard yet. Cursors, activation, **fractional-scale** (0.9.12). **Icons** (0.9.13): `xdg_toplevel_icon_manager_v1` — clients that set an icon show it on the SSD title bar and panel; others get a default glyph. Still expected: text-input/IME. |
 | `kitty` | linux-dmabuf (GL) | **Try** | On **vk-display** (0.9.10): Vulkan import + GPU blit into the compositor pass (ARGB/XRGB). Nested/drm still readback or LINEAR mmap. Log: `linux-dmabuf: Vulkan import + GPU sample`. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
@@ -458,7 +462,8 @@ Workaround — real display on **tty3**:
 - Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)
 - Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY. Unmatched host `wl_pointer.button` releases are dropped (foot stray-release warning should be gone).
 - Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
-- Fractional scale (0.9.12): `preferred_scale` follows `--scale` (default 1.0). Viewport / `set_buffer_scale` size the logical window; shm at 1.0 unchanged. Single output. Nest does not inherit Plasma scale. No `xdg-toplevel-icon` or IME (`zwp_text_input`)
+- Fractional scale (0.9.12): `preferred_scale` follows `--scale` (default 1.0). Viewport / `set_buffer_scale` size the logical window; shm at 1.0 unchanged. Single output. Nest does not inherit Plasma scale.
+- Window icons (0.9.13): `xdg_toplevel_icon_manager_v1` shm buffers on SSD + panel. No freedesktop icon-theme lookup for `set_name`. No IME (`zwp_text_input`).
 - Compiz theater v0 is hardcoded (no plugin graph); `--effects=off` disables
 - Launcher reads XDG `.desktop` files (no icon theme yet; `Terminal=true` apps skipped; no ibus/fcitx IME)
 - Panel is CPU-composited chrome (not a toolkit)

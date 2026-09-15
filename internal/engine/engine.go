@@ -27,6 +27,23 @@ type Actor struct {
 	UnmapAt       time.Time // map-out start (zero = mapped)
 	FocusPulse    time.Time // last focus-gain
 	Workspace     int       // virtual desktop (0-based)
+	IconPix       []byte    // optional BGRA window icon
+	IconW, IconH  int
+	IconStride    int
+}
+
+// HasIcon reports a client-supplied icon buffer.
+func (a *Actor) HasIcon() bool {
+	return a != nil && len(a.IconPix) > 0 && a.IconW > 0 && a.IconH > 0
+}
+
+// ClearIcon drops a client-supplied icon (SSD/panel fall back to the default).
+func (a *Actor) ClearIcon() {
+	if a == nil {
+		return
+	}
+	a.IconPix = nil
+	a.IconW, a.IconH, a.IconStride = 0, 0, 0
 }
 
 // PixelSize is the attached buffer size (falls back to the logical window).

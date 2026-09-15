@@ -3,6 +3,7 @@ package shell
 import (
 	"time"
 
+	"github.com/codemodify/worldr/internal/decorations"
 	"github.com/codemodify/worldr/internal/engine"
 )
 
@@ -50,6 +51,10 @@ type ChromeDraw struct {
 	Launcher   *LauncherDraw
 	WS         engine.WorkspaceDraw
 	Occupied   []bool
+	Icon       []byte
+	IconW      int
+	IconH      int
+	IconStride int
 }
 
 // LauncherDraw is the in-shell command overlay.
@@ -165,6 +170,15 @@ func ClockString(now time.Time) string {
 	return now.Format("15:04:05")
 }
 
+func focusedActor(actors []*engine.Actor) *engine.Actor {
+	for _, a := range actors {
+		if a != nil && a.Focused {
+			return a
+		}
+	}
+	return nil
+}
+
 // FocusedTitle is the focused actor's title or app id.
 func FocusedTitle(actors []*engine.Actor) string {
 	for _, a := range actors {
@@ -194,8 +208,24 @@ func drawPanel(dst []byte, stride, w, h int, ch ChromeDraw) {
 	drawBtn(dst, stride, w, h, r.Launch, "apps", ch.LaunchOn)
 	drawPagerDots(dst, stride, w, h, r, ch.WS.Active, ch.Occupied)
 	drawBtn(dst, stride, w, h, r.Overview, "grid", ch.OverviewOn)
+	titleX := r.Title.X
+	if r.Title.W > 20 && (ch.Title != "" || len(ch.Icon) > 0) {
+		iz := 16
+		if iz > r.Title.H-4 {
+			iz = r.Title.H - 4
+		}
+		if iz >= 8 {
+			iy := r.Title.Y + (r.Title.H-iz)/2
+			a := &engine.Actor{IconPix: ch.Icon, IconW: ch.IconW, IconH: ch.IconH, IconStride: ch.IconStride}
+			decorations.DrawIcon(dst, stride, w, h, titleX, iy, iz, a)
+			titleX += iz + 6
+		}
+	}
 	if ch.Title != "" && r.Title.W > 8 {
-		engine.DrawText(dst, stride, w, h, r.Title.X, textY(r.Title, 2), truncateTo(ch.Title, r.Title.W, 2), colTextDim, 2)
+		tw := r.Title.W - (titleX - r.Title.X)
+		if tw > 8 {
+			engine.DrawText(dst, stride, w, h, titleX, textY(r.Title, 2), truncateTo(ch.Title, tw, 2), colTextDim, 2)
+		}
 	}
 	if ch.Clock != "" {
 		engine.DrawText(dst, stride, w, h, r.Clock.X, textY(r.Clock, 2), ch.Clock, colText, 2)

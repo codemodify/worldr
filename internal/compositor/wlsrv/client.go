@@ -22,7 +22,7 @@ const (
 	globalViewporter uint32 = 8
 	globalDataDev    uint32 = 9
 	globalSubcomp    uint32 = 10
-	// 11–15 are in extras.go (cursor, activation, primary, xwayland_shell, fractional_scale)
+	// 11–16 are in extras.go (cursor, activation, primary, xwayland_shell, fractional_scale, toplevel_icon)
 )
 
 type objectKind int
@@ -70,6 +70,8 @@ const (
 	kindXwSurface
 	kindFracScaleMgr
 	kindFracScale
+	kindIconMgr
+	kindToplevelIcon
 )
 
 type object struct {
@@ -86,6 +88,7 @@ type object struct {
 	src   *dataSource
 	offer *dataOffer
 	dma   *dmaBuf
+	icon  *toplevelIcon
 }
 
 type shmPool struct {
@@ -151,6 +154,7 @@ type xdgToplevel struct {
 	xdg   *xdgSurface
 	title string
 	app   string
+	icon  *iconSnap
 }
 
 // Client is one Wayland connection.
@@ -350,6 +354,10 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqFracScaleMgr(o, msg.Opcode, cur)
 	case kindFracScale:
 		return c.reqFracScale(o, msg.Opcode, cur)
+	case kindIconMgr:
+		return c.reqIconMgr(o, msg.Opcode, cur)
+	case kindToplevelIcon:
+		return c.reqToplevelIcon(o, msg.Opcode, cur)
 	case kindKeyboard, kindOutput, kindCallback, kindDmaFeedback:
 		return nil
 	default:
@@ -399,6 +407,7 @@ func (c *Client) advertise(reg uint32) error {
 		{globalPrimary, "zwp_primary_selection_device_manager_v1", 1},
 		{globalXwayland, "xwayland_shell_v1", 1},
 		{globalFractionalScale, "wp_fractional_scale_manager_v1", 1},
+		{globalToplevelIcon, "xdg_toplevel_icon_manager_v1", 1},
 	}
 	for _, gl := range globals {
 		p := wayland.PutU32(nil, gl.name)
@@ -478,6 +487,10 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 		o.kind = kindXwShell
 	case globalFractionalScale:
 		o.kind = kindFracScaleMgr
+	case globalToplevelIcon:
+		o.kind = kindIconMgr
+		c.objs[id] = o
+		return c.sendIconMgr(id)
 	default:
 		switch iface {
 		case "wl_data_device_manager":
@@ -785,6 +798,7 @@ func (c *Client) mapSurface(s *surface) {
 	if s.xdg != nil && s.xdg.top != nil {
 		s.actor.Title = s.xdg.top.title
 		s.actor.AppID = s.xdg.top.app
+		s.xdg.top.icon.apply(s.actor)
 	} else if s.xwayland {
 		if x11ok {
 			applyX11Hints(s.actor, x11, c.srv.Scene)
