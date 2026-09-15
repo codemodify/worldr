@@ -72,23 +72,28 @@ const (
 	kindFracScale
 	kindIconMgr
 	kindToplevelIcon
+	kindSyncobjMgr
+	kindSyncobjTimeline
+	kindSyncobjSurface
 )
 
 type object struct {
-	id    uint32
-	kind  objectKind
-	pool  *shmPool
-	buf   *shmBuffer
-	surf  *surface
-	xdgS  *xdgSurface
-	xdgT  *xdgToplevel
-	xdgP  *xdgPopup
-	pos   *positioner
-	sub   *subsurface
-	src   *dataSource
-	offer *dataOffer
-	dma   *dmaBuf
-	icon  *toplevelIcon
+	id       uint32
+	kind     objectKind
+	pool     *shmPool
+	buf      *shmBuffer
+	surf     *surface
+	xdgS     *xdgSurface
+	xdgT     *xdgToplevel
+	xdgP     *xdgPopup
+	pos      *positioner
+	sub      *subsurface
+	src      *dataSource
+	offer    *dataOffer
+	dma      *dmaBuf
+	icon     *toplevelIcon
+	timeline *syncTimeline
+	syncSurf *syncSurface
 }
 
 type shmPool struct {
@@ -134,6 +139,7 @@ type surface struct {
 	bufScale int
 	fracID   uint32
 	xwayland bool
+	sync     *syncSurface
 }
 
 type xdgSurface struct {
@@ -216,6 +222,9 @@ func (c *Client) close() {
 		}
 		if o.dma != nil {
 			c.releaseDma(o.dma)
+		}
+		if o.timeline != nil {
+			o.timeline.close()
 		}
 		if o.pool != nil && o.pool.fd > 0 {
 			_ = syscall.Close(o.pool.fd)
@@ -366,6 +375,12 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqIconMgr(o, msg.Opcode, cur)
 	case kindToplevelIcon:
 		return c.reqToplevelIcon(o, msg.Opcode, cur)
+	case kindSyncobjMgr:
+		return c.reqSyncobjMgr(o, msg.Opcode, cur)
+	case kindSyncobjTimeline:
+		return c.reqSyncobjTimeline(o, msg.Opcode, cur)
+	case kindSyncobjSurface:
+		return c.reqSyncobjSurface(o, msg.Opcode, cur)
 	case kindKeyboard, kindOutput, kindCallback, kindDmaFeedback:
 		return nil
 	default:
@@ -416,6 +431,9 @@ func (c *Client) advertise(reg uint32) error {
 		{globalXwayland, "xwayland_shell_v1", 1},
 		{globalFractionalScale, "wp_fractional_scale_manager_v1", 1},
 		{globalToplevelIcon, "xdg_toplevel_icon_manager_v1", 1},
+	}
+	if advertiseSyncobj() {
+		globals = append(globals, g{globalSyncobj, "wp_linux_drm_syncobj_manager_v1", 1})
 	}
 	for _, gl := range globals {
 		p := wayland.PutU32(nil, gl.name)
@@ -499,10 +517,14 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 		o.kind = kindIconMgr
 		c.objs[id] = o
 		return c.sendIconMgr(id)
+	case globalSyncobj:
+		o.kind = kindSyncobjMgr
 	default:
 		switch iface {
 		case "wl_data_device_manager":
 			o.kind = kindDataDeviceManager
+		case syncobjIface:
+			o.kind = kindSyncobjMgr
 		default:
 			c.srv.log.Printf("bind unknown %s name=%d", iface, name)
 		}
@@ -708,11 +730,13 @@ func (c *Client) commit(s *surface) {
 	if s.pending != nil {
 		s.attached = s.pending
 	}
+	c.applySyncobjAcquire(s)
 	if s.attached != nil && s.attached.dma != nil {
 		if err := c.resolveDma(s.attached.dma); err != nil {
 			c.srv.log.Printf("dmabuf resolve: %v", err)
 		}
 	}
+	c.applySyncobjRelease(s)
 	if s.sub != nil && s.sub.sync {
 		s.sub.cached = s.attached
 		return
