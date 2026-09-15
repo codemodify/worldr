@@ -25,6 +25,11 @@ func ApplyX11Hints(scene *engine.Scene, h X11MapHints) *engine.Actor {
 	return wlsrv.ApplyX11Hints(scene, h)
 }
 
+// ScaleTo120ths converts a display scale to wp_fractional_scale units.
+func ScaleTo120ths(scale float64) uint32 {
+	return wlsrv.ScaleTo120ths(scale)
+}
+
 // Listen starts a Wayland socket. imp may be nil (shm-only).
 func Listen(displayName string, scene *engine.Scene, screenW, screenH int, imp wlsrv.DMABufImport) (*Server, error) {
 	return wlsrv.Listen(displayName, scene, screenW, screenH, imp)

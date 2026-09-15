@@ -14,11 +14,6 @@ const (
 	globalFractionalScale uint32 = 15
 )
 
-// PreferredScale120ths is 1.0 in wp_fractional_scale_v1 units (scale / 120).
-// v0 reports this so clients stop warning; the shell still composites at
-// integer buffer scale.
-const PreferredScale120ths uint32 = 120
-
 // wp_cursor_shape_v1 shapes (enum starts at 1).
 const (
 	cursorShapeDefault = 1
@@ -158,13 +153,19 @@ func (c *Client) reqFracScaleMgr(_ *object, op uint16, cur *wayland.Cursor) erro
 			surf = so.surf
 		}
 		c.objs[id] = &object{id: id, kind: kindFracScale, surf: surf}
-		return c.send(id, 0, wayland.PutU32(nil, PreferredScale120ths), nil)
+		if surf != nil {
+			surf.fracID = id
+		}
+		return c.send(id, 0, wayland.PutU32(nil, c.srv.PreferredScale120ths()), nil)
 	}
 	return nil
 }
 
 func (c *Client) reqFracScale(o *object, op uint16, _ *wayland.Cursor) error {
 	if op == 0 {
+		if o.surf != nil && o.surf.fracID == o.id {
+			o.surf.fracID = 0
+		}
 		delete(c.objs, o.id)
 	}
 	return nil

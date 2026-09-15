@@ -36,6 +36,8 @@ type Server struct {
 	clip *selection
 	prim *selection
 
+	scale120 uint32 // wp_fractional_scale preferred_scale; 0 = 120 (1.0)
+
 	// X11OnMap is set by the shell when a tiny XWM is running.
 	X11OnMap func(bufW, bufH int) (X11MapHints, bool)
 	// X11OnFocus tells the XWM which X11 window should receive input.
@@ -231,6 +233,35 @@ func (s *Server) setCursorShape(shape uint32) {
 	s.cursorShape = shape
 	s.cursorHX, s.cursorHY = 0, 0
 	s.mu.Unlock()
+}
+
+// SetOutputScale sets the single-output scale (1, 1.25, 1.5, 2, …).
+// Clients already bound see the next get_fractional_scale / new wl_output bind.
+func (s *Server) SetOutputScale(scale float64) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.scale120 = ScaleTo120ths(scale)
+	s.mu.Unlock()
+}
+
+// PreferredScale120ths is the current wp_fractional_scale_v1 value.
+func (s *Server) PreferredScale120ths() uint32 {
+	if s == nil {
+		return PreferredScale120ths
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.scale120 == 0 {
+		return PreferredScale120ths
+	}
+	return s.scale120
+}
+
+// IntegerOutputScale is the coherent wl_output.scale for the current preferred scale.
+func (s *Server) IntegerOutputScale() int32 {
+	return IntegerScaleFrom120ths(s.PreferredScale120ths())
 }
 
 // KeyboardKey delivers a Wayland/XKB keycode (evdev+8) to every client.

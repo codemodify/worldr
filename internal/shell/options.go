@@ -41,6 +41,7 @@ type Options struct {
 	Effects          engine.Tier
 	OverviewDemo     bool
 	Workspaces       int
+	Scale            float64 // 0 = auto (1.0)
 }
 
 // ErrTakeOverRequired is returned when a real display backend would steal
@@ -67,6 +68,7 @@ func ParseFlags(args []string) (Options, error) {
 	effects := fs.String("effects", "high", "window theater: high|low|off (scale+fade map/unmap; off disables)")
 	fs.BoolVar(&o.OverviewDemo, "overview-demo", false, "auto-enter expose after the first window maps (smoke)")
 	fs.IntVar(&o.Workspaces, "workspaces", engine.WorkspaceDefault, "virtual desktops (2–4, default 3)")
+	fs.Float64Var(&o.Scale, "scale", 0, "output scale 1 / 1.25 / 1.5 / 2 (0 = auto: 1.0 nested and vk-display; host nest scale unknown)")
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}
@@ -88,7 +90,19 @@ func ParseFlags(args []string) (Options, error) {
 	}
 	o.Effects = tier
 	o.Workspaces = engine.ClampWorkspaces(o.Workspaces)
+	if o.Scale < 0 {
+		return o, fmt.Errorf("--scale must be ≥ 0 (0 = auto 1.0)")
+	}
 	return o, nil
+}
+
+// ResolveOutputScale returns the compositor scale. 0 / auto is 1.0
+// (nested host does not bind wl_output, so Plasma scale is unknown).
+func ResolveOutputScale(explicit float64) float64 {
+	if explicit > 0 {
+		return explicit
+	}
+	return 1
 }
 
 // GraphicalSession reports whether this process inherited a nested session.

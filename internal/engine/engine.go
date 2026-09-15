@@ -13,6 +13,7 @@ import (
 type Actor struct {
 	X, Y          int
 	Width, Height int
+	BufW, BufH    int // pixel buffer; 0 = same as Width/Height (scale 1 / no viewport)
 	Stride        int
 	Pixels        []byte // BGRA8 / XRGB8888, length >= Stride*Height
 	Title         string
@@ -26,6 +27,26 @@ type Actor struct {
 	UnmapAt       time.Time // map-out start (zero = mapped)
 	FocusPulse    time.Time // last focus-gain
 	Workspace     int       // virtual desktop (0-based)
+}
+
+// PixelSize is the attached buffer size (falls back to the logical window).
+func (a *Actor) PixelSize() (w, h int) {
+	if a == nil {
+		return 0, 0
+	}
+	if a.BufW > 0 && a.BufH > 0 {
+		return a.BufW, a.BufH
+	}
+	return a.Width, a.Height
+}
+
+// ScaledBuffer reports a viewport or buffer-scale mismatch (need a scaled blit).
+func (a *Actor) ScaledBuffer() bool {
+	if a == nil {
+		return false
+	}
+	bw, bh := a.PixelSize()
+	return bw != a.Width || bh != a.Height
 }
 
 // Scene holds window actors. The frame loop must reuse storage.

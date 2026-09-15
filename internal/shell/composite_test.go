@@ -75,6 +75,33 @@ func TestCompositeDesktopGPUOverlaySkipsPixels(t *testing.T) {
 	}
 }
 
+func TestCompositeDesktopViewportScaleBlit(t *testing.T) {
+	const w, h, stride = 16, 16, 64
+	dst := make([]byte, stride*h)
+	clear := PackBGRA([4]float32{0, 0, 0, 1})
+	// 2×2 red buffer shown in a 1×1 logical window (fractional/viewport).
+	pix := []byte{
+		0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff,
+		0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff,
+	}
+	actor := &engine.Actor{
+		X: 2, Y: 3, Width: 1, Height: 1, BufW: 2, BufH: 2,
+		Stride: 8, Pixels: pix, NoChrome: true,
+	}
+	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{}, Theater{}, OverviewDraw{}, ChromeDraw{}, false)
+	i := 3*stride + 2*4
+	if dst[i] != 0x00 || dst[i+1] != 0x00 || dst[i+2] != 0xff {
+		t.Fatalf("scaled blit %x %x %x", dst[i], dst[i+1], dst[i+2])
+	}
+}
+
+func TestGPULayersSkipsScaledBuffer(t *testing.T) {
+	a := &engine.Actor{X: 4, Y: 5, Width: 10, Height: 8, BufW: 20, BufH: 16, GPUSlot: 2, Workspace: 0}
+	if gpuLayers([]*engine.Actor{a}, ChromeDraw{WS: engine.WorkspaceDraw{Count: 1, Active: 0, From: 0, To: 0, T: 1}}, 800, true) != nil {
+		t.Fatal("scaled dmabuf must stay on the CPU blit path")
+	}
+}
+
 func TestGPULayersCollectsSlots(t *testing.T) {
 	a := &engine.Actor{X: 4, Y: 5, Width: 10, Height: 8, GPUSlot: 2, Workspace: 0}
 	got := gpuLayers([]*engine.Actor{a}, ChromeDraw{WS: engine.WorkspaceDraw{Count: 1, Active: 0, From: 0, To: 0, T: 1}}, 800, true)

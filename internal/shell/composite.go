@@ -106,10 +106,15 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 		if ssd {
 			decorations.Draw(dst, stride, w, h, a)
 		}
-		if gpuOverlay && a.GPUSlot > 0 {
+		if gpuOverlay && a.GPUSlot > 0 && !a.ScaledBuffer() {
 			return
 		}
-		engine.BlitBGRA(dst, stride, w, h, a.X, a.Y, a.Pixels, a.Stride, a.Width, a.Height)
+		srcW, srcH := a.PixelSize()
+		if a.ScaledBuffer() {
+			engine.BlitBGRAScaledAlpha(dst, stride, w, h, a.X, a.Y, a.Width, a.Height, a.Pixels, a.Stride, srcW, srcH, 1)
+		} else {
+			engine.BlitBGRA(dst, stride, w, h, a.X, a.Y, a.Pixels, a.Stride, a.Width, a.Height)
+		}
 		return
 	}
 	fw := a.Width + 2*decorations.Border
@@ -147,10 +152,12 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 		engine.FillRectAlpha(dst, stride, w, h, sx+sw-bd, sy, bd, sh, frame, v.Alpha)
 		engine.FillRectAlpha(dst, stride, w, h, sx, sy+sh-bd, sw, bd, frame, v.Alpha)
 		cw, ch := scaleI(a.Width, v.Scale), scaleI(a.Height, v.Scale)
-		engine.BlitBGRAScaledAlpha(dst, stride, w, h, sx+bd, sy+th, cw, ch, a.Pixels, a.Stride, a.Width, a.Height, v.Alpha)
+		srcW, srcH := a.PixelSize()
+		engine.BlitBGRAScaledAlpha(dst, stride, w, h, sx+bd, sy+th, cw, ch, a.Pixels, a.Stride, srcW, srcH, v.Alpha)
 		return
 	}
-	engine.BlitBGRAScaledAlpha(dst, stride, w, h, sx, sy, sw, sh, a.Pixels, a.Stride, a.Width, a.Height, v.Alpha)
+	srcW, srcH := a.PixelSize()
+	engine.BlitBGRAScaledAlpha(dst, stride, w, h, sx, sy, sw, sh, a.Pixels, a.Stride, srcW, srcH, v.Alpha)
 }
 
 // OverviewDraw is the expose pose (T=0 is the normal desktop).
@@ -188,10 +195,12 @@ func drawActorIn(dst []byte, stride, w, h int, a *engine.Actor, dest engine.Grid
 		engine.FillRectAlpha(dst, stride, w, h, dest.X+dest.W-bd, dest.Y, bd, dest.H, frame, alpha)
 		engine.FillRectAlpha(dst, stride, w, h, dest.X, dest.Y+dest.H-bd, dest.W, bd, frame, alpha)
 		cw, ch := dest.W-2*bd, dest.H-th-bd
-		engine.BlitBGRAScaledAlpha(dst, stride, w, h, dest.X+bd, dest.Y+th, cw, ch, a.Pixels, a.Stride, a.Width, a.Height, alpha)
+		srcW, srcH := a.PixelSize()
+		engine.BlitBGRAScaledAlpha(dst, stride, w, h, dest.X+bd, dest.Y+th, cw, ch, a.Pixels, a.Stride, srcW, srcH, alpha)
 		return
 	}
-	engine.BlitBGRAScaledAlpha(dst, stride, w, h, dest.X, dest.Y, dest.W, dest.H, a.Pixels, a.Stride, a.Width, a.Height, alpha)
+	srcW, srcH := a.PixelSize()
+	engine.BlitBGRAScaledAlpha(dst, stride, w, h, dest.X, dest.Y, dest.W, dest.H, a.Pixels, a.Stride, srcW, srcH, alpha)
 }
 
 func max1(n int) int {
