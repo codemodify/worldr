@@ -41,6 +41,29 @@ func ProbeSeat() Seat {
 // HasDRM is true when at least one /dev/dri/card* node exists.
 func HasDRM() bool { return len(ListDRMCards()) > 0 }
 
+// ValidateDRMCard checks --card. Empty means "first /dev/dri/cardN".
+// Render nodes cannot drmSetMaster; refuse them with a TTY hint.
+func ValidateDRMCard(card string) error {
+	if card == "" {
+		return nil
+	}
+	base := filepath.Base(card)
+	if strings.HasPrefix(base, "renderD") {
+		return fmt.Errorf("%s is a render node — vk-display/drm need a KMS primary node (/dev/dri/cardN). Spare TTY: Ctrl+Alt+F3 then scripts/try-tty.sh", card)
+	}
+	if !strings.HasPrefix(card, "/dev/dri/card") {
+		return fmt.Errorf("refusing --card=%s (expected /dev/dri/cardN). Spare TTY: Ctrl+Alt+F3 then scripts/try-tty.sh", card)
+	}
+	st, err := os.Stat(card)
+	if err != nil {
+		return fmt.Errorf("no DRM device %s (%v). Need /dev/dri/card* and video/render. Spare TTY: scripts/try-tty.sh", card, err)
+	}
+	if st.IsDir() {
+		return fmt.Errorf("--card=%s is a directory", card)
+	}
+	return nil
+}
+
 // ListDRMCards returns existing /dev/dri/cardN paths (sorted).
 func ListDRMCards() []string {
 	matches, err := filepath.Glob("/dev/dri/card*")

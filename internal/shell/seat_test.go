@@ -84,6 +84,33 @@ func TestCheckTakeoverDRMRefusesSession(t *testing.T) {
 	}
 }
 
+func TestCheckTakeoverAutoRefusesOrphanSessionType(t *testing.T) {
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DISPLAY", "")
+	t.Setenv("XDG_SESSION_TYPE", "wayland")
+	if err := CheckTakeover(BackendAuto, false); err == nil {
+		t.Fatal("auto + XDG_SESSION_TYPE=wayland without a socket would steal via vk-display")
+	}
+	if err := CheckTakeover(BackendAuto, true); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestValidateDRMCard(t *testing.T) {
+	if err := ValidateDRMCard(""); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateDRMCard("/dev/dri/renderD128"); err == nil || !strings.Contains(err.Error(), "render") {
+		t.Fatalf("render node: %v", err)
+	}
+	if err := ValidateDRMCard("/tmp/not-a-card"); err == nil || !strings.Contains(err.Error(), "cardN") {
+		t.Fatalf("wrong path: %v", err)
+	}
+	if err := ValidateDRMCard("/dev/dri/card99"); err == nil || !strings.Contains(err.Error(), "card99") {
+		t.Fatalf("missing card: %v", err)
+	}
+}
+
 func TestHintVKDisplayMentionsTryTTY(t *testing.T) {
 	err := hintVKDisplay(fmt.Errorf("vkCreateDisplayPlaneSurfaceKHR failed"))
 	if err == nil || !strings.Contains(err.Error(), "try-tty.sh") || !strings.Contains(err.Error(), "F3") {

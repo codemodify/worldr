@@ -72,8 +72,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on pointer hygiene):
-git checkout cursor/desktop-launcher-c92c
+# this branch (stacked on .desktop launcher):
+git checkout cursor/tty-vk-display-soak-c92c
 
 export CGO_ENABLED=1
 make build
@@ -258,56 +258,83 @@ Fullscreen nested (still inside your compositor):
 ./bin/worldr-shell --backend=wayland-client --fullscreen-client --duration=15s
 ```
 
-## Real display on a spare TTY (tryable compositor)
+## Real display on a spare TTY (vk-display soak)
 
-`vk-display` / `drm` take DRM master. The nested path is unchanged and still
-the safe desktop demo. This path is the architecture’s real compositor seat.
+`vk-display` / `drm` take DRM master. **Daily demo stays nested** on Plasma
+(`--backend=wayland-client`). This path is the architecture’s real compositor
+seat on **bare-metal Intel iGPU** (abox / Mesa). The cloud agent does not have
+a TTY; soak on the machine after merge.
 
-`--backend=auto` prefers **nested** when `WAYLAND_DISPLAY` is set; on a TTY
+`--backend=auto` prefers **nested** when `WAYLAND_DISPLAY` is set. On a TTY
 with `/dev/dri/card*` and no graphical session env it tries **vk-display**,
-then **drm**. Takeover is refused unless `--take-over-display` (or those env
-vars / `XDG_SESSION_TYPE=wayland|x11` are absent).
+then **drm**. Takeover is refused unless `--take-over-display`. A leftover
+`XDG_SESSION_TYPE=wayland` **without** a host socket also refuses (that used
+to pick vk-display and steal the GPU). `--card` must be `/dev/dri/cardN`
+(not `renderD*`). GPU waits on vk-display time out after **2s** so a lost
+master does not hang the VT forever.
 
 Panel, overview, launcher, workspaces, and effects use the same
 `CompositeDesktop` path as nested.
 
-### Script (abox)
+### Exact abox soak (Intel iGPU)
 
-1. Leave Plasma running. Switch to **tty3**: **Ctrl+Alt+F3**.
-2. Log in (a real logind session).
-3. `cd` to the worldr tree and run:
+Leave Plasma on its VT. Do **not** pass `--take-over-display` from the desktop.
+
+1. **Ctrl+Alt+F3** → tty3. Log in (real logind session).
+2. Groups if needed (once): `sudo usermod -aG video,render "$USER"` then re-login.
+3. Confirm the node and ICD:
+
+```sh
+ls /dev/dri/card*          # need cardN, not only renderD128
+vulkaninfo --summary       # Mesa Intel, Vulkan 1.4
+echo "seat=$XDG_SEAT vt=$XDG_VTNR type=$XDG_SESSION_TYPE"
+# type should be tty (or empty). WAYLAND_DISPLAY and DISPLAY must be unset.
+```
+
+4. `cd` to the worldr tree and soak **vk-display** first (15s cap):
 
 ```sh
 ./scripts/try-tty.sh
-# optional: DURATION=20s BACKEND=drm ./scripts/try-tty.sh
+# explicit:
+DURATION=15s BACKEND=vk-display ./scripts/try-tty.sh
+# second GPU / wrong card:
+# CARD=/dev/dri/card1 DURATION=15s BACKEND=drm ./scripts/try-tty.sh
 ```
 
-The script builds `bin/worldr-shell` if needed, refuses to run when
-`WAYLAND_DISPLAY`/`DISPLAY` or a graphical `XDG_SESSION_TYPE` is set, sets
-`XDG_RUNTIME_DIR`, and starts **`--duration=15s`** the first time.
+The script builds `bin/worldr-shell` if needed, refuses a graphical session
+env, sets `XDG_RUNTIME_DIR`, and runs `--duration=15s`.
 
-4. You should see a dark cinematic clear plus the bottom panel. The process
-   advertises a Wayland socket (default `wayland-1`):
+5. Success looks like a dark cinematic clear + bottom panel, and:
 
 ```
-present: backend=vk-display …
+present: backend=vk-display size=… device=…
 seat: kind=tty …
 desktop: CompositeDesktop (panel, overview, launcher, workspaces, effects) …
 wayland compositor: WAYLAND_DISPLAY=wayland-1
 ```
 
-5. From **another TTY or SSH** (same user):
+6. From **another TTY or SSH** (same user), attach a client:
 
 ```sh
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
-export WAYLAND_DISPLAY=wayland-1
-foot                       # or F1 on the TTY if evdev keys work
+export WAYLAND_DISPLAY=wayland-1   # name the shell printed
+foot                               # or F1 on the TTY if evdev keys work
 ```
 
-6. When the duration expires (or Ctrl+C / Esc): **Ctrl+Alt+F1** or **F2**
-   back to Plasma. If the TTY looks wedged: **Ctrl+Alt+F4**, `pkill worldr-shell`.
+7. When the duration expires (or **Ctrl+Q** / Ctrl+C): **Ctrl+Alt+F1** or **F2**
+   back to Plasma.
 
-Manual equivalent (if you do not want the script):
+**If the TTY looks wedged:** **Ctrl+Alt+F4**, `pkill worldr-shell`, then F1/F2.
+vk-display present/teardown waits at most 2s; if KMS is still blank, a VT
+switch usually restores Plasma’s CRTC.
+
+**vk-display failed, drm fallback:**
+
+```sh
+DURATION=15s BACKEND=drm ./scripts/try-tty.sh
+```
+
+Manual equivalent:
 
 ```sh
 unset WAYLAND_DISPLAY DISPLAY
@@ -417,5 +444,5 @@ Workaround — real display on **tty3**:
 - Launcher reads XDG `.desktop` files (no icon theme yet; `Terminal=true` apps skipped; no ibus/fcitx IME)
 - Panel is CPU-composited chrome (not a toolkit)
 - Workspaces v0: no drag-to-desktop, no per-output set, overview is current-desktop only
-- vk-display/drm need DRM master on a spare VT (scripts/try-tty.sh); CI exercises refuse/no-DRM paths only
+- vk-display/drm need DRM master on a spare VT (scripts/try-tty.sh). CI exercises refuse / no-DRM / render-node `--card` paths only; soak vk-display on abox after merge.
 - UI toolkit still deferred

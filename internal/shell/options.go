@@ -98,15 +98,21 @@ func GraphicalSession() (wayland, x11 bool) {
 
 // CheckTakeover refuses DRM/Vulkan display backends when a graphical
 // session is already attached, unless the user passed --take-over-display.
+// --backend=auto is allowed when a host Wayland/X11 socket is present
+// (nested/headless). A leftover XDG_SESSION_TYPE=wayland|x11 without a
+// socket would otherwise pick vk-display and steal the GPU.
 func CheckTakeover(backend Backend, takeOver bool) error {
-	if !TakesDisplay(backend) {
-		return nil
-	}
 	if takeOver {
 		return nil
 	}
 	seat := ProbeSeat()
 	if !seat.LooksGraphical {
+		return nil
+	}
+	if backend == BackendAuto && (seat.Wayland || seat.X11) {
+		return nil
+	}
+	if !TakesDisplay(backend) && backend != BackendAuto {
 		return nil
 	}
 	return fmt.Errorf("%w (WAYLAND_DISPLAY=%q DISPLAY=%q XDG_SESSION_TYPE=%q vt=%s). Spare TTY: Ctrl+Alt+F3, login, unset WAYLAND_DISPLAY/DISPLAY, then scripts/try-tty.sh. Or pass --take-over-display (steals the GPU). See docs/RUN-ABOX.md",

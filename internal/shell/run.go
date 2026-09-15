@@ -471,6 +471,9 @@ func openOne(opt Options, b Backend) (*presenter, error) {
 		if !native.Available() {
 			return nil, fmt.Errorf("cgo/vulkan not in this binary")
 		}
+		if err := ValidateDRMCard(opt.Card); err != nil {
+			return nil, err
+		}
 		if !HasDRM() {
 			return nil, fmt.Errorf("no /dev/dri/card* — vk-display needs a GPU node and DRM master. Spare TTY: Ctrl+Alt+F3 then scripts/try-tty.sh")
 		}
@@ -484,6 +487,9 @@ func openOne(opt Options, b Backend) (*presenter, error) {
 	case BackendDRM:
 		if !native.Available() {
 			return nil, fmt.Errorf("cgo/drm not in this binary")
+		}
+		if err := ValidateDRMCard(opt.Card); err != nil {
+			return nil, err
 		}
 		if !HasDRM() && opt.Card == "" {
 			return nil, fmt.Errorf("no /dev/dri/card* — drm backend needs a KMS device. Spare TTY: Ctrl+Alt+F3 then scripts/try-tty.sh")

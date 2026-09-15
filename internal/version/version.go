@@ -5,7 +5,7 @@ package version
 const Phase = "5"
 
 // Version is the placeholder semver for this tree.
-const Version = "0.9.6-dev"
+const Version = "0.9.7-dev"
 
 // String returns the version identifier.
 func String() string {

@@ -43,5 +43,16 @@ jobs:
           fi
           echo "$out" | grep -E -q "try-tty|no /dev/dri|vk-display|DRM|display" \
             || (echo "vk-display error missing TTY/DRM hint" && exit 1)
+          set +e
+          out=$(./bin/worldr-shell --backend=drm --card=/dev/dri/renderD128 --duration=1s 2>&1)
+          ec=$?
+          set -e
+          echo "$out"
+          if [ "$ec" -eq 0 ]; then
+            echo "unexpected drm success on render node"
+            exit 1
+          fi
+          echo "$out" | grep -E -q "render|cardN|try-tty" \
+            || (echo "render-node --card missing refuse hint" && exit 1)
       - name: nested not broken
         run: ./bin/worldr-shell --backend=headless --compositor --duration=1s | grep -F "workspaces:"

@@ -23,6 +23,9 @@ func TestParseColor(t *testing.T) {
 }
 
 func TestCheckTakeoverHeadlessOK(t *testing.T) {
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DISPLAY", "")
+	t.Setenv("XDG_SESSION_TYPE", "")
 	if err := CheckTakeover(BackendHeadless, false); err != nil {
 		t.Fatal(err)
 	}
@@ -34,6 +37,10 @@ func TestCheckTakeoverHeadlessOK(t *testing.T) {
 	}
 	if err := CheckTakeover(BackendAuto, false); err != nil {
 		t.Fatal(err)
+	}
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	if err := CheckTakeover(BackendAuto, false); err != nil {
+		t.Fatal("auto + host Wayland must stay nested, not refuse")
 	}
 }
 
