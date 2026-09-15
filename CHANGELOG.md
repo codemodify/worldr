@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.20-dev — linux-drm-syncobj
+
+- Advertise `wp_linux_drm_syncobj_manager_v1` when a local DRM node reports `DRM_CAP_SYNCOBJ_TIMELINE`.
+- `get_timeline` imports the client fd; `set_acquire_point` / `set_release_point` parse hi/lo. Commit tries a short DRM timeline wait, then a release signal. Failure keeps **implicit sync** (Intel).
+- No Vulkan `VK_KHR_timeline_semaphore` wait yet (TODO). NVIDIA/AMD best-effort (same ioctls). No IME.
+
 ## 0.9.19-dev — image clipboard MIME
 
 - `wl_data_device` and `zwp_primary_selection` offer/receive `image/png` (and `image/bmp` when advertised). In-compositor paste is exact-MIME.

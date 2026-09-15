@@ -17,6 +17,7 @@ import (
 	"github.com/codemodify/worldr/internal/platform/linux/native"
 	"github.com/codemodify/worldr/internal/platform/linux/wlclient"
 	"github.com/codemodify/worldr/internal/scanout"
+	"github.com/codemodify/worldr/internal/syncobj"
 	"github.com/codemodify/worldr/internal/version"
 )
 
@@ -87,6 +88,11 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			fmt.Fprintln(stdout, "linux-dmabuf: LINEAR mmap + KMS primary scanout for fullscreen ARGB/XRGB (tiled AddFB2 on Intel; NVIDIA/AMD best-effort)")
 		} else {
 			fmt.Fprintln(stdout, "linux-dmabuf: advertised; LINEAR mmap works, tiled GPU buffers need Vulkan import (unavailable on this device)")
+		}
+		if syncobj.TimelineAvailable() {
+			fmt.Fprintln(stdout, "linux-drm-syncobj: wp_linux_drm_syncobj_manager_v1 advertised (acquire wait + release signal; implicit sync fallback). Vulkan timeline wait TODO.")
+		} else {
+			fmt.Fprintln(stdout, "linux-drm-syncobj: not advertised (no DRM SYNCOBJ_TIMELINE); implicit sync only")
 		}
 		deskH := usableHeight(int(h), PanelH)
 		if deskH < 1 {

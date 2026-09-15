@@ -117,6 +117,7 @@ and explicit sync, not by opening the DRM device themselves.
 | `internal/platform/linux/wlclient` | Debug nested Wayland *client* (wl_shm). Not the primary path. |
 | `internal/shell` | `worldr-shell` flags, safety, present loop, panel, launcher. |
 | `internal/icontheme` | XDG icon-theme PNG lookup (`Icon=` / AppID); client `xdg_toplevel_icon` still wins. |
+| `internal/syncobj` | linux-drm-syncobj timeline points + DRM ioctl wait/signal (implicit fallback). |
 | `internal/input` | Best-effort evdev pointer + keys. Quit is Ctrl+Q in the shell. |
 | `internal/wayland` | Wire protocol encode/decode. |
 | `internal/version` | Version / phase string. |
@@ -149,7 +150,10 @@ Readback / mmap remain for nested, drm, ABGR, and theater. shm is the
 fallback. Fullscreen ARGB/XRGB on `--backend=drm` can skip the blit via
 KMS primary-plane scanout (`internal/scanout` eligibility + atomic/`SetCrtc`).
 `vk-display` evaluates the same helpers then falls back (Vulkan holds DRM
-master). Overlay planes and `linux-drm-syncobj` are later.
+master). `wp_linux_drm_syncobj_manager_v1` is advertised when
+`DRM_CAP_SYNCOBJ_TIMELINE` is present; acquire/release fds are imported and
+a DRM timeline wait is attempted, else implicit sync. Vulkan timeline wait
+is later. Overlay planes are later.
 
 ## Present / compositor loop
 
