@@ -1,9 +1,9 @@
 // Package icontheme resolves freedesktop icon names to PNG or SVG files.
 //
-// Search is png-first under the current theme and hicolor
-// ($XDG_DATA_HOME / $XDG_DATA_DIRS icons/). Missing PNG falls back to
-// a simple SVG raster (rect/circle/path). Absolute Icon= paths are used
-// as-is when they exist.
+// Search is png-first under the current theme, then each Inherits=
+// theme from index.theme, then hicolor. Missing PNG falls back to SVG
+// (librsvg when built with -tags=librsvg, else the simple raster).
+// Absolute Icon= paths are used as-is when they exist.
 package icontheme
 
 import (
@@ -105,11 +105,7 @@ func Resolve(name string, s Search) (string, bool) {
 	if want < 1 {
 		want = DefaultWant
 	}
-	themes := make([]string, 0, 2)
-	if th := strings.TrimSpace(s.Theme); th != "" && !strings.EqualFold(th, "hicolor") {
-		themes = append(themes, th)
-	}
-	themes = append(themes, "hicolor")
+	themes := InheritChain(s.Theme, s.Dirs)
 
 	sizes := []int{16, 22, 24, 32, 36, 48, 64, 96, 128, 256}
 	contexts := []string{"apps", "places", "devices", "categories", "mimetypes", "status", "actions"}
@@ -202,6 +198,11 @@ func LoadBGRA(path string) (pix []byte, w, h, stride int, err error) {
 // LoadBGRASize decodes path; SVG is rasterized to want×want.
 func LoadBGRASize(path string, want int) (pix []byte, w, h, stride int, err error) {
 	if strings.EqualFold(filepath.Ext(path), ".svg") {
+		if RsvgAvailable() {
+			if pix, w, h, st, err := RasterRSVG(path, want); err == nil && w > 0 && h > 0 {
+				return pix, w, h, st, nil
+			}
+		}
 		return RasterSVG(path, want)
 	}
 	f, err := os.Open(path)

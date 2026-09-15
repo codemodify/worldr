@@ -16,11 +16,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gcc pkg-config libvulkan-dev libdrm-dev
+            gcc pkg-config libvulkan-dev libdrm-dev librsvg2-dev
       - name: test
         env:
           CGO_ENABLED: "1"
-        run: go test ./...
+        run: make test
       - name: build
         env:
           CGO_ENABLED: "1"
