@@ -9,6 +9,10 @@ const (
 	keyLeft      uint32 = 105
 	keyRight     uint32 = 106
 	keyF12       uint32 = 88
+	keyF1        uint32 = 59
+	keySpace     uint32 = 57
+	keyUp        uint32 = 103
+	keyDown      uint32 = 108
 	keyLeftMeta  uint32 = 125
 	keyRightMeta uint32 = 126
 )

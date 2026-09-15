@@ -26,7 +26,8 @@ already running Hyprland/Sway/GNOME/KDE.
 | Ctrl+Alt+F1…F7 | Switch virtual terminals. Your existing graphical session stays on its VT. |
 | Ctrl+C | Stop `worldr-shell` if it is in the foreground on that TTY. |
 | Esc or Q | Quit if evdev can open a keyboard (`input` group). In overview, Esc leaves the grid first. |
-| F12 | Toggle expose/overview (nested window must be focused). Super+Tab if the host does not steal Super. |
+| F12 | Toggle expose/overview (nested window must be focused). Super+Tab if the host does not steal Super. Also the panel **grid** button. |
+| F1 | Open the in-shell launcher (Super+Space if the host does not steal Super). Also the panel **apps** button. |
 | `--duration=15s` | Always exits — use this the first time on a TTY. |
 
 If the TTY appears wedged: another TTY (`Ctrl+Alt+F3`), `pkill worldr-shell`,
@@ -69,8 +70,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on XWayland / nested compositor):
-git checkout feat/overview-expose-v0
+# this branch (stacked on overview / theater):
+git checkout feat/panel-launcher-v0
 
 export CGO_ENABLED=1
 make build
@@ -114,7 +115,8 @@ foot
 # or: weston-simple-shm
 ```
 
-You should see foot (or the shm client) with a cyan/magenta SSD frame inside the
+You should see a bottom panel (clock + **apps** / **grid**) and foot (or the
+shm client) with a cyan/magenta SSD frame inside the
 `worldr-shell (nested compositor)` window. On map it **scale+fades in** (~260ms);
 on close it scale+fades out (~220ms). Clicking another window gives a short
 lift/shadow pulse. Pointer and keys while that window is focused are forwarded
@@ -152,6 +154,31 @@ Smoke without pressing keys (video-less):
 ```
 
 Overview auto-enters ~0.6s after the first window maps.
+
+### Panel + launcher (v0)
+
+A **bottom panel** is always composited (clock, `worldr` label, focused
+window title, **apps**, **grid**). The compositor output is the area above
+the bar so new windows do not sit under it.
+
+**Launch foot without a second terminal:** focus the nested worldr window,
+press **F1** (or click **apps**), highlight `foot`, Enter. The child gets
+the printed `WAYLAND_DISPLAY` (host `wayland-0` is stripped). Super+Space
+is the same bind when KWin does not steal Super.
+
+| Key / click | Action |
+| --- | --- |
+| F1 | Toggle launcher |
+| Super+Space | Same toggle if the host allows Super |
+| Panel **apps** | Toggle launcher |
+| Panel **grid** | Toggle overview (same as F12) |
+| ↑ ↓ Tab | Move launcher selection |
+| Enter / click row | Spawn that command |
+| Esc | Close launcher (does not quit) |
+
+Hardcoded list (no `.desktop` scan): `foot`, `weston-simple-shm`, and
+`xeyes` / `xterm` when `--xwayland` is on. Missing binaries log
+`launcher: … not on PATH` and the shell keeps running.
 
 `--compositor=false` restores the old clear-only debug window (no socket).
 
@@ -323,8 +350,8 @@ Host binds (clamped): compositor, shm, `xdg_wm_base`, `wl_seat` ≤ v5 (pointer 
 keyboard forwarded into worldr). Still skipped: output, viewporter, dmabuf,
 cursor-shape.
 
-**Success:** window titled `worldr-shell (nested compositor)` + `foot` visible
-inside it with SSD.
+**Success:** window titled `worldr-shell (nested compositor)` + bottom panel
+visible. **F1 → foot** maps a client without a second terminal.
 
 **If the host window dies:** paste `wayland-client: global/bind` lines.
 Workaround — real display on **tty2**:
@@ -348,4 +375,6 @@ export XDG_RUNTIME_DIR=/run/user/$(id -u)
 - Pointer/keyboard keymap sent to clients is a tiny US map
 - No fractional scaling, `xdg-toplevel-icon`, or IME (`zwp_text_input`)
 - Compiz theater v0 is hardcoded (no plugin graph); `--effects=off` disables
+- Launcher is a hardcoded list (no `.desktop` / menu scan)
+- Panel is CPU-composited chrome (not a toolkit)
 - UI toolkit still deferred

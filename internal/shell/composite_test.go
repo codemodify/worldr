@@ -19,7 +19,7 @@ func TestCompositeDesktopFakeActor(t *testing.T) {
 		},
 		Title: "fake-foot", Focused: true,
 	}
-	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, true, CursorBlit{}, Theater{}, OverviewDraw{})
+	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, true, CursorBlit{}, Theater{}, OverviewDraw{}, ChromeDraw{})
 
 	// Actor pixel at (10,12)
 	i := 12*stride + 10*4
@@ -41,7 +41,7 @@ func TestCompositeDesktopCursor(t *testing.T) {
 	dst := make([]byte, stride*h)
 	CompositeDesktop(dst, stride, w, h, 0xff000000, nil, false, CursorBlit{
 		X: 4, Y: 4, Visible: true,
-	}, Theater{}, OverviewDraw{})
+	}, Theater{}, OverviewDraw{}, ChromeDraw{})
 	var n int
 	for _, b := range dst {
 		if b != 0 {
@@ -67,7 +67,7 @@ func TestCompositeDesktopMapInFades(t *testing.T) {
 	}
 	dst0 := make([]byte, stride*h)
 	CompositeDesktop(dst0, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{},
-		Theater{Now: now, Tier: engine.TierHigh}, OverviewDraw{})
+		Theater{Now: now, Tier: engine.TierHigh}, OverviewDraw{}, ChromeDraw{})
 	i := 20*stride + 20*4
 	// t=0 map-in: alpha 0 — pixel stays clear (black)
 	if dst0[i] != 0 || dst0[i+1] != 0 || dst0[i+2] != 0 {
@@ -75,7 +75,7 @@ func TestCompositeDesktopMapInFades(t *testing.T) {
 	}
 	dst1 := make([]byte, stride*h)
 	CompositeDesktop(dst1, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{},
-		Theater{Now: now.Add(engine.MapInDuration), Tier: engine.TierHigh}, OverviewDraw{})
+		Theater{Now: now.Add(engine.MapInDuration), Tier: engine.TierHigh}, OverviewDraw{}, ChromeDraw{})
 	if dst1[i] < 0xf0 {
 		t.Fatalf("settled map-in should be opaque, got %x", dst1[i])
 	}
@@ -88,7 +88,7 @@ func TestCompositeDesktopOverviewMovesActor(t *testing.T) {
 	actor := &engine.Actor{X: 4, Y: 4, Width: 1, Height: 1, Stride: 4, Pixels: pix}
 	dst := make([]byte, stride*h)
 	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{},
-		Theater{}, OverviewDraw{T: 1})
+		Theater{}, OverviewDraw{T: 1}, ChromeDraw{})
 	// Home pixel should no longer be the actor (grid letterboxes toward center).
 	home := 4*stride + 4*4
 	if dst[home] == 0x10 && dst[home+1] == 0x20 && dst[home+2] == 0x30 {

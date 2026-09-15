@@ -3,9 +3,10 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** expose/overview v0 on `feat/overview-expose-v0` (stacked on theater).
-Safe demo: `--backend=wayland-client` + two `foot` windows, then **F12** for
-the grid. `--overview-demo` auto-enters. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
+**Status:** panel + launcher v0 on `feat/panel-launcher-v0` (stacked on overview).
+Safe demo: `--backend=wayland-client`, then **F1** to launch `foot` from the
+in-shell list (no second terminal). Bottom panel stays visible. See
+[docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
 ## Quick links
 
@@ -22,7 +23,8 @@ the grid. `--overview-demo` auto-enters. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md
 4. XWayland — spike (`--xwayland`, rootless Xwayland + tiny XWM → actors)
 5. Compiz-style theater v0 — map/unmap scale+fade (`--effects`)
 6. Expose/overview v0 — F12 grid (`--overview-demo`)
-7. Revisit UI toolkit — deferred
+7. Panel + launcher v0 — bottom bar, F1 spawns foot
+8. Revisit UI toolkit — deferred
 
 ## Build
 
@@ -39,11 +41,12 @@ Safe nested compositor (existing Wayland session — recommended first try):
 ```sh
 ./bin/worldr-shell --backend=wayland-client --duration=30s
 # window theater on (default). --effects=off to disable.
-# other terminal:
+# focus the worldr window, F1 (or Super+Space / panel apps) → foot
+# other terminal still works:
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 export WAYLAND_DISPLAY=wayland-1   # use the name the shell printed
 foot
-# second terminal, same WAYLAND_DISPLAY: another foot, then F12 in the worldr window
+# F12 or panel grid for expose; second foot from the launcher
 # X11 (optional):
 ./bin/worldr-shell --backend=wayland-client --xwayland --duration=60s
 DISPLAY=:N xeyes    # N from the shell's "xwayland: DISPLAY=" line
