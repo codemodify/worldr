@@ -25,6 +25,90 @@ type Launcher struct {
 	Items  []LaunchItem
 }
 
+// launcherGate suppresses the opening press from dismissing the overlay.
+// Nested evdev+wl used to feed the same physical click twice (toggle open,
+// then outside-close or toggle shut). Arm ignoreOutside on open; clear on
+// pointer Release. Apps-button close is explicit after debounce.
+type launcherGate struct {
+	ignoreOutside bool
+	lastToggle    time.Time
+}
+
+const launcherToggleDebounce = 150 * time.Millisecond
+
+func (g *launcherGate) onOpen(now time.Time) {
+	if g == nil {
+		return
+	}
+	g.ignoreOutside = true
+	g.lastToggle = now
+}
+
+func (g *launcherGate) onClose(now time.Time) {
+	if g == nil {
+		return
+	}
+	g.ignoreOutside = false
+	if !now.IsZero() {
+		g.lastToggle = now
+	}
+}
+
+func (g *launcherGate) onRelease() {
+	if g == nil {
+		return
+	}
+	g.ignoreOutside = false
+}
+
+// handlePanelAppsClick: closed → open; open + apps → close (after debounce).
+func handlePanelAppsClick(ln *Launcher, g *launcherGate, now time.Time) {
+	if ln == nil {
+		return
+	}
+	if ln.Open {
+		if g != nil && !g.lastToggle.IsZero() && now.Sub(g.lastToggle) < launcherToggleDebounce {
+			return
+		}
+		ln.Close()
+		g.onClose(now)
+		return
+	}
+	ln.Open = true
+	g.onOpen(now)
+}
+
+// handleLauncherDesktopClick handles a click in the usable desktop (above the panel).
+// Returns consumed=true when the overlay ate the click. Opening-press
+// outside-close is ignored until Release (g.ignoreOutside).
+func handleLauncherDesktopClick(ln *Launcher, g *launcherGate, x, y, screenW, screenH, panelH int) (spawn *LaunchItem, consumed bool) {
+	if ln == nil || !ln.Open {
+		return nil, false
+	}
+	deskH := usableHeight(screenH, panelH)
+	if y >= deskH {
+		return nil, false
+	}
+	card, rows := LayoutLauncher(len(ln.Items), screenW, screenH, panelH)
+	idx, inside := HitLauncher(card, rows, x, y)
+	if idx >= 0 && idx < len(ln.Items) {
+		it := ln.Items[idx]
+		ln.Select = idx
+		ln.Close()
+		g.onClose(time.Time{})
+		return &it, true
+	}
+	if !inside {
+		if g != nil && g.ignoreOutside {
+			return nil, true
+		}
+		ln.Close()
+		g.onClose(time.Time{})
+		return nil, true
+	}
+	return nil, true
+}
+
 // Catalog is the v0 command list. X11 entries appear only when Xwayland is on.
 func Catalog(xwayland bool) []LaunchItem {
 	out := []LaunchItem{
@@ -85,9 +169,8 @@ func isLauncherToggle(code uint32, metaHeld bool) bool {
 	return metaHeld && isEvdev(code, keySpace)
 }
 
-func handleLauncherKeys(ln *Launcher, ptr *input.Pointer, now time.Time, metaHeld *bool) (consumed map[uint32]bool, spawn *LaunchItem) {
+func handleLauncherKeys(ln *Launcher, ptr *input.Pointer, now time.Time, metaHeld *bool, gate *launcherGate) (consumed map[uint32]bool, spawn *LaunchItem) {
 	consumed = map[uint32]bool{}
-	_ = now
 	if ln == nil || ptr == nil {
 		return consumed, nil
 	}
@@ -102,6 +185,11 @@ func handleLauncherKeys(ln *Launcher, ptr *input.Pointer, now time.Time, metaHel
 		}
 		if isLauncherToggle(k.Code, *metaHeld) {
 			ln.Toggle()
+			if ln.Open {
+				gate.onOpen(now)
+			} else {
+				gate.onClose(now)
+			}
 			consumed[k.Code] = true
 			ptr.Quit = false
 			continue

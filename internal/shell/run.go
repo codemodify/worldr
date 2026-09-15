@@ -144,6 +144,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 
 	var ov Overview
 	ln := Launcher{Items: Catalog(x11Display != "")}
+	var lnGate launcherGate
 	fmt.Fprintln(stdout, "overview: F12 or panel grid toggles expose (Super+Tab if the host does not steal Super). Esc leaves overview; Esc/Q outside it quits.")
 	if opt.OverviewDemo {
 		fmt.Fprintln(stdout, "overview: --overview-demo will auto-enter after the first window maps")
@@ -191,17 +192,10 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		}
 		ptr.Poll()
 		if p.wl != nil {
-			in := p.wl.TakeInput()
-			ptr.X, ptr.Y = in.X, in.Y
-			if in.Click {
-				ptr.Click = true
-			}
-			if in.Release {
-				ptr.Release = true
-			}
-			for _, k := range in.Keys {
-				ptr.Keys = append(ptr.Keys, input.Key{Code: k.Code, Pressed: k.Pressed})
-			}
+			// Nested host seat is authoritative for pointer (and keys).
+			// OR-merging evdev Click with wl Click toggled the launcher
+			// open then shut on one physical press.
+			applyNestedPointer(ptr, p.wl.TakeInput())
 		}
 		now := time.Now()
 		if demoArmed && scene.HasActors() && frames > 40 {
@@ -211,7 +205,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			demoArmed = false
 			fmt.Fprintln(stdout, "overview: demo auto-enter (F12 or Esc to leave)")
 		}
-		lcons, spawn := handleLauncherKeys(&ln, ptr, now, &metaHeld)
+		lcons, spawn := handleLauncherKeys(&ln, ptr, now, &metaHeld, &lnGate)
 		if spawn != nil {
 			_ = SpawnClient(*spawn, waylandName, x11Display, stdout)
 		}
@@ -240,24 +234,20 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				srv.KeyboardKey(k.Code, k.Pressed)
 			}
 		}
-		if ln.Open && ptr.Click && ptr.Y < deskH {
-			card, rows := LayoutLauncher(len(ln.Items), int(w), int(h), PanelH)
-			idx, inside := HitLauncher(card, rows, ptr.X, ptr.Y)
-			if idx >= 0 && idx < len(ln.Items) {
-				it := ln.Items[idx]
-				ln.Select = idx
-				ln.Close()
-				_ = SpawnClient(it, waylandName, x11Display, stdout)
-			} else if !inside {
-				ln.Close()
+		if ln.Open && ptr.Click {
+			item, ate := handleLauncherDesktopClick(&ln, &lnGate, ptr.X, ptr.Y, int(w), int(h), PanelH)
+			if item != nil {
+				_ = SpawnClient(*item, waylandName, x11Display, stdout)
 			}
-			ptr.Click = false
+			if ate {
+				ptr.Click = false
+			}
 		}
 		if ptr.Click {
 			prects := LayoutPanelWS(int(w), int(h), scene.WorkspaceCount())
 			switch HitPanel(prects, ptr.X, ptr.Y) {
 			case PanelHitLaunch:
-				ln.Toggle()
+				handlePanelAppsClick(&ln, &lnGate, now)
 				ptr.Click = false
 			case PanelHitOverview:
 				ov.Toggle(now)
@@ -293,6 +283,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			}
 		}
 		if ptr.Release {
+			lnGate.onRelease()
 			dragging = false
 			drag = nil
 			if srv != nil && !ov.Want && !ln.Open {

@@ -3,7 +3,7 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** 0.9.1-dev on `feat/v0.9-changelog-fractional-scale` (stacked on TTY/seat harden).
+**Status:** 0.9.2-dev on `fix/launcher-sticky` (stacked on 0.9.1 changelog + fractional-scale).
 Nested compositor is the safe demo. Real display: spare TTY via `scripts/try-tty.sh`.
 Human history: [CHANGELOG.md](CHANGELOG.md). Abox notes: [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
