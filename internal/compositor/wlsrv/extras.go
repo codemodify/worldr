@@ -101,35 +101,6 @@ func (c *Client) reqActToken(o *object, op uint16, cur *wayland.Cursor) error {
 	return nil
 }
 
-func (c *Client) reqPrimaryMgr(_ *object, op uint16, cur *wayland.Cursor) error {
-	switch op {
-	case 0: // create_source
-		id, err := cur.U32()
-		if err != nil {
-			return err
-		}
-		c.objs[id] = &object{id: id, kind: kindPrimSource}
-	case 1: // get_device(new_id, seat)
-		id, err := cur.U32()
-		if err != nil {
-			return err
-		}
-		_, _ = cur.U32()
-		c.objs[id] = &object{id: id, kind: kindPrimDevice}
-		// empty clipboard — clients that wait for selection get a null offer
-		return c.send(id, 1, wayland.PutU32(nil, 0), nil)
-	case 2: // destroy
-	}
-	return nil
-}
-
-func (c *Client) reqPrimDevice(o *object, op uint16, _ *wayland.Cursor) error {
-	if op == 1 {
-		delete(c.objs, o.id)
-	}
-	return nil
-}
-
 func (c *Client) reqXwaylandShell(_ *object, op uint16, cur *wayland.Cursor) error {
 	if op != 1 { // get_xwayland_surface
 		return nil

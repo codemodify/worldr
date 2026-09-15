@@ -47,6 +47,8 @@ const (
 	kindOutput
 	kindDataDeviceManager
 	kindDataDevice
+	kindDataSource
+	kindDataOffer
 	kindPositioner
 	kindDmaParams
 	kindDmaFeedback
@@ -71,17 +73,19 @@ const (
 )
 
 type object struct {
-	id   uint32
-	kind objectKind
-	pool *shmPool
-	buf  *shmBuffer
-	surf *surface
-	xdgS *xdgSurface
-	xdgT *xdgToplevel
-	xdgP *xdgPopup
-	pos  *positioner
-	sub  *subsurface
-	dma  *dmaBuf
+	id    uint32
+	kind  objectKind
+	pool  *shmPool
+	buf   *shmBuffer
+	surf  *surface
+	xdgS  *xdgSurface
+	xdgT  *xdgToplevel
+	xdgP  *xdgPopup
+	pos   *positioner
+	sub   *subsurface
+	src   *dataSource
+	offer *dataOffer
+	dma   *dmaBuf
 }
 
 type shmPool struct {
@@ -162,6 +166,8 @@ type Client struct {
 	entered  uint32
 	ptrBtns  pointerButtons
 	kbdSurf  uint32
+	dataDev  uint32
+	primDev  uint32
 	serverID uint32
 }
 
@@ -183,6 +189,9 @@ func newClient(s *Server, conn *net.UnixConn) *Client {
 }
 
 func (c *Client) close() {
+	if c.srv != nil {
+		c.srv.dropClientSelection(c)
+	}
 	if c.conn != nil {
 		_ = c.conn.Close()
 		c.conn = nil
@@ -301,12 +310,13 @@ func (c *Client) dispatch(msg wayland.Message) error {
 	case kindViewport:
 		return c.reqViewport(o, msg.Opcode, cur)
 	case kindDataDeviceManager:
-		id, err := cur.U32()
-		if err != nil {
-			return nil
-		}
-		c.objs[id] = &object{id: id, kind: kindDataDevice}
-		return nil
+		return c.reqDataDevMgr(o, msg.Opcode, cur)
+	case kindDataDevice:
+		return c.reqDataDevice(o, msg.Opcode, cur)
+	case kindDataSource:
+		return c.reqDataSource(o, msg.Opcode, cur)
+	case kindDataOffer:
+		return c.reqDataOffer(o, msg.Opcode, cur)
 	case kindPointer:
 		return c.reqPointer(o, msg.Opcode, cur)
 	case kindCursorShapeMgr:
@@ -321,6 +331,8 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqPrimaryMgr(o, msg.Opcode, cur)
 	case kindPrimDevice:
 		return c.reqPrimDevice(o, msg.Opcode, cur)
+	case kindPrimSource:
+		return c.reqPrimSource(o, msg.Opcode, cur)
 	case kindXwShell:
 		return c.reqXwaylandShell(o, msg.Opcode, cur)
 	case kindXwSurface:
@@ -329,7 +341,7 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqFracScaleMgr(o, msg.Opcode, cur)
 	case kindFracScale:
 		return c.reqFracScale(o, msg.Opcode, cur)
-	case kindKeyboard, kindOutput, kindDataDevice, kindCallback, kindDmaFeedback, kindPrimSource:
+	case kindKeyboard, kindOutput, kindCallback, kindDmaFeedback:
 		return nil
 	default:
 		return nil

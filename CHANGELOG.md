@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.9-dev — clipboard MIME (text/plain)
+
+- `wl_data_device_manager` now does real selection: `wl_data_source.offer`, `set_selection`, `data_offer` / `selection`, `data_offer.receive` → `data_source.send` (UTF-8 bytes on the fd).
+- `text/plain` and `text/plain;charset=utf-8` alias. Same path for `zwp_primary_selection` (foot mouse-select / middle-click).
+- In-compositor only: copy/paste between worldr clients. Nested host clipboard bridge is a follow-up (host nest does not bind `wl_data_device`).
+- No IME.
+
 ## 0.9.8-dev — xdg_popup + wl_subsurface
 
 - `xdg_surface.get_popup` sends `xdg_popup.configure` + `xdg_surface.configure`. `reposition` (v3) sends `repositioned` then a new configure. `grab` dismisses the popup on an outside click.
