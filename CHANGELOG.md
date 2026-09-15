@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.26-dev — Qt Wayland init SEGV (ark / Brave)
+
+- Root cause: `wl_data_device.selection(null)` (and primary `selection(null)`) was sent immediately on `get_data_device` during the client's first `wl_display_roundtrip`. Qt6 `QWaylandDataDevice` then calls `platformIntegration()->clipboard()` before `createPlatformIntegration` has published the integration → SIGSEGV in `libQt6WaylandClient`.
+- Protocol: send `selection` only immediately before `wl_keyboard.enter`, or when the selection changes while that client has keyboard focus. Null marshal is still `object` id 0 (4-byte zero). Seat v8 + keymap/repeat_info + cursor-shape were not the crash.
+- `WAYLAND_DEBUG=1 ark`: second `sync` must reach `callback.done`; `wl_data_device.selection` must not appear before `wl_keyboard.enter`. After `get_keyboard`: `keymap` + `repeat_info`.
+- No IME. GNOME Disks still deferred (GTK, not this Qt path).
+
 ## 0.9.25-dev — SVG icons + JPEG/WebP clipboard
 
 - XDG `Icon=` / theme lookup rasters simple SVG (rect/circle/ellipse/polygon/path) when no PNG exists (`scalable/` and sized `.svg`). PNG still wins. Cached like PNG.

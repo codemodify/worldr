@@ -105,7 +105,11 @@ func (c *Client) reqDataDevMgr(_ *object, op uint16, cur *wayland.Cursor) error 
 		if c.dataDev == 0 {
 			c.dataDev = id
 		}
-		c.sendSelection(false)
+		// Spec: selection is sent immediately before keyboard focus, or
+		// when the selection changes while focused — not on get_data_device.
+		// Qt6 calls platformIntegration()->clipboard() from that event;
+		// emitting it during the init roundtrip SEGVs (ark / Brave shim).
+		c.sendSelectionIfFocused(false)
 	}
 	return nil
 }
@@ -202,7 +206,7 @@ func (c *Client) reqPrimaryMgr(_ *object, op uint16, cur *wayland.Cursor) error 
 		if c.primDev == 0 {
 			c.primDev = id
 		}
-		c.sendSelection(true)
+		c.sendSelectionIfFocused(true)
 	case 2: // destroy
 	}
 	return nil
@@ -282,7 +286,7 @@ func (s *Server) setSelection(primary bool, from *Client, src *dataSource) {
 	cl := append([]*Client(nil), s.clients...)
 	s.mu.Unlock()
 	for _, c := range cl {
-		c.sendSelection(primary)
+		c.sendSelectionIfFocused(primary)
 	}
 	if s.clipExport != nil && src != nil && !src.isHost() && clipbridge.Bridgeable(src.mimes) {
 		s.clipExport(primary, src.mimes)
@@ -381,7 +385,7 @@ func (s *Server) ImportHostPayload(primary bool, mime string, data []byte) {
 		cl := append([]*Client(nil), s.clients...)
 		s.mu.Unlock()
 		for _, c := range cl {
-			c.sendSelection(primary)
+			c.sendSelectionIfFocused(primary)
 		}
 		return
 	}
@@ -478,6 +482,18 @@ func (s *Server) transfer(offer *dataOffer, mime string, fd int) {
 func (c *Client) sendCurrentSelections() {
 	c.sendSelection(false)
 	c.sendSelection(true)
+}
+
+// hasKeyboardFocus is true after wl_keyboard.enter for a live surface.
+// get_data_device during Qt/Chromium platform init has a device but no enter.
+func (c *Client) hasKeyboardFocus() bool {
+	return c != nil && c.kbdID != 0 && c.kbdSurf != 0
+}
+
+func (c *Client) sendSelectionIfFocused(primary bool) {
+	if c.hasKeyboardFocus() {
+		c.sendSelection(primary)
+	}
 }
 
 func (c *Client) sendSelection(primary bool) {
