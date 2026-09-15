@@ -34,7 +34,7 @@ tryable `worldr-shell`.
 5. Compiz-style theater v0 — done (hardcoded map/unmap scale+fade)
 6. Expose/overview v0 — done (F12 grid)
 7. Panel + launcher v0 — done (bottom bar, F1 spawn)
-8. Workspaces v0 — done (2–4 desktops, pager, slide)
+8. Workspaces — done (2–4 desktops, pager N/M, slide, move-window)
 9. TTY/seat harden — **this branch** (spare VT vk-display/drm)
 10. Revisit UI toolkit
 

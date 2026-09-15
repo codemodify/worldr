@@ -164,7 +164,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	}
 	fmt.Fprintln(stdout, "panel: bottom bar always visible (worldr, apps, focused title, pager, grid, clock).")
 	fmt.Fprintf(stdout, "launcher: F1 or Super+Space (or panel apps). %d apps from XDG .desktop (fallback if none). Enter/click spawns with this WAYLAND_DISPLAY. Esc closes the list.\n", len(ln.Items))
-	fmt.Fprintf(stdout, "workspaces: %d desktops (Ctrl+Alt+←/→ or pager dots). New windows spawn on the active desktop. Overview is current-desktop only.\n", scene.WorkspaceCount())
+	fmt.Fprintf(stdout, "workspaces: %d desktops. Ctrl+Alt+←/→ switch (wraps); Ctrl+Alt+Shift+←/→ move the focused window and follow. Pager shows N/M + occupied dots. Empty desktops stay addressable. Overview is current-desktop only.\n", scene.WorkspaceCount())
 
 	fmt.Fprintln(stdout, "running. Exit: Ctrl+Q, Ctrl+C, or --duration. Bare Q/Esc never quit while a client is on the desktop (type in foot freely). Esc on an empty desktop still quits.")
 	if TakesDisplay(Backend(p.name)) {
@@ -175,6 +175,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	metaHeld := false
 	ctrlHeld := false
 	altHeld := false
+	shiftHeld := false
 	demoArmed := opt.OverviewDemo
 	ticker := time.NewTicker(16 * time.Millisecond)
 	defer ticker.Stop()
@@ -224,7 +225,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		if spawn != nil {
 			_ = SpawnClient(*spawn, waylandName, x11Display, stdout)
 		}
-		wcons := handleWorkspaceKeys(scene, ptr, now, &ctrlHeld, &altHeld)
+		wcons := handleWorkspaceKeys(scene, ptr, now, &ctrlHeld, &altHeld, &shiftHeld)
 		consume := handleOverviewKeys(&ov, ptr, scene, now, int(w), deskH, &metaHeld, ln.Open, &ctrlHeld, &altHeld)
 		for code, ok := range wcons {
 			if ok {

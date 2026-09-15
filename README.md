@@ -3,7 +3,7 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** 0.9.13-dev on `cursor/toplevel-icon-c92c` (stacked on fractional scale). `xdg_toplevel_icon` on SSD/panel; **Ctrl+Q** quits.
+**Status:** 0.9.14-dev on `cursor/workspaces-polish-c92c`. Workspaces: Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow; **Ctrl+Q** quits.
 Nested compositor is the safe demo. Real display: spare TTY via `scripts/try-tty.sh`.
 Human history: [CHANGELOG.md](CHANGELOG.md). Abox notes: [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
@@ -35,7 +35,7 @@ Existing Wayland session. Clients appear inside the worldr window.
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 export WAYLAND_DISPLAY=wayland-1   # name the shell printed
 foot
-# F12 or panel grid = expose; pager / Ctrl+Alt+←/→ = workspaces
+# F12 or panel grid = expose; Ctrl+Alt+←/→ switch desktop; Ctrl+Alt+Shift+←/→ move window
 # quit: Ctrl+Q (bare Q/Esc do not quit while a client is open)
 # HiDPI soak: --scale=1.5  (default 1.0; nest does not read Plasma’s scale)
 # optional X11:

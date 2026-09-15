@@ -4,23 +4,25 @@ import "github.com/codemodify/worldr/internal/input"
 
 // Linux evdev codes. Nested Wayland seats usually send evdev+8 (XKB).
 const (
-	keyEsc       uint32 = 1
-	keyTab       uint32 = 15
-	keyQ         uint32 = 16
-	keyEnter     uint32 = 28
-	keyLeft      uint32 = 105
-	keyRight     uint32 = 106
-	keyF12       uint32 = 88
-	keyF1        uint32 = 59
-	keySpace     uint32 = 57
-	keyUp        uint32 = 103
-	keyDown      uint32 = 108
-	keyLeftMeta  uint32 = 125
-	keyRightMeta uint32 = 126
-	keyLeftCtrl  uint32 = 29
-	keyRightCtrl uint32 = 97
-	keyLeftAlt   uint32 = 56
-	keyRightAlt  uint32 = 100
+	keyEsc        uint32 = 1
+	keyTab        uint32 = 15
+	keyQ          uint32 = 16
+	keyEnter      uint32 = 28
+	keyLeft       uint32 = 105
+	keyRight      uint32 = 106
+	keyF12        uint32 = 88
+	keyF1         uint32 = 59
+	keySpace      uint32 = 57
+	keyUp         uint32 = 103
+	keyDown       uint32 = 108
+	keyLeftMeta   uint32 = 125
+	keyRightMeta  uint32 = 126
+	keyLeftCtrl   uint32 = 29
+	keyRightCtrl  uint32 = 97
+	keyLeftAlt    uint32 = 56
+	keyRightAlt   uint32 = 100
+	keyLeftShift  uint32 = 42
+	keyRightShift uint32 = 54
 )
 
 func isCtrl(code uint32) bool {
@@ -29,6 +31,10 @@ func isCtrl(code uint32) bool {
 
 func isAlt(code uint32) bool {
 	return isEvdev(code, keyLeftAlt) || isEvdev(code, keyRightAlt)
+}
+
+func isShift(code uint32) bool {
+	return isEvdev(code, keyLeftShift) || isEvdev(code, keyRightShift)
 }
 
 func isEvdev(code, evdev uint32) bool {

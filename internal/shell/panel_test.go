@@ -34,6 +34,12 @@ func TestLayoutPanelPagerHits(t *testing.T) {
 	if len(r.Dots) != 3 {
 		t.Fatal(len(r.Dots))
 	}
+	if r.Label.W <= 0 || r.Label.X != r.Pager.X {
+		t.Fatalf("N/M label %+v pager %+v", r.Label, r.Pager)
+	}
+	if r.Dots[0].X < r.Label.X+r.Label.W {
+		t.Fatal("dots must sit after the N/M label")
+	}
 	if HitPager(r, r.Dots[2].X+2, r.Dots[2].Y+2) != 2 {
 		t.Fatal("dot 2")
 	}
@@ -42,6 +48,38 @@ func TestLayoutPanelPagerHits(t *testing.T) {
 	}
 	if inCell(r.Dots[0], r.Overview.X+1, r.Overview.Y+1) {
 		t.Fatal("pager/overview overlap")
+	}
+}
+
+func TestPanelDrawsWorkspaceLabel(t *testing.T) {
+	const w, h, stride = 800, 80, 3200
+	dst := make([]byte, stride*h)
+	clear := PackBGRA([4]float32{0, 0, 0, 1})
+	CompositeDesktop(dst, stride, w, h, clear, nil, false, CursorBlit{}, Theater{}, OverviewDraw{},
+		ChromeDraw{
+			PanelH:   PanelH,
+			WS:       engine.WorkspaceDraw{Count: 3, Active: 1, From: 1, To: 1, T: 1},
+			Occupied: []bool{true, false, false},
+		}, false)
+	r := LayoutPanelWS(w, h, 3)
+	found := false
+	for y := r.Label.Y; y < r.Label.Y+r.Label.H && !found; y++ {
+		for x := r.Label.X; x < r.Label.X+r.Label.W; x++ {
+			i := y*stride + x*4
+			if dst[i] != 0 || dst[i+1] != 0 || dst[i+2] != 0 {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected N/M label pixels on the pager")
+	}
+}
+
+func TestLayoutPanelEmptyWorkspaceDotsHit(t *testing.T) {
+	r := LayoutPanelWS(800, 600, 3)
+	if HitPager(r, r.Dots[1].X+2, r.Dots[1].Y+2) != 1 {
+		t.Fatal("empty desktop 2 stays clickable")
 	}
 }
 

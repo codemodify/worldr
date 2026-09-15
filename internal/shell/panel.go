@@ -36,8 +36,8 @@ const (
 
 // PanelRects are hit/draw boxes in screen space.
 type PanelRects struct {
-	Bar, Brand, Launch, Title, Overview, Clock, Pager engine.GridCell
-	Dots                                              []engine.GridCell
+	Bar, Brand, Launch, Title, Overview, Clock, Pager, Label engine.GridCell
+	Dots                                                     []engine.GridCell
 }
 
 // ChromeDraw is the shell DE chrome passed into CompositeDesktop.
@@ -103,19 +103,25 @@ func LayoutPanelWS(w, h, workspaces int) PanelRects {
 		overview.X = launch.X + launch.W + 4
 	}
 	pagerW := 0
+	labelW := 0
 	n := workspaces
 	if n >= engine.WorkspaceMin {
-		pagerW = n * 16
+		labelW = engine.TextWidth("4/4", 2) + 6
+		pagerW = labelW + n*16
 	}
 	pager := engine.GridCell{X: overview.X - 8 - pagerW, Y: by, W: pagerW, H: btnH}
 	if pager.X < launch.X+launch.W {
 		pager.X = launch.X + launch.W + 4
 	}
+	label := engine.GridCell{}
+	if labelW > 0 {
+		label = engine.GridCell{X: pager.X, Y: by, W: labelW, H: btnH}
+	}
 	dots := make([]engine.GridCell, 0, n)
 	if pagerW > 0 {
 		for i := 0; i < n; i++ {
 			dots = append(dots, engine.GridCell{
-				X: pager.X + i*16 + 3,
+				X: pager.X + labelW + i*16 + 3,
 				Y: by + (btnH-10)/2,
 				W: 10, H: 10,
 			})
@@ -131,7 +137,7 @@ func LayoutPanelWS(w, h, workspaces int) PanelRects {
 		titleW = 0
 	}
 	title := engine.GridCell{X: titleX, Y: by, W: titleW, H: btnH}
-	return PanelRects{Bar: bar, Brand: brand, Launch: launch, Title: title, Overview: overview, Clock: clock, Pager: pager, Dots: dots}
+	return PanelRects{Bar: bar, Brand: brand, Launch: launch, Title: title, Overview: overview, Clock: clock, Pager: pager, Label: label, Dots: dots}
 }
 
 // HitPanel returns the chrome zone under (x,y).
@@ -206,7 +212,7 @@ func drawPanel(dst []byte, stride, w, h int, ch ChromeDraw) {
 	ty := textY(r.Brand, 2)
 	engine.DrawText(dst, stride, w, h, r.Brand.X, ty, brand, colBrand, 2)
 	drawBtn(dst, stride, w, h, r.Launch, "apps", ch.LaunchOn)
-	drawPagerDots(dst, stride, w, h, r, ch.WS.Active, ch.Occupied)
+	drawPagerDots(dst, stride, w, h, r, ch.WS.Active, ch.WS.Count, ch.Occupied)
 	drawBtn(dst, stride, w, h, r.Overview, "grid", ch.OverviewOn)
 	titleX := r.Title.X
 	if r.Title.W > 20 && (ch.Title != "" || len(ch.Icon) > 0) {
@@ -232,7 +238,13 @@ func drawPanel(dst []byte, stride, w, h int, ch ChromeDraw) {
 	}
 }
 
-func drawPagerDots(dst []byte, stride, w, h int, r PanelRects, active int, occupied []bool) {
+func drawPagerDots(dst []byte, stride, w, h int, r PanelRects, active, count int, occupied []bool) {
+	if r.Label.W > 0 {
+		lbl := engine.WorkspaceLabel(active, count)
+		if lbl != "" {
+			engine.DrawText(dst, stride, w, h, r.Label.X, textY(r.Label, 2), lbl, colBrand, 2)
+		}
+	}
 	for i, d := range r.Dots {
 		pix := colTextDim
 		if i < len(occupied) && occupied[i] {

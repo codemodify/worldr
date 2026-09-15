@@ -36,6 +36,10 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 		}
 		actors = filterChromeActors(actors)
 		engine.FillRectAlpha(dst, stride, w, h, 0, 0, w, deskH, 0xff000000, 0.38*ov.T)
+		if ch.WS.Count > 1 {
+			lbl := "desk " + engine.WorkspaceLabel(ch.WS.Active, ch.WS.Count)
+			engine.DrawText(dst, stride, w, h, 12, 10, lbl, colBrand, 2)
+		}
 		cells := engine.LayoutGrid(len(actors), w, deskH)
 		for i, a := range actors {
 			if a == nil || i >= len(cells) {

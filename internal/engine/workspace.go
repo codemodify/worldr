@@ -1,6 +1,9 @@
 package engine
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 // Virtual desktops v0 — 2–4 workspaces, default 3.
 const (
@@ -138,6 +141,20 @@ func (s *Scene) ActorsOn(ws int) []*Actor {
 	return out
 }
 
+// WorkspaceLabel is the 1-based "N/M" pager caption (empty when count < 1).
+func WorkspaceLabel(active, count int) string {
+	if count < 1 {
+		return ""
+	}
+	if active < 0 {
+		active = 0
+	}
+	if active >= count {
+		active = count - 1
+	}
+	return strconv.Itoa(active+1) + "/" + strconv.Itoa(count)
+}
+
 // Occupied is true per desktop when at least one actor lives there.
 func (s *Scene) Occupied() []bool {
 	s.mu.Lock()
@@ -190,6 +207,72 @@ func (s *Scene) StepWorkspace(delta int, now time.Time) bool {
 		s.wsN = n
 	}
 	to := WrapWorkspace(s.wsActive+delta, n)
+	s.mu.Unlock()
+	return s.SwitchTo(to, now)
+}
+
+// MoveActor assigns a (and actors that name it as Owner) to dest.
+// dest is wrapped into the pager. Empty dest stays addressable.
+func (s *Scene) MoveActor(a *Actor, dest int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.moveActorLocked(a, dest)
+}
+
+func (s *Scene) workspaceNLocked() int {
+	n := s.wsN
+	if n < WorkspaceMin {
+		n = WorkspaceDefault
+		s.wsN = n
+	}
+	return n
+}
+
+func (s *Scene) moveActorLocked(a *Actor, dest int) bool {
+	if a == nil {
+		return false
+	}
+	if a.NoChrome && a.Owner != nil {
+		a = a.Owner
+	}
+	n := s.workspaceNLocked()
+	dest = WrapWorkspace(dest, n)
+	if a.Workspace == dest {
+		return false
+	}
+	for _, x := range s.actors {
+		if x == nil {
+			continue
+		}
+		if x == a || x.Owner == a {
+			x.Workspace = dest
+		}
+	}
+	return true
+}
+
+// MoveFocused assigns the focused window to dest = wrap(active+delta)
+// and follows with a slide. No focused window still switches (empty
+// dest stays addressable). Returns false when dest == active.
+func (s *Scene) MoveFocused(delta int, now time.Time) bool {
+	s.mu.Lock()
+	n := s.workspaceNLocked()
+	to := WrapWorkspace(s.wsActive+delta, n)
+	if to == s.wsActive {
+		s.mu.Unlock()
+		return false
+	}
+	var hit *Actor
+	for _, a := range s.actors {
+		if a == nil || !a.Focused || !a.UnmapAt.IsZero() {
+			continue
+		}
+		hit = a
+		break
+	}
+	if hit != nil {
+		s.moveActorLocked(hit, to)
+	}
 	s.mu.Unlock()
 	return s.SwitchTo(to, now)
 }
