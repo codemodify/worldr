@@ -21,9 +21,13 @@ type Server struct {
 	ScreenW     int
 	ScreenH     int
 	Import      DMABufImport
-	mu          sync.Mutex
-	clients     []*Client
-	log         *log.Logger
+	// Waiter is the Vulkan timeline wait used at commit for
+	// wp_linux_drm_syncobj acquire points. Independent of Import so
+	// --backend=drm can wait even when HasDMABuf is false.
+	Waiter  TimelineWaiter
+	mu      sync.Mutex
+	clients []*Client
+	log     *log.Logger
 
 	cursorX, cursorY   int
 	cursorHX, cursorHY int

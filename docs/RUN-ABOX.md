@@ -199,7 +199,7 @@ abox try saw **1.75** (`preferred_scale=210/120`, `wl_output.scale=2`).
 unless `--scale` is set. **0.9.21:** `xdg_surface.set_window_geometry` width/height
 crop the actor so GTK4 CSD shadows are not wrapped in SSD.
 
-**KMS scanout (0.9.17 / 0.9.23):** on a spare TTY, `--backend=drm`, start `kitty` (or
+**KMS scanout (0.9.17 / 0.9.23 / 0.9.30):** on a spare TTY, `--backend=drm`, start `kitty` (or
 another GL client) and fullscreen it. One opaque ARGB/XRGB buffer that covers
 the output should print `kms scanout: primary dmabuf`. Windowed dmabuf clients
 may print `kms overlay` (overlay plane + desktop on primary). A small software
@@ -207,8 +207,10 @@ cursor may print `kms cursor` (hardware cursor plane). Failure of either stays
 on the blit path (`kms overlay fallback` / `kms cursor fallback`). Overview,
 launcher, workspace slide, theater, or shm (`foot`) stay compose.
 `--backend=vk-display` prints `kms scanout fallback` / overlay fallback
-(Vulkan holds DRM master) and keeps the GPU blit. NVIDIA/AMD: same try; expect
-fallback if `AddFB2` rejects the modifier. Nested is unchanged.
+(Vulkan holds DRM master) and keeps the GPU blit. **0.9.30:** drm opens an
+offscreen Vulkan ICD so acquire waits are `vkWaitSemaphores` (log
+`linux-drm-syncobj: … Vulkan timeline wait`), not ioctl-only. NVIDIA/AMD: same
+try; expect fallback if `AddFB2` rejects the modifier. Nested is unchanged.
 
 **Icons (0.9.18):** `xdg_toplevel_icon` buffers still win when the client sets
 one. Otherwise worldr looks up `.desktop` `Icon=` / `AppID` in `$XDG_ICON_THEME`
@@ -501,7 +503,7 @@ Workaround — real display on **tty3**:
 - `xdg_popup` + `wl_subsurface` stacking (0.9.8): menus/tooltips/dropdowns. Positioner uses size + anchor + offset (no constraint/flip). Foot right-click menu is the abox check.
 - Clipboard (0.9.19 / **0.9.25**): `text/plain` + `image/png` / `image/jpeg` / `image/webp` / `image/bmp` between worldr clients. Nested: Plasma ↔ worldr for text and those images when the host advertises them. Primary bridged if advertised. vk-display/drm have no host to bind.
 - Drag-and-drop (**0.9.29**): `wl_data_device.start_drag` between worldr clients for those same MIME types (copy). Empty-desktop drop cancels (no icon canvas — follow-up). No nest-host DND bridge.
-- dmabuf (0.9.17+ / **0.9.23**): GPU sample on vk-display; **KMS primary scanout** for one fullscreen ARGB/XRGB on `--backend=drm`; **overlay** for one windowed dmabuf when the card has an overlay plane; **cursor plane** for a small ARGB cursor. **0.9.20 / 0.9.23:** `wp_linux_drm_syncobj_manager_v1` when `DRM_CAP_SYNCOBJ_TIMELINE` (log `linux-drm-syncobj: … advertised`). Acquire waits on a Vulkan timeline (`vkWaitSemaphores`) before blit/sample/scanout; DRM ioctl is the fallback. Release is signaled after present. Miss → implicit sync. vk-display extra planes are eligible but usually compose (`VK_KHR_display` holds master). Nested host still CPU-composites. Soak: spare TTY, `kitty` — look for the syncobj line plus `kms scanout` / `kms overlay` / blit.
+- dmabuf (0.9.17+ / **0.9.23** / **0.9.30**): GPU sample on vk-display; **KMS primary scanout** for one fullscreen ARGB/XRGB on `--backend=drm`; **overlay** for one windowed dmabuf when the card has an overlay plane; **cursor plane** for a small ARGB cursor. **0.9.20 / 0.9.23 / 0.9.30:** `wp_linux_drm_syncobj_manager_v1` when `DRM_CAP_SYNCOBJ_TIMELINE` (log `linux-drm-syncobj: … advertised`). Acquire waits on a Vulkan timeline (`vkWaitSemaphores`) before blit/sample/scanout on **every** present path that has a Vulkan session — including `--backend=drm`, which now opens an offscreen ICD so it is no longer ioctl-only. DRM ioctl is the fallback. Release is signaled after present. Miss → implicit sync. vk-display extra planes are eligible but usually compose (`VK_KHR_display` holds master). Nested host still CPU-composites. Soak: spare TTY, `kitty` — look for the Vulkan syncobj line (not “ioctl wait”) plus `kms scanout` / `kms overlay` / blit.
 - SSD is thicker accent + title gradient + focused glow (still not a toolkit)
 - Software cursor (0.9.21 / **0.9.22** / **0.9.23**): nest binds host `wp_cursor_shape_manager_v1` and `set_shape(default)` on enter (shm arrow fallback) using the enter serial, **without taking `Window.mu` again** (0.9.21 deadlocked `TakeInput` vs `readLoop` — frozen nest, no click/key). Client `set_cursor` / cursor-shape still draw the software overlay; null `set_cursor` keeps the default arrow. `--backend=drm` tries a hardware cursor plane when the image is ≤256×256; miss stays software. vk-display / nested stay software (no DRM master for extra planes).
 - Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY. Unmatched host `wl_pointer.button` releases are dropped (foot stray-release warning should be gone).

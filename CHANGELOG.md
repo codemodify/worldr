@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.30-dev — Vulkan timeline wait on every present path
+
+- `--backend=drm` opens a headless Vulkan session (same offscreen ICD as nest/headless) so `wp_linux_drm_syncobj` acquire waits use `vkWaitSemaphores` before KMS primary scanout, overlay, and compose upload. DRM `SYNCOBJ_TIMELINE` ioctl stays the fallback.
+- Commit-time wait (`applySyncobjAcquire`) uses `Server.Waiter` even when `HasDMABuf` is false (Import still optional). Present-time `waitActorSync` already used `p.vk`; drm no longer leaves that nil.
+- Cursor plane is compositor ARGB (no client fence). vk-display / nest / headless unchanged. No IME.
+
 ## 0.9.29-dev — drag-and-drop between clients
 
 - `wl_data_device.start_drag` → `data_offer` / `enter` / `motion` / `drop` / `leave` for text and image MIME we already support (`text/plain`, png/jpeg/webp/bmp). Copy action only. Dest `receive` + `finish` completes `data_source.send` / `dnd_finished`.

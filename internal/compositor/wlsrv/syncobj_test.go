@@ -145,6 +145,77 @@ func TestSyncobjPointHelper(t *testing.T) {
 	}
 }
 
+type recWaiter struct {
+	hits int
+	fd   int
+	pt   uint64
+}
+
+func (r *recWaiter) HasTimeline() bool { return true }
+
+func (r *recWaiter) WaitTimeline(fd int, point uint64, timeoutNS uint64) error {
+	r.hits++
+	r.fd, r.pt = fd, point
+	return nil
+}
+
+func (r *recWaiter) ImportDMABuf(uint32, uint32, uint32, uint64, []DMABufPlane) ([]byte, int, error) {
+	return nil, 0, errFakeImport
+}
+
+func TestCommitWaiterPrefersServerWaiter(t *testing.T) {
+	sw, iw := &recWaiter{}, &recWaiter{}
+	s := &Server{Waiter: sw, Import: iw}
+	if got := commitWaiter(s); got != sw {
+		t.Fatal("Server.Waiter must win over Import")
+	}
+	if commitWaiter(nil) != nil {
+		t.Fatal("nil server")
+	}
+	if got := commitWaiter(&Server{Import: iw}); got != iw {
+		t.Fatal("Import waiter when Server.Waiter is nil")
+	}
+	if commitWaiter(&Server{}) != nil {
+		t.Fatal("no waiter")
+	}
+}
+
+func TestApplySyncobjAcquireUsesServerWaiter(t *testing.T) {
+	fd, err := unix.MemfdCreate("t-acq-wait", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &recWaiter{}
+	c := &Client{srv: &Server{log: log.New(io.Discard, "", 0), Waiter: w}}
+	surf := &surface{sync: &syncSurface{pendingAcq: syncobj.Fence{FD: fd, Point: 11}}}
+	c.applySyncobjAcquire(surf)
+	if w.hits != 1 || w.fd != fd || w.pt != 11 {
+		t.Fatalf("commit must Vulkan-wait: %+v", w)
+	}
+	if surf.sync.pendingAcq.Valid() {
+		t.Fatal("acquire consumed")
+	}
+	if !surf.sync.readyAcq.Valid() || surf.sync.readyAcq.Point != 11 {
+		t.Fatalf("ready %+v", surf.sync.readyAcq)
+	}
+	surf.sync.readyAcq.CloseFD()
+}
+
+func TestApplySyncobjAcquireUsesImportWaiter(t *testing.T) {
+	fd, err := unix.MemfdCreate("t-acq-imp", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &recWaiter{}
+	c := &Client{srv: &Server{log: log.New(io.Discard, "", 0), Import: w}}
+	surf := &surface{sync: &syncSurface{pendingAcq: syncobj.Fence{FD: fd, Point: 2}}}
+	c.applySyncobjAcquire(surf)
+	if w.hits != 1 {
+		t.Fatalf("Import waiter hits=%d", w.hits)
+	}
+	surf.sync.readyAcq.CloseFD()
+}
+
 func TestApplyActorSyncMovesFences(t *testing.T) {
 	acq, err := unix.MemfdCreate("t-acq", 0)
 	if err != nil {

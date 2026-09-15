@@ -81,6 +81,8 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			imp = vkDMABuf{p.vk}
 			if p.vk.IsDisplay() {
 				fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + GPU sample on vk-display; KMS primary scanout when a fullscreen dmabuf is eligible (else blit)")
+			} else if p.drm != nil {
+				fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + readback; KMS primary scanout for fullscreen ARGB/XRGB (tiled AddFB2 on Intel; NVIDIA/AMD best-effort)")
 			} else {
 				fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + readback enabled (shm remains fallback)")
 			}
@@ -108,6 +110,9 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		} else {
 			srv = s
 			waylandName = srv.DisplayName
+			if p.vk != nil {
+				srv.Waiter = vkDMABuf{p.vk}
+			}
 			defer srv.Close()
 			hostScale := 0.0
 			if p.wl != nil {
@@ -678,15 +683,22 @@ func (p *presenter) disableCursor() {
 	}
 }
 
+func (p *presenter) acquireWaiter() syncobj.Waiter {
+	if p == nil || p.vk == nil {
+		return nil
+	}
+	return p.vk
+}
+
 func (p *presenter) waitActorSync(a *engine.Actor) {
-	if p == nil || a == nil || a.AcqFD <= 0 {
+	waitActorAcquire(a, p.acquireWaiter())
+}
+
+func waitActorAcquire(a *engine.Actor, w syncobj.Waiter) {
+	if a == nil || a.AcqFD <= 0 {
 		return
 	}
 	f := syncobj.Fence{FD: a.AcqFD, Point: a.AcqPoint}
-	var w syncobj.Waiter
-	if p.vk != nil {
-		w = p.vk
-	}
 	_ = syncobj.WaitAcquire(f, 100*time.Millisecond, w)
 }
 
@@ -806,6 +818,24 @@ func openPresent(stdout, stderr io.Writer, opt Options, seat Seat) (*presenter, 
 	return nil, fmt.Errorf("no present backend worked: %v", errs)
 }
 
+// attachOffscreenVK opens a headless Vulkan session for timeline waits
+// and dmabuf import. Shared by nest, headless, and --backend=drm.
+// vk-display already owns a VK_KHR_display session and must not call this.
+func attachOffscreenVK(p *presenter) error {
+	if p == nil || p.vk != nil {
+		return nil
+	}
+	if !native.Available() {
+		return fmt.Errorf("cgo/vulkan not in this binary")
+	}
+	vk, err := native.OpenVK(false, 64, 64)
+	if err != nil {
+		return err
+	}
+	p.vk = vk
+	return nil
+}
+
 func openOne(opt Options, b Backend) (*presenter, error) {
 	switch b {
 	case BackendVKDisplay:
@@ -840,8 +870,17 @@ func openOne(opt Options, b Backend) (*presenter, error) {
 			return nil, err
 		}
 		w, h, _ := d.Size()
-		return &presenter{name: string(b), device: d.Card(), w: w, h: h, drm: d, color: opt.Color,
-			note: "DRM/KMS dumb buffer present (CPU blit). Fullscreen ARGB/XRGB dmabuf uses primary-plane scanout when eligible."}, nil
+		p := &presenter{name: string(b), device: d.Card(), w: w, h: h, drm: d, color: opt.Color,
+			note: "DRM/KMS dumb buffer present (CPU blit). Fullscreen ARGB/XRGB dmabuf uses primary-plane scanout when eligible."}
+		if err := attachOffscreenVK(p); err != nil {
+			p.note += " Vulkan timeline wait unavailable: " + err.Error()
+		} else if p.vk != nil {
+			if p.vk.DeviceName() != "" {
+				p.device = p.vk.DeviceName() + "+" + d.Card()
+			}
+			p.note += " Vulkan timeline wait + dmabuf import on drm present."
+		}
+		return p, nil
 	case BackendWaylandClient, BackendNested:
 		title := "worldr-shell (nested compositor)"
 		note := "SAFE DEMO: nested window on the host session + worldr compositor socket. Run clients with the printed WAYLAND_DISPLAY (not the host's)."
@@ -855,30 +894,24 @@ func openOne(opt Options, b Backend) (*presenter, error) {
 		}
 		w, h, _ := win.Size()
 		p := &presenter{name: string(b), device: "wayland-client", w: uint32(w), h: uint32(h), wl: win, color: opt.Color, note: note}
-		if native.Available() {
-			vk, err := native.OpenVK(false, 64, 64)
-			if err != nil {
-				p.note += " Vulkan import unavailable: " + err.Error()
-			} else {
-				p.vk = vk
-				if vk.DeviceName() != "" {
-					p.device = vk.DeviceName() + "+wayland-client"
-				}
-				p.note += " Vulkan dmabuf import available for nested GPU clients."
+		if err := attachOffscreenVK(p); err != nil {
+			p.note += " Vulkan import unavailable: " + err.Error()
+		} else if p.vk != nil {
+			if p.vk.DeviceName() != "" {
+				p.device = p.vk.DeviceName() + "+wayland-client"
 			}
+			p.note += " Vulkan dmabuf import available for nested GPU clients."
 		}
 		return p, nil
 	case BackendHeadless:
 		p := &presenter{name: string(b), device: "none", w: 1280, h: 720, color: opt.Color,
 			note: "headless: no DRM. Tries Vulkan offscreen clear if an ICD exists."}
-		if native.Available() {
-			vk, err := native.OpenVK(false, 64, 64)
-			if err != nil {
-				p.note += " Vulkan instance/device: " + err.Error()
-				return p, nil
-			}
-			p.vk = vk
-			p.device = vk.DeviceName()
+		if err := attachOffscreenVK(p); err != nil {
+			p.note += " Vulkan instance/device: " + err.Error()
+			return p, nil
+		}
+		if p.vk != nil {
+			p.device = p.vk.DeviceName()
 			if p.device == "" {
 				p.device = "headless-vk"
 			}

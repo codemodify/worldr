@@ -1,6 +1,6 @@
 // Package syncobj is the linux-drm-syncobj helper (timeline points + DRM
-// ioctl plumbing). Vulkan GPU wait is a later TODO; callers must keep
-// implicit-sync fallback when Wait/Signal fail.
+// ioctl plumbing). WaitAcquire prefers a Vulkan timeline waiter
+// (vkWaitSemaphores) and falls back to SYNCOBJ_TIMELINE ioctl.
 package syncobj
 
 // Point packs wp_linux_drm_syncobj_surface_v1 point_hi/lo.

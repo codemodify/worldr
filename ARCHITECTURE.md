@@ -152,8 +152,9 @@ KMS primary-plane scanout (`internal/scanout` eligibility + atomic/`SetCrtc`).
 `vk-display` evaluates the same helpers then falls back (Vulkan holds DRM
 master). `wp_linux_drm_syncobj_manager_v1` is advertised when
 `DRM_CAP_SYNCOBJ_TIMELINE` is present; acquire/release fds are imported and
-a DRM timeline wait is attempted, else implicit sync. Vulkan timeline wait
-is later. Overlay planes are later.
+a Vulkan timeline wait (`vkWaitSemaphores`) runs before blit/sample/scanout
+on every backend that has a Vulkan session (vk-display, nest, headless, and
+`--backend=drm` offscreen ICD). DRM `SYNCOBJ_TIMELINE` ioctl is the fallback.
 
 ## Present / compositor loop
 
