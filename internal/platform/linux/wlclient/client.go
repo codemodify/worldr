@@ -51,6 +51,7 @@ type Window struct {
 	hostOutScale                         int32
 	hostFrac120                          uint32
 	hostCursorHidden                     bool
+	hostCursorSet                        bool
 	onHostScale                          func(float64)
 	ptrSerial                            uint32
 	hostX, hostY                         int

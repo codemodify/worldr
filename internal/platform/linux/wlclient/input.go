@@ -31,9 +31,14 @@ func (w *Window) handlePointer(msg wayland.Message) error {
 		w.ptrSerial = ser
 		w.hostX, w.hostY = fixedToInt(x), fixedToInt(y)
 		w.hostInside = true
-		// Must set a cursor or Plasma shows none. Prefer the host arrow;
-		// the compositor software overlay covers client set_cursor / shape.
-		w.EnsureHostCursor()
+		// readLoop already holds w.mu — do not call EnsureHostCursor
+		// (it locks). A nested Lock froze the nest: TakeInput waited
+		// forever, 0% CPU, no click/key.
+		w.hostCursorHidden = false
+		w.hostCursorSet = true
+		if ser != 0 {
+			w.sendHostCursor(ser, w.cursorDev, w.cursorSurf, false)
+		}
 	case 1: // leave
 		w.hostInside = false
 		// Host implicit grab usually delivers the real release; if the
