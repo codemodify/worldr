@@ -57,6 +57,47 @@ func TestOverlayClosedSession(t *testing.T) {
 	}
 }
 
+func TestPlanesOnlyClosed(t *testing.T) {
+	var d *DRM
+	if d.PlanesOnly() {
+		t.Fatal("nil")
+	}
+	d = &DRM{planesOnly: true}
+	if !d.PlanesOnly() {
+		t.Fatal("flag")
+	}
+	if err := d.ScanoutDMABuf(3, 64, 64, 0x34325258, 0, 0, 256); err == nil {
+		t.Fatal("planes-only must refuse primary")
+	}
+	if _, err := OpenVKOnDRM(nil); err == nil {
+		t.Fatal("nil drm")
+	}
+	if _, err := OpenVKOnDRM(&DRM{}); err == nil {
+		t.Fatal("closed drm")
+	}
+}
+
+func TestOpenDRMPlanesNoCrash(t *testing.T) {
+	if !Available() {
+		if _, err := OpenDRMPlanes(""); err == nil {
+			t.Fatal("stub")
+		}
+		return
+	}
+	d, err := OpenDRMPlanes("")
+	if err != nil {
+		t.Logf("planes sidecar (ok without master): %v", err)
+		return
+	}
+	defer d.Close()
+	if !d.PlanesOnly() {
+		t.Fatal("must be planes-only")
+	}
+	if err := d.ScanoutDMABuf(3, 64, 64, 0x34325258, 0, 0, 256); err == nil {
+		t.Fatal("sidecar must refuse primary scanout")
+	}
+}
+
 func TestListDevicesNoCrash(t *testing.T) {
 	s, err := ListDevices()
 	if !Available() {

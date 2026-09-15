@@ -10,6 +10,9 @@ enum {
 };
 
 int worldr_vk_create(int mode, uint32_t prefer_w, uint32_t prefer_h, worldr_vk **out, char *err, int errlen);
+/* VK_KHR_display on a DRM fd we already drmSetMaster (VK_EXT_acquire_drm_display). */
+int worldr_vk_create_on_drm(int drm_fd, uint32_t connector_id, uint32_t prefer_w, uint32_t prefer_h,
+			    worldr_vk **out, char *err, int errlen);
 void worldr_vk_destroy(worldr_vk *vk);
 const char *worldr_vk_device_name(const worldr_vk *vk);
 uint32_t worldr_vk_width(const worldr_vk *vk);

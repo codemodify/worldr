@@ -149,8 +149,9 @@ onto the swapchain after the CPU desktop upload (implicit dma-buf sync).
 Readback / mmap remain for nested, drm, ABGR, and theater. shm is the
 fallback. Fullscreen ARGB/XRGB on `--backend=drm` can skip the blit via
 KMS primary-plane scanout (`internal/scanout` eligibility + atomic/`SetCrtc`).
-`vk-display` evaluates the same helpers then falls back (Vulkan holds DRM
-master). `wp_linux_drm_syncobj_manager_v1` is advertised when
+`vk-display` keeps the primary on the Vulkan swapchain. When DRM master is
+available it opens a planes-only sidecar and `VK_EXT_acquire_drm_display` so
+overlay / cursor atomic commits share that fd. `wp_linux_drm_syncobj_manager_v1` is advertised when
 `DRM_CAP_SYNCOBJ_TIMELINE` is present; acquire/release fds are imported and
 a Vulkan timeline wait (`vkWaitSemaphores`) runs before blit/sample/scanout
 on every backend that has a Vulkan session (vk-display, nest, headless, and

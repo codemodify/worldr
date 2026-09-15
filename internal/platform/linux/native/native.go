@@ -62,6 +62,25 @@ func OpenVK(display bool, w, h uint32) (*VK, error) {
 	return &VK{ptr: ptr}, nil
 }
 
+// OpenVKOnDRM creates VK_KHR_display on a planes-only DRM master via
+// VK_EXT_acquire_drm_display so overlay/cursor ioctls share the same fd.
+func OpenVKOnDRM(d *DRM) (*VK, error) {
+	if d == nil || d.ptr == nil {
+		return nil, fmt.Errorf("drm session closed")
+	}
+	fd := C.worldr_drm_fd(d.ptr)
+	conn := C.worldr_drm_connector_id(d.ptr)
+	if fd < 0 || conn == 0 {
+		return nil, fmt.Errorf("planes-only DRM missing fd/connector")
+	}
+	errb := make([]C.char, errBuf)
+	var ptr *C.worldr_vk
+	if C.worldr_vk_create_on_drm(fd, conn, 0, 0, &ptr, &errb[0], C.int(len(errb))) != 0 {
+		return nil, cErr(errb)
+	}
+	return &VK{ptr: ptr}, nil
+}
+
 func (v *VK) Close() {
 	if v == nil || v.ptr == nil {
 		return
@@ -263,7 +282,8 @@ func (v *VK) HeadlessClear(r, g, b, a float32) (pixel uint32, err error) {
 
 // DRM is a DRM/KMS dumb-buffer session.
 type DRM struct {
-	ptr *C.worldr_drm
+	ptr        *C.worldr_drm
+	planesOnly bool
 }
 
 func OpenDRM(card string) (*DRM, error) {
@@ -278,6 +298,25 @@ func OpenDRM(card string) (*DRM, error) {
 		return nil, cErr(errb)
 	}
 	return &DRM{ptr: ptr}, nil
+}
+
+// OpenDRMPlanes takes DRM master without modesetting the primary plane.
+func OpenDRMPlanes(card string) (*DRM, error) {
+	errb := make([]C.char, errBuf)
+	var ptr *C.worldr_drm
+	var ccard *C.char
+	if card != "" {
+		ccard = C.CString(card)
+		defer C.free(unsafe.Pointer(ccard))
+	}
+	if C.worldr_drm_create_planes(ccard, &ptr, &errb[0], C.int(len(errb))) != 0 {
+		return nil, cErr(errb)
+	}
+	return &DRM{ptr: ptr, planesOnly: true}, nil
+}
+
+func (d *DRM) PlanesOnly() bool {
+	return d != nil && d.planesOnly
 }
 
 func (d *DRM) Close() {
@@ -317,6 +356,9 @@ func (d *DRM) PresentBGRA(bgra []byte, stride uint32) error {
 func (d *DRM) ScanoutDMABuf(fd int, width, height, fourcc uint32, modifier uint64, offset, pitch uint32) error {
 	if d == nil || d.ptr == nil {
 		return fmt.Errorf("drm session closed")
+	}
+	if d.planesOnly {
+		return fmt.Errorf("planes-only DRM (vk-display sidecar); no primary scanout")
 	}
 	if fd < 0 {
 		return fmt.Errorf("dmabuf fd")

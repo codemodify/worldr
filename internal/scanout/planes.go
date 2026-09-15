@@ -4,8 +4,9 @@ import "github.com/codemodify/worldr/internal/engine"
 
 // Hardware plane assignment beyond the primary-fullscreen path.
 // Nested / headless never get overlay or cursor planes. vk-display is
-// eligible in the helper (Intel first) but typically cannot commit extra
-// DRM planes while VK_KHR_display holds master — callers fall back to compose.
+// eligible (Intel first). When a planes-only DRM sidecar holds master
+// (VK_EXT_acquire_drm_display), callers commit overlay/cursor; otherwise
+// they fall back to compose.
 
 // CursorMax is the typical Intel hardware cursor cap (width and height).
 const CursorMax = 256

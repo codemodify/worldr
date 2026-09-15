@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.31-dev — vk-display overlay/cursor when DRM master is available
+
+- `--backend=vk-display` tries a planes-only DRM sidecar (`drmSetMaster`, no primary `SetCrtc`) and `VK_EXT_acquire_drm_display` so overlay + hardware cursor share the master fd with `VK_KHR_display`.
+- Primary stays the Vulkan swapchain (GPU blit). Miss (no master, no acquire ext, atomic reject) prints the existing `kms overlay fallback` / `kms cursor fallback` and composes.
+- Nested / headless unchanged. No IME.
+
 ## 0.9.30-dev — Vulkan timeline wait on every present path
 
 - `--backend=drm` opens a headless Vulkan session (same offscreen ICD as nest/headless) so `wp_linux_drm_syncobj` acquire waits use `vkWaitSemaphores` before KMS primary scanout, overlay, and compose upload. DRM `SYNCOBJ_TIMELINE` ioctl stays the fallback.
