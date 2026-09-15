@@ -131,6 +131,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	dragging := false
 	var drag *engine.Actor
 	dx, dy := 0, 0
+	clientBtn := false
 
 	switch opt.Effects {
 	case engine.TierOff:
@@ -145,7 +146,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	var ov Overview
 	ln := Launcher{Items: Catalog(x11Display != "")}
 	var lnGate launcherGate
-	fmt.Fprintln(stdout, "overview: F12 or panel grid toggles expose (Super+Tab if the host does not steal Super). Esc leaves overview; Esc/Q outside it quits.")
+	fmt.Fprintln(stdout, "overview: F12 or panel grid toggles expose (Super+Tab if the host does not steal Super). Esc leaves overview (does not quit).")
 	if opt.OverviewDemo {
 		fmt.Fprintln(stdout, "overview: --overview-demo will auto-enter after the first window maps")
 	}
@@ -153,7 +154,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	fmt.Fprintln(stdout, "launcher: F1 or Super+Space (or panel apps). Enter/click spawns with this WAYLAND_DISPLAY. Esc closes the list.")
 	fmt.Fprintf(stdout, "workspaces: %d desktops (Ctrl+Alt+←/→ or pager dots). New windows spawn on the active desktop. Overview is current-desktop only.\n", scene.WorkspaceCount())
 
-	fmt.Fprintln(stdout, "running. Exit: Ctrl+C, or --duration, or Esc/Q on an evdev keyboard.")
+	fmt.Fprintln(stdout, "running. Exit: Ctrl+Q, Ctrl+C, or --duration. Bare Q/Esc never quit while a client is on the desktop (type in foot freely). Esc on an empty desktop still quits.")
 	if TakesDisplay(Backend(p.name)) {
 		fmt.Fprintln(stdout, "WARNING: this process may own the VT display. Spare TTY: Ctrl+Alt+F3 + scripts/try-tty.sh. Back to Plasma: Ctrl+Alt+F1 or F2. See docs/RUN-ABOX.md")
 	}
@@ -221,7 +222,13 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				consume[code] = true
 			}
 		}
-		if ptr.Quit && !ov.Want && !ln.Open {
+		quit, qcons := handleQuitKeys(ptr, ctrlHeld, ov.Want || ln.Open, desktopHasClient(scene))
+		for code, ok := range qcons {
+			if ok {
+				consume[code] = true
+			}
+		}
+		if quit {
 			fmt.Fprintln(stdout, "quit key")
 			return nil
 		}
@@ -280,15 +287,17 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				dx, dy = ptr.X-a.X, ptr.Y-a.Y
 			} else if srv != nil {
 				srv.PointerButton(ptr.X, ptr.Y, true)
+				clientBtn = true
 			}
 		}
 		if ptr.Release {
 			lnGate.onRelease()
 			dragging = false
 			drag = nil
-			if srv != nil && !ov.Want && !ln.Open {
+			if srv != nil && clientBtn {
 				srv.PointerButton(ptr.X, ptr.Y, false)
 			}
+			clientBtn = false
 		}
 		if dragging && drag != nil && !ov.Want && !ln.Open {
 			drag.X = ptr.X - dx

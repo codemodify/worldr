@@ -19,8 +19,5 @@ func applyNestedPointer(ptr *input.Pointer, in wlclient.Input) {
 	ptr.Quit = false
 	for _, k := range in.Keys {
 		ptr.Keys = append(ptr.Keys, input.Key{Code: k.Code, Pressed: k.Pressed})
-		if k.Pressed && isQuit(k.Code) {
-			ptr.Quit = true
-		}
 	}
 }

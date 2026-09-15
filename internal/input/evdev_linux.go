@@ -20,8 +20,6 @@ const (
 	relY = 1
 
 	btnLeft = 0x110
-	keyEsc  = 1
-	keyQ    = 16
 )
 
 type evdevEvent struct {
@@ -103,9 +101,6 @@ func (p *Pointer) Poll() {
 				}
 				if code < 0x100 && (val == 0 || val == 1) {
 					p.Keys = append(p.Keys, Key{Code: uint32(code), Pressed: val == 1})
-				}
-				if (code == keyEsc || code == keyQ) && val == 1 {
-					p.Quit = true
 				}
 			}
 		}

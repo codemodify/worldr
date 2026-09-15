@@ -34,7 +34,7 @@ func TestApplyNestedPointerIgnoresEvdevClick(t *testing.T) {
 	if len(ptr.Keys) != 1 || ptr.Keys[0].Code != keyEsc {
 		t.Fatalf("keys %+v", ptr.Keys)
 	}
-	if !ptr.Quit {
-		t.Fatal("wl Esc should set Quit")
+	if ptr.Quit {
+		t.Fatal("wl Esc must not set Quit; handleQuitKeys owns the chord")
 	}
 }
