@@ -14,13 +14,14 @@ set -euo pipefail
 
 DURATION="${DURATION:-15s}"
 BACKEND="${BACKEND:-auto}"
+CARD="${CARD:-}"
 ROOT="${WORLDR_ROOT:-}"
 
 if [[ -z "$ROOT" ]]; then
 	ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
 
-echo "worldr try-tty: root=$ROOT backend=$BACKEND duration=$DURATION"
+echo "worldr try-tty: root=$ROOT backend=$BACKEND duration=$DURATION card=${CARD:-first}"
 
 if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
 	echo "refusing: graphical session env is set" >&2
@@ -40,6 +41,8 @@ esac
 
 if [[ ! -e /dev/dri ]]; then
 	echo "warning: no /dev/dri — vk-display/drm will fail. Need video/render + a GPU." >&2
+elif ! compgen -G /dev/dri/card* >/dev/null; then
+	echo "warning: no /dev/dri/card* (render nodes alone are not enough). Need a KMS primary node." >&2
 fi
 
 if [[ -z "${XDG_RUNTIME_DIR:-}" ]]; then
@@ -56,9 +59,14 @@ if [[ ! -x bin/worldr-shell ]]; then
 fi
 
 echo
-echo "Starting worldr-shell. First try is duration-capped ($DURATION)."
+echo "Starting worldr-shell. First soak is duration-capped ($DURATION)."
+echo "Preferred: BACKEND=vk-display (Intel iGPU / Mesa). Fallback: BACKEND=drm."
 echo "Panel / overview / launcher / workspaces / effects use CompositeDesktop on this path too."
-echo "When it exits: Ctrl+Alt+F1 or F2 → Plasma. If wedged: another TTY, pkill worldr-shell."
+echo "When it exits: Ctrl+Alt+F1 or F2 → Plasma. If wedged: Ctrl+Alt+F4, pkill worldr-shell."
 echo
 
-exec ./bin/worldr-shell --backend="$BACKEND" --duration="$DURATION" "$@"
+args=(--backend="$BACKEND" --duration="$DURATION")
+if [[ -n "$CARD" ]]; then
+	args+=(--card="$CARD")
+fi
+exec ./bin/worldr-shell "${args[@]}" "$@"

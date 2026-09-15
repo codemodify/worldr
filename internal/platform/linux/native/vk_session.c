@@ -9,6 +9,8 @@
 #include <drm_fourcc.h>
 
 #define WORLDR_MAX_IMAGES 8
+/* Finite GPU wait so a lost DRM master / hung KMS does not wedge the TTY. */
+#define WORLDR_VK_WAIT_NS 2000000000ull
 
 struct worldr_vk {
 	int mode;
@@ -626,7 +628,11 @@ static int submit_wait(worldr_vk *vk, VkSemaphore wait, VkPipelineStageFlags wai
 		return -1;
 	}
 	if (vk->fence) {
-		r = vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, UINT64_MAX);
+		r = vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, WORLDR_VK_WAIT_NS);
+		if (r == VK_TIMEOUT) {
+			seterr(err, errlen, "GPU wait timed out (2s) — lost DRM master or hung KMS. Spare TTY: Ctrl+Alt+F4, pkill worldr-shell, Ctrl+Alt+F1", r);
+			return -1;
+		}
 		if (r != VK_SUCCESS) {
 			seterr(err, errlen, "vkWaitForFences failed", r);
 			return -1;
@@ -689,7 +695,12 @@ void worldr_vk_destroy(worldr_vk *vk)
 		return;
 	}
 	if (vk->device) {
-		vkDeviceWaitIdle(vk->device);
+		/* Bounded wait: UINT64_MAX WaitIdle can hang the spare VT forever. */
+		if (vk->fence) {
+			vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, WORLDR_VK_WAIT_NS);
+		} else {
+			vkDeviceWaitIdle(vk->device);
+		}
 	}
 	if (vk->staging_map && vk->staging_mem) {
 		vkUnmapMemory(vk->device, vk->staging_mem);
@@ -836,10 +847,17 @@ int worldr_vk_clear_present(worldr_vk *vk, float r, float g, float b, float a, c
 		seterr(err, errlen, "clear_present requires vk-display session", VK_SUCCESS);
 		return -1;
 	}
-	vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, UINT64_MAX);
+	if (vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, WORLDR_VK_WAIT_NS) == VK_TIMEOUT) {
+		seterr(err, errlen, "GPU wait timed out (2s) before acquire — lost DRM master? Spare TTY: pkill worldr-shell, Ctrl+Alt+F1", VK_TIMEOUT);
+		return -1;
+	}
 	vkResetFences(vk->device, 1, &vk->fence);
 	uint32_t idx = 0;
-	VkResult ar = vkAcquireNextImageKHR(vk->device, vk->swapchain, UINT64_MAX, vk->img_avail, VK_NULL_HANDLE, &idx);
+	VkResult ar = vkAcquireNextImageKHR(vk->device, vk->swapchain, WORLDR_VK_WAIT_NS, vk->img_avail, VK_NULL_HANDLE, &idx);
+	if (ar == VK_TIMEOUT) {
+		seterr(err, errlen, "vkAcquireNextImageKHR timed out (2s) — not DRM master or display gone. Spare TTY: scripts/try-tty.sh", ar);
+		return -1;
+	}
 	if (ar != VK_SUCCESS && ar != VK_SUBOPTIMAL_KHR) {
 		seterr(err, errlen, "vkAcquireNextImageKHR failed", ar);
 		return -1;
@@ -877,10 +895,17 @@ int worldr_vk_upload_present(worldr_vk *vk, const uint8_t *bgra, uint32_t stride
 		return -1;
 	}
 	memcpy(vk->staging_map, bgra, (size_t)size);
-	vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, UINT64_MAX);
+	if (vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, WORLDR_VK_WAIT_NS) == VK_TIMEOUT) {
+		seterr(err, errlen, "GPU wait timed out (2s) before upload — lost DRM master? Spare TTY: pkill worldr-shell, Ctrl+Alt+F1", VK_TIMEOUT);
+		return -1;
+	}
 	vkResetFences(vk->device, 1, &vk->fence);
 	uint32_t idx = 0;
-	VkResult ar = vkAcquireNextImageKHR(vk->device, vk->swapchain, UINT64_MAX, vk->img_avail, VK_NULL_HANDLE, &idx);
+	VkResult ar = vkAcquireNextImageKHR(vk->device, vk->swapchain, WORLDR_VK_WAIT_NS, vk->img_avail, VK_NULL_HANDLE, &idx);
+	if (ar == VK_TIMEOUT) {
+		seterr(err, errlen, "vkAcquireNextImageKHR timed out (2s) — not DRM master or display gone. Spare TTY: scripts/try-tty.sh", ar);
+		return -1;
+	}
 	if (ar != VK_SUCCESS && ar != VK_SUBOPTIMAL_KHR) {
 		seterr(err, errlen, "vkAcquireNextImageKHR failed", ar);
 		return -1;
@@ -985,7 +1010,10 @@ int worldr_vk_dmabuf_import(worldr_vk *vk, uint32_t width, uint32_t height, uint
 		return -1;
 	}
 	if (vk->fence) {
-		vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, UINT64_MAX);
+		if (vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, WORLDR_VK_WAIT_NS) == VK_TIMEOUT) {
+			seterr(err, errlen, "GPU wait timed out (2s) before dmabuf import", VK_TIMEOUT);
+			return -1;
+		}
 		vkResetFences(vk->device, 1, &vk->fence);
 	}
 

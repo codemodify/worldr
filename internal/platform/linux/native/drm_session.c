@@ -67,6 +67,7 @@ int worldr_drm_create(const char *card, worldr_drm **out, char *err, int errlen)
 		seterr(err, errlen, "oom", 0);
 		return -1;
 	}
+	d->fd = -1; /* calloc leaves 0 (stdin) — destroy must not close that */
 	if (card && card[0]) {
 		d->fd = open_card(card, d->card, sizeof(d->card), err, errlen);
 		if (d->fd < 0) {
@@ -272,6 +273,7 @@ void worldr_drm_destroy(worldr_drm *d)
 	if (d->fd >= 0) {
 		drmDropMaster(d->fd);
 		close(d->fd);
+		d->fd = -1;
 	}
 	free(d);
 }
