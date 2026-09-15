@@ -3,9 +3,9 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** workspaces v0 on `feat/workspaces-v0` (stacked on panel/launcher).
-Safe demo: `--backend=wayland-client`, **F1** → `foot`, pager dots or
-Ctrl+Alt+←/→ to switch desktops. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
+**Status:** TTY/seat harden on `feat/tty-seat-harden` (stacked on workspaces).
+Safe demo stays nested. Real display: spare TTY `scripts/try-tty.sh`.
+See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
 ## Quick links
 
@@ -24,7 +24,8 @@ Ctrl+Alt+←/→ to switch desktops. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 6. Expose/overview v0 — F12 grid (`--overview-demo`)
 7. Panel + launcher v0 — bottom bar, F1 spawns foot
 8. Workspaces v0 — 3 desktops, pager + Ctrl+Alt+←/→
-9. Revisit UI toolkit — deferred
+9. TTY/seat harden — spare VT vk-display/drm (`scripts/try-tty.sh`)
+10. Revisit UI toolkit — deferred
 
 ## Build
 
@@ -53,10 +54,12 @@ foot
 DISPLAY=:N xeyes    # N from the shell's "xwayland: DISPLAY=" line
 ```
 
-Spare TTY (real display — do not run this on top of your desktop without reading the safety notes):
+Spare TTY (real display — do not run this on top of your desktop):
 
 ```sh
-./bin/worldr-shell --backend=vk-display --duration=15s
+# Ctrl+Alt+F3, login, then:
+./scripts/try-tty.sh
+# back to Plasma: Ctrl+Alt+F1 or F2
 ```
 
 ## License

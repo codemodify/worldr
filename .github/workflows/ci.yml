@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: native deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config libvulkan-dev libdrm-dev
+      - name: test
+        env:
+          CGO_ENABLED: "1"
+        run: go test ./...
+      - name: build
+        env:
+          CGO_ENABLED: "1"
+        run: make build
+      - name: headless smoke
+        run: ./bin/worldr-shell --backend=headless --duration=1s
+      - name: vk-display refuse / no-DRM path
+        # CI has no DRM master. The binary must still start, refuse or fail
+        # with the TTY hint — not crash. A graphical env is unset here.
+        run: |
+          bash -n scripts/try-tty.sh
+          set +e
+          out=$(./bin/worldr-shell --backend=vk-display --duration=1s 2>&1)
+          ec=$?
+          set -e
+          echo "$out"
+          if [ "$ec" -eq 0 ]; then
+            echo "unexpected vk-display success on CI (no seat)"
+            exit 1
+          fi
+          echo "$out" | grep -E -q "try-tty|no /dev/dri|vk-display|DRM|display" \
+            || (echo "vk-display error missing TTY/DRM hint" && exit 1)
+      - name: nested not broken
+        run: ./bin/worldr-shell --backend=headless --compositor --duration=1s | grep -F "workspaces:"

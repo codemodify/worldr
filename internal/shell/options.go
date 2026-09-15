@@ -96,21 +96,21 @@ func GraphicalSession() (wayland, x11 bool) {
 	return os.Getenv("WAYLAND_DISPLAY") != "", os.Getenv("DISPLAY") != ""
 }
 
-// CheckTakeover refuses DRM/Vulkan display backends when a session is already
-// attached, unless the user passed --take-over-display.
+// CheckTakeover refuses DRM/Vulkan display backends when a graphical
+// session is already attached, unless the user passed --take-over-display.
 func CheckTakeover(backend Backend, takeOver bool) error {
-	if backend == BackendHeadless || backend == BackendWaylandClient || backend == BackendNested || backend == BackendAuto {
-		return nil
-	}
-	wl, x11 := GraphicalSession()
-	if !wl && !x11 {
+	if !TakesDisplay(backend) {
 		return nil
 	}
 	if takeOver {
 		return nil
 	}
-	return fmt.Errorf("%w (WAYLAND_DISPLAY=%q DISPLAY=%q). Switch to a spare VT (Ctrl+Alt+F2) or pass --take-over-display. See docs/RUN-ABOX.md",
-		ErrTakeOverRequired, os.Getenv("WAYLAND_DISPLAY"), os.Getenv("DISPLAY"))
+	seat := ProbeSeat()
+	if !seat.LooksGraphical {
+		return nil
+	}
+	return fmt.Errorf("%w (WAYLAND_DISPLAY=%q DISPLAY=%q XDG_SESSION_TYPE=%q vt=%s). Spare TTY: Ctrl+Alt+F3, login, unset WAYLAND_DISPLAY/DISPLAY, then scripts/try-tty.sh. Or pass --take-over-display (steals the GPU). See docs/RUN-ABOX.md",
+		ErrTakeOverRequired, os.Getenv("WAYLAND_DISPLAY"), os.Getenv("DISPLAY"), seat.SessionType, emptyDash(seat.ActiveVT))
 }
 
 // TakesDisplay is true when the backend will attempt DRM master / KHR_display.
