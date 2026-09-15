@@ -1,7 +1,12 @@
 # Changelog
 
-Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1 stub.
+Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
+
+## 0.9.2-dev — sticky launcher (nested apps click)
+
+- Nested: host Wayland seat is the only pointer (and key) source. Evdev Click is no longer OR-merged with `TakeInput()` — that double edge opened then immediately closed the launcher.
+- After open (panel **apps** or F1), ignore outside-click dismiss until pointer Release. **apps** while open closes explicitly (150ms debounce on the opening press).
 
 ## 0.9.1-dev — docs + fractional-scale stub
 

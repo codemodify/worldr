@@ -72,8 +72,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on tty-seat-harden):
-git checkout feat/v0.9-changelog-fractional-scale
+# this branch (stacked on 0.9.1 changelog):
+git checkout fix/launcher-sticky
 
 export CGO_ENABLED=1
 make build
@@ -173,7 +173,7 @@ is the same bind when KWin does not steal Super.
 | --- | --- |
 | F1 | Toggle launcher |
 | Super+Space | Same toggle if the host allows Super |
-| Panel **apps** | Toggle launcher |
+| Panel **apps** | Open launcher (stays open). Click **apps** again to close. Outside-click dismisses only after pointer release. |
 | Panel **grid** | Toggle overview (same as F12) |
 | ↑ ↓ Tab | Move launcher selection |
 | Enter / click row | Spawn that command |
