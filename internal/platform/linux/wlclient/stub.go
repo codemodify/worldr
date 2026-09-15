@@ -19,3 +19,8 @@ func (w *Window) TakeInput() Input { return Input{} }
 func (w *Window) BoundVersions() (uint32, uint32, uint32) {
 	return 0, 0, 0
 }
+func (w *Window) HostClipBound() bool                    { return false }
+func (w *Window) HostPrimaryBound() bool                 { return false }
+func (w *Window) SetClipImport(func(bool, []byte))       {}
+func (w *Window) SetClipFulfill(func(bool, string, int)) {}
+func (w *Window) OfferHostText(bool, []string)           {}

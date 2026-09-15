@@ -23,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/codemodify/worldr/internal/clipbridge"
 	"github.com/codemodify/worldr/internal/wayland"
 	"golang.org/x/sys/unix"
 )
@@ -39,13 +40,20 @@ type Window struct {
 
 	reg, comp, shm, xdg, surf, xdgS, top uint32
 	seat, ptrID, kbdID                   uint32
+	ddmgr, dataDev, primmgr, primDev     uint32
+	hostSrc, hostPrimSrc                 uint32
 	compVer, shmVer, xdgVer, seatVer     uint32
+	ddmgrVer, primVer                    uint32
 	ptrSerial                            uint32
 	hostX, hostY                         int
 	hostClick, hostRelease               bool
 	hostBtnDown                          bool
 	hostKeys                             []HostKey
 	hostInside                           bool
+	hostOffers                           map[uint32]*hostOffer
+	ownHost                              clipbridge.HostOwn
+	onClipImport                         func(primary bool, text []byte)
+	onClipFulfill                        func(primary bool, mime string, fd int)
 
 	configured bool
 	needAck    bool
@@ -112,6 +120,7 @@ func Open(title string, w, h int, fullscreen bool) (*Window, error) {
 		frameDone:      true,
 		stop:           make(chan struct{}),
 		readerFinished: make(chan struct{}),
+		hostOffers:     map[uint32]*hostOffer{},
 	}
 	if err := win.setup(title, fullscreen); err != nil {
 		_ = c.Close()
@@ -127,6 +136,9 @@ func (w *Window) alloc() uint32 {
 }
 
 func (w *Window) send(obj uint32, op uint16, payload []byte, fds []int) error {
+	if w == nil || w.wr == nil {
+		return nil
+	}
 	if payload == nil {
 		payload = []byte{}
 	}
@@ -150,6 +162,9 @@ func (w *Window) setup(title string, fullscreen bool) error {
 		return err
 	}
 	if err := w.setupSeat(); err != nil {
+		return err
+	}
+	if err := w.setupClip(); err != nil {
 		return err
 	}
 	// Flush host errors (invalid bind shows up as wl_display.error) before
@@ -320,6 +335,12 @@ func (w *Window) bindOne(g registryGlobal, requested uint32) error {
 	case ifaceSeat:
 		w.seat = id
 		w.seatVer = requested
+	case ifaceDataDev:
+		w.ddmgr = id
+		w.ddmgrVer = requested
+	case ifacePrimary:
+		w.primmgr = id
+		w.primVer = requested
 	}
 	return nil
 }
@@ -456,6 +477,9 @@ func (w *Window) handle(msg wayland.Message) error {
 		w.closed = true
 	}
 	if err := w.handleSeat(msg); err != nil {
+		return err
+	}
+	if err := w.handleClip(msg); err != nil {
 		return err
 	}
 	for i := range w.slots {
@@ -628,5 +652,5 @@ func wrapHostClose(err error) error {
 	if !isBrokenPipe(err) && !errors.Is(err, io.EOF) && !strings.Contains(err.Error(), "wl_display.error") {
 		return err
 	}
-	return fmt.Errorf("%w\n\nKWin/Plasma nested-window note: the host compositor closed the socket. abox saw `invalid arguments for wl_registry#2.bind` — that is a bad bind (version 0, version above advertised, or interface/name mismatch), not a random I/O flake. worldr now collects globals, binds only wl_compositor/wl_shm/xdg_wm_base at min(our_max, advertised), and logs each advertise/bind on stderr. Also waits for xdg_surface.configure and double-buffers shm. If this still happens, paste the wayland-client: global/bind lines and use a spare TTY: --backend=vk-display --duration=15s.", err)
+	return fmt.Errorf("%w\n\nKWin/Plasma nested-window note: the host compositor closed the socket. abox saw `invalid arguments for wl_registry#2.bind` — that is a bad bind (version 0, version above advertised, or interface/name mismatch), not a random I/O flake. worldr now collects globals, binds only compositor/shm/xdg_wm_base/seat plus wl_data_device_manager (and zwp_primary_selection if advertised) at min(our_max, advertised), and logs each advertise/bind on stderr. Also waits for xdg_surface.configure and double-buffers shm. If this still happens, paste the wayland-client: global/bind lines and use a spare TTY: --backend=vk-display --duration=15s.", err)
 }

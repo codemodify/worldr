@@ -33,8 +33,9 @@ type Server struct {
 	cursorShape        uint32
 	cursorVisible      bool
 
-	clip *selection
-	prim *selection
+	clip       *selection
+	prim       *selection
+	clipExport func(primary bool, mimes []string)
 
 	scale120 uint32 // wp_fractional_scale preferred_scale; 0 = 120 (1.0)
 

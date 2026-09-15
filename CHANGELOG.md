@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.15-dev — nest host clipboard bridge
+
+- Nested `--backend=wayland-client` binds host `wl_data_device_manager` (and `zwp_primary_selection` when advertised).
+- worldr `set_selection` of `text/plain` is offered to Plasma; host selection is imported so foot paste works both ways.
+- Echo of our own host `set_selection` is ignored. No IME.
+
 ## 0.9.14-dev — workspaces polish
 
 - One shortcut scheme: **Ctrl+Alt+←/→** switches desktop (wraps); **Ctrl+Alt+Shift+←/→** moves the focused window and follows. No Super+1..N.
