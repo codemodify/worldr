@@ -150,11 +150,12 @@ type xdgSurface struct {
 }
 
 type xdgToplevel struct {
-	id    uint32
-	xdg   *xdgSurface
-	title string
-	app   string
-	icon  *iconSnap
+	id       uint32
+	xdg      *xdgSurface
+	title    string
+	app      string
+	icon     *iconSnap
+	iconName string
 }
 
 // Client is one Wayland connection.
@@ -181,6 +182,7 @@ type Client struct {
 
 type iconPending struct {
 	snap *iconSnap
+	name string
 }
 
 func newClient(s *Server, conn *net.UnixConn) *Client {
@@ -830,7 +832,10 @@ func (c *Client) mapSurface(s *surface) {
 	if s.xdg != nil && s.xdg.top != nil {
 		s.actor.Title = s.xdg.top.title
 		s.actor.AppID = s.xdg.top.app
-		s.xdg.top.icon.apply(s.actor)
+		applyToplevelIcon(s.actor, s.xdg.top.icon, s.xdg.top.iconName)
+		if s.actor.IconName == "" && s.actor.AppID != "" {
+			s.actor.IconName = s.actor.AppID
+		}
 	} else if s.xwayland {
 		if x11ok {
 			applyX11Hints(s.actor, x11, c.srv.Scene)
@@ -840,6 +845,9 @@ func (c *Client) mapSurface(s *surface) {
 		}
 		if s.actor.AppID == "" {
 			s.actor.AppID = "xwayland"
+		}
+		if s.actor.IconName == "" && s.actor.AppID != "" && s.actor.AppID != "xwayland" {
+			s.actor.IconName = s.actor.AppID
 		}
 		c.srv.log.Printf("mapped X11 actor %dx%d title=%q class=%q chrome=%v", w, h, s.actor.Title, s.actor.AppID, !s.actor.NoChrome)
 	}
@@ -896,9 +904,10 @@ func (c *Client) reqXdgSurface(o *object, op uint16, cur *wayland.Cursor) error 
 		t := &xdgToplevel{id: id, xdg: xs}
 		if p, ok := c.pendingIcon[id]; ok {
 			t.icon = p.snap
+			t.iconName = p.name
 			delete(c.pendingIcon, id)
 			if xs.surf != nil {
-				p.snap.apply(xs.surf.actor)
+				applyToplevelIcon(xs.surf.actor, p.snap, p.name)
 			}
 		}
 		xs.top = t

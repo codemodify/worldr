@@ -57,9 +57,16 @@ type ChromeDraw struct {
 	IconStride int
 }
 
+// LaunchIcon is one overlay row icon (theme PNG or empty → default glyph).
+type LaunchIcon struct {
+	Pix          []byte
+	W, H, Stride int
+}
+
 // LauncherDraw is the in-shell command overlay.
 type LauncherDraw struct {
 	Items  []string
+	Icons  []LaunchIcon
 	Select int
 }
 
@@ -312,7 +319,20 @@ func drawLauncher(dst []byte, stride, w, h int, panelH int, ln LauncherDraw) {
 		if i == ln.Select {
 			engine.FillRect(dst, stride, w, h, row.X, row.Y, row.W, row.H, colLaunchSel)
 		}
-		engine.DrawText(dst, stride, w, h, row.X+12, textY(row, 2), label, colText, 2)
+		tx := row.X + 12
+		if i < len(ln.Icons) {
+			iz := 16
+			if iz > row.H-4 {
+				iz = row.H - 4
+			}
+			if iz >= 8 {
+				iy := row.Y + (row.H-iz)/2
+				a := &engine.Actor{IconPix: ln.Icons[i].Pix, IconW: ln.Icons[i].W, IconH: ln.Icons[i].H, IconStride: ln.Icons[i].Stride}
+				decorations.DrawIcon(dst, stride, w, h, tx, iy, iz, a)
+				tx += iz + 8
+			}
+		}
+		engine.DrawText(dst, stride, w, h, tx, textY(row, 2), label, colText, 2)
 	}
 }
 

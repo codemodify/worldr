@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.18-dev — XDG icon theme
+
+- Resolve `.desktop` `Icon=` (and window `AppID` / `xdg_toplevel_icon.set_name`) via the current theme + **hicolor** under `$XDG_DATA_HOME` / `$XDG_DATA_DIRS` (png-first; absolute paths; pixmaps fallback). SVG is not rasterized.
+- Launcher rows and the panel/SSD title slot draw the theme PNG. A client `xdg_toplevel_icon` buffer still wins. Missing name → default glyph.
+- No IME. No icon-theme index.theme inheritance graph.
+
 ## 0.9.17-dev — KMS dmabuf scanout bypass
 
 - When a single visible client is fullscreen opaque ARGB/XRGB (buffer == CRTC, not scaled) and the backend is `drm` or `vk-display`, worldr tries **primary-plane scanout** (`drmPrimeFDToHandle` + `AddFB2` + atomic commit, `SetCrtc` fallback) instead of the CPU desktop upload.

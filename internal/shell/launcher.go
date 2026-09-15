@@ -13,12 +13,16 @@ import (
 
 // LaunchItem is one launcher entry (from a .desktop file or the fallback list).
 type LaunchItem struct {
-	Label string
-	Bin   string   // Exec argv[0]
-	Args  []string // Exec argv[1:]
-	Icon  string   // Icon= (unused in v0 draw)
-	ID    string   // desktop-file id
-	X11   bool
+	Label      string
+	Bin        string   // Exec argv[0]
+	Args       []string // Exec argv[1:]
+	Icon       string   // Icon= name or path
+	IconPix    []byte
+	IconW      int
+	IconH      int
+	IconStride int
+	ID         string // desktop-file id
+	X11        bool
 }
 
 // Launcher is the in-shell command overlay.
@@ -140,6 +144,17 @@ func (l *Launcher) labels() []string {
 		out[i] = it.Label
 	}
 	return out
+}
+
+func (l *Launcher) drawState() *LauncherDraw {
+	if l == nil {
+		return nil
+	}
+	d := &LauncherDraw{Items: l.labels(), Select: l.Select, Icons: make([]LaunchIcon, len(l.Items))}
+	for i, it := range l.Items {
+		d.Icons[i] = LaunchIcon{Pix: it.IconPix, W: it.IconW, H: it.IconH, Stride: it.IconStride}
+	}
+	return d
 }
 
 func (l *Launcher) pick() *LaunchItem {
