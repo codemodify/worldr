@@ -94,6 +94,7 @@ func TestPopupMapsAboveParentWithoutChrome(t *testing.T) {
 	px := &xdgSurface{id: 21, surf: ps, top: &xdgToplevel{id: 22}, acked: 1}
 	ps.xdg = px
 	c.objs[20] = &object{id: 20, kind: kindSurface, surf: ps}
+	c.objs[21] = &object{id: 21, kind: kindXdgSurface, xdgS: px}
 
 	cs := &surface{id: 30}
 	cx := &xdgSurface{id: 31, surf: cs, acked: 1}
