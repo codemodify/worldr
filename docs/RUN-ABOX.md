@@ -436,7 +436,7 @@ without `/dev/dri`.
 | `--color` | `#0b1020` | Clear color |
 | `--compositor` | true | Listen as Wayland server (on for `wayland-client`/`nested` too) |
 | `--xwayland` | false | Launch rootless Xwayland on the worldr socket |
-| `--effects` | `high` | Window theater: `high` (scale+fade+focus pulse) \| `low` (fade) \| `off` |
+| `--effects` | `high` | Window theater: `high` (wobbly+cube+expose) \| `low` (fade) \| `off` |
 | `--overview-demo` | false | Auto-enter expose after the first window maps |
 | `--workspaces` | `3` | Virtual desktops (clamped 2–4) |
 | `--scale` | `0` (auto) | Output scale `1` / `1.25` / `1.5` / `2`. Auto: nest follows host `wl_output` / `wp_fractional_scale`; vk-display/drm stay 1.0. Explicit `--scale` always wins. |
@@ -514,7 +514,7 @@ Workaround — real display on **tty3**:
 - Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
 - Fractional scale (0.9.16 / 0.9.21): nest follows host `preferred_scale` / `wl_output.scale`. `--scale` overrides. vk-display/drm default 1.0. Viewport / `set_buffer_scale` / window geometry size the logical window. Single worldr output.
 - Window icons (0.9.18 / **0.9.25** / **0.9.28**): `xdg_toplevel_icon` shm buffers on SSD + panel win when set. Else XDG theme PNG, then SVG (`Icon=` / `AppID` / `set_name`) walking `index.theme` `Inherits=` then hicolor. librsvg when built with `librsvg2-dev` + `make` (`-tags=librsvg`); else the simple raster. No full Directory/Size graph. No IME (`zwp_text_input`).
-- Compiz theater (**0.9.24**): hardcoded scale/fade/rise map-in, minimize-to-panel unmap, focus glow, ease-in-out workspace slide. No wobbly/cube. `--effects=off|low|high`. Frame loop reuses slices (no per-frame actor-list storm).
+- Compiz theater (**0.9.24** / **0.9.32**): hardcoded scale/fade/rise map-in, minimize-to-panel unmap, focus glow, ease-in-out workspace slide. **0.9.32 high:** cheap wobbly on move (spring offset, no mesh), cube-style workspace foreshorten, expose polish (in-out ease, selected scale, title, ↑/↓). `--effects=off|low|high`. Frame loop reuses slices + expose grid (no per-frame actor-list / grid storm). No plugin graph.
 - Launcher reads XDG `.desktop` files and theme PNGs for `Icon=` (0.9.18). `Terminal=true` apps skipped; no ibus/fcitx IME
 - Panel is CPU-composited chrome (not a toolkit)
 - Workspaces (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. No Super+1..N, no drag-to-desktop, no per-output set. Overview is current-desktop only (shows `desk N/M`). Empty desktops stay addressable.

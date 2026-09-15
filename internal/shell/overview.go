@@ -51,7 +51,7 @@ func (o *Overview) Progress(now time.Time) float64 {
 	}
 	p := float64(now.Sub(o.Since)) / float64(engine.OverviewDuration)
 	p = clamp01f(p)
-	e := engine.EaseOutCubic(p)
+	e := engine.EaseInOutCubic(p)
 	if o.Want {
 		return e
 	}
@@ -121,6 +121,22 @@ func handleOverviewKeys(ov *Overview, ptr *input.Pointer, scene *engine.Scene, n
 		}
 		if ov.Want && isEvdev(k.Code, keyLeft) {
 			ov.moveSelect(-1, n)
+			if ov.Select >= 0 && ov.Select < n {
+				scene.FocusActor(actors[ov.Select])
+			}
+			consumed[k.Code] = true
+			continue
+		}
+		if ov.Want && isEvdev(k.Code, keyUp) {
+			ov.moveSelect(-engine.GridCols(n), n)
+			if ov.Select >= 0 && ov.Select < n {
+				scene.FocusActor(actors[ov.Select])
+			}
+			consumed[k.Code] = true
+			continue
+		}
+		if ov.Want && isEvdev(k.Code, keyDown) {
+			ov.moveSelect(engine.GridCols(n), n)
 			if ov.Select >= 0 && ov.Select < n {
 				scene.FocusActor(actors[ov.Select])
 			}

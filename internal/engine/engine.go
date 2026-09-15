@@ -40,7 +40,13 @@ type Actor struct {
 	IconPix       []byte    // optional BGRA window icon (client buffer preferred)
 	IconW, IconH  int
 	IconStride    int
-	IconName      string // freedesktop name (set_name / AppID) when no client buffer
+	IconName      string  // freedesktop name (set_name / AppID) when no client buffer
+	WobbleX       float64 // decaying move impulse (high theater)
+	WobbleY       float64
+	WobbleAt      time.Time
+	wobblePX      int
+	wobblePY      int
+	wobbleOn      bool
 }
 
 // HasIcon reports a client-supplied icon buffer.

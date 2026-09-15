@@ -19,8 +19,8 @@ func TestOverviewProgressEase(t *testing.T) {
 		t.Fatal("t0 enter is 0")
 	}
 	mid := o.Progress(now.Add(engine.OverviewDuration / 2))
-	if mid <= 0.5 {
-		t.Fatalf("ease-out mid %v", mid)
+	if mid < 0.45 || mid > 0.55 {
+		t.Fatalf("ease-in-out mid %v", mid)
 	}
 	if o.Progress(now.Add(engine.OverviewDuration)) != 1 {
 		t.Fatal("enter done")
@@ -104,6 +104,30 @@ func TestHandleOverviewKeysSuperTabAndEnter(t *testing.T) {
 	}
 	if !b.Focused {
 		t.Fatal("Enter should keep the picked actor focused")
+	}
+}
+
+func TestHandleOverviewKeysUpDownByRow(t *testing.T) {
+	scene := engine.NewScene()
+	var acts [4]*engine.Actor
+	for i := range acts {
+		acts[i] = &engine.Actor{Width: 10, Height: 10}
+		scene.Add(acts[i])
+	}
+	acts[0].Focused = true
+	var ov Overview
+	ov.Want = true
+	meta := false
+	now := time.Unix(3, 0)
+	ptr := &input.Pointer{Keys: []input.Key{{Code: keyDown, Pressed: true}}}
+	handleOverviewKeys(&ov, ptr, scene, now, 800, 600, &meta, false, nil, nil)
+	if ov.Select != 2 || !acts[2].Focused {
+		t.Fatalf("down by row select=%d", ov.Select)
+	}
+	ptr = &input.Pointer{Keys: []input.Key{{Code: keyUp, Pressed: true}}}
+	handleOverviewKeys(&ov, ptr, scene, now.Add(time.Millisecond), 800, 600, &meta, false, nil, nil)
+	if ov.Select != 0 || !acts[0].Focused {
+		t.Fatalf("up by row select=%d", ov.Select)
 	}
 }
 

@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.32-dev — richer Compiz theater (wobbly / cube / expose)
+
+- `--effects=high`: moving a window adds a decaying spring offset (cheap wobbly, no mesh). Workspace slide foreshortens like a cube face (scale + hinge pull). `--effects=low` stays fade-only; `off` is instant.
+- Expose: ease-in-out enter/leave, selected tile scales up, title under the cell, ↑/↓ move by row. `LayoutGridInto` + presenter `cellsBuf` so the grid is not allocated every frame.
+- Still no plugin graph / real 3D cube / mesh jelly. No IME.
+
 ## 0.9.31-dev — vk-display overlay/cursor when DRM master is available
 
 - `--backend=vk-display` tries a planes-only DRM sidecar (`drmSetMaster`, no primary `SetCrtc`) and `VK_EXT_acquire_drm_display` so overlay + hardware cursor share the master fd with `VK_KHR_display`.

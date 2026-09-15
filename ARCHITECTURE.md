@@ -31,7 +31,7 @@ tryable `worldr-shell`.
 2. Minimal Wayland server (surface → textured window actor) — done
 3. SSD borders + input/focus — done (simple chrome)
 4. XWayland — done (`--xwayland`, tiny XWM + `xwayland_shell_v1`)
-5. Compiz-style theater v0 — done (hardcoded map/unmap scale+fade)
+5. Compiz-style theater v0 — done (map/unmap, wobbly/cube/expose on high)
 6. Expose/overview v0 — done (F12 grid)
 7. Panel + launcher v0 — done (bottom bar, F1 spawn)
 8. Workspaces — done (2–4 desktops, pager N/M, slide, move-window)
@@ -172,7 +172,7 @@ actors + SSD → upload (`vkCmdCopyBufferToImage`) or dumb-buffer memcpy.
 - Client-side decorations as the default chrome
 - Vendoring large dependency trees
 - macOS / Windows as first-class targets
-- Full Compiz effect-graph plugin system (v0 is hardcoded map/unmap/focus)
+- Full Compiz effect-graph plugin system (v0 is hardcoded map/unmap/focus/wobbly/cube)
 - Full EWMH / ICCCM XWM (0.9.11 has `_NET_*` basics, titles/class, focus/stacking, OR/transient no-SSD — not reparenting/pager/IME)
 
 ## Vendor bring-up
