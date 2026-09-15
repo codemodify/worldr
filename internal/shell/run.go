@@ -128,12 +128,20 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			engine.MapInDuration, engine.MapOutDuration)
 	}
 
+	var ov Overview
+	fmt.Fprintln(stdout, "overview: F12 toggles expose (Super+Tab if the host does not steal Super). Esc leaves overview; Esc/Q outside it quits.")
+	if opt.OverviewDemo {
+		fmt.Fprintln(stdout, "overview: --overview-demo will auto-enter after the first window maps")
+	}
+
 	fmt.Fprintln(stdout, "running. Exit: Ctrl+C, or --duration, or Esc/Q on an evdev keyboard.")
 	if TakesDisplay(Backend(p.name)) {
 		fmt.Fprintln(stdout, "WARNING: this process may own the VT display. Prefer a spare TTY (Ctrl+Alt+F2). See docs/RUN-ABOX.md")
 	}
 
 	frames := 0
+	metaHeld := false
+	demoArmed := opt.OverviewDemo
 	ticker := time.NewTicker(16 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -169,19 +177,33 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			}
 			for _, k := range in.Keys {
 				ptr.Keys = append(ptr.Keys, input.Key{Code: k.Code, Pressed: k.Pressed})
-				if k.Pressed && (k.Code == 1 || k.Code == 16) { // ESC, Q
-					ptr.Quit = true
-				}
 			}
 		}
-		if ptr.Quit {
+		now := time.Now()
+		if demoArmed && scene.HasActors() && frames > 40 {
+			ov.Open(now)
+			actors := scene.Actors()
+			ov.Select = focusedIndex(actors)
+			demoArmed = false
+			fmt.Fprintln(stdout, "overview: demo auto-enter (F12 or Esc to leave)")
+		}
+		consume := handleOverviewKeys(&ov, ptr, scene, now, int(w), int(h), &metaHeld)
+		if ptr.Quit && !ov.Want {
 			fmt.Fprintln(stdout, "quit key")
 			return nil
 		}
-		if srv != nil {
+		ptr.Quit = false
+		if srv != nil && !ov.Live(now) {
 			for _, k := range ptr.Keys {
+				if consume[k.Code] {
+					continue
+				}
 				srv.KeyboardKey(k.Code, k.Pressed)
 			}
+		}
+		if ov.Want && ptr.Click {
+			_ = pickOverview(&ov, scene, ptr.X, ptr.Y, int(w), int(h), now)
+			ptr.Click = false
 		}
 		if ptr.Click {
 			a := scene.FocusAt(ptr.X, ptr.Y, decorations.TitleH, decorations.Border)
@@ -196,14 +218,14 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		if ptr.Release {
 			dragging = false
 			drag = nil
-			if srv != nil {
+			if srv != nil && !ov.Want {
 				srv.PointerButton(ptr.X, ptr.Y, false)
 			}
 		}
-		if dragging && drag != nil {
+		if dragging && drag != nil && !ov.Want {
 			drag.X = ptr.X - dx
 			drag.Y = ptr.Y - dy
-		} else if srv != nil {
+		} else if srv != nil && !ov.Live(now) {
 			srv.PointerMotion(ptr.X, ptr.Y)
 		}
 		if srv != nil {
@@ -218,7 +240,8 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				cur = CursorBlit{X: cx, Y: cy, HX: hx, HY: hy, Pix: pix, W: cw, H: ch, Stride: cstride, Shape: shape, Visible: vis}
 			}
 			CompositeDesktop(fb, stride, int(w), int(h), pixel, scene.Actors(), opt.SSD, cur,
-				Theater{Now: time.Now(), Tier: opt.Effects})
+				Theater{Now: now, Tier: opt.Effects},
+				OverviewDraw{T: ov.Progress(now), Select: ov.Select})
 			if err := p.upload(fb, uint32(stride)); err != nil {
 				return err
 			}

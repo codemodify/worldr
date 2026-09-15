@@ -3,10 +3,9 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** window theater v0 on `feat/window-effects-v0` (stacked on XWayland).
-Safe demo remains `--backend=wayland-client` + `foot` — windows scale+fade on
-map/unmap. `--effects=off` disables. `--xwayland` + `DISPLAY=:N xeyes` is
-optional. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
+**Status:** expose/overview v0 on `feat/overview-expose-v0` (stacked on theater).
+Safe demo: `--backend=wayland-client` + two `foot` windows, then **F12** for
+the grid. `--overview-demo` auto-enters. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
 ## Quick links
 
@@ -22,7 +21,8 @@ optional. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 3. SSD borders + pointer focus (**this branch**, simple)
 4. XWayland — spike (`--xwayland`, rootless Xwayland + tiny XWM → actors)
 5. Compiz-style theater v0 — map/unmap scale+fade (`--effects`)
-6. Revisit UI toolkit — deferred
+6. Expose/overview v0 — F12 grid (`--overview-demo`)
+7. Revisit UI toolkit — deferred
 
 ## Build
 
@@ -43,6 +43,7 @@ Safe nested compositor (existing Wayland session — recommended first try):
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 export WAYLAND_DISPLAY=wayland-1   # use the name the shell printed
 foot
+# second terminal, same WAYLAND_DISPLAY: another foot, then F12 in the worldr window
 # X11 (optional):
 ./bin/worldr-shell --backend=wayland-client --xwayland --duration=60s
 DISPLAY=:N xeyes    # N from the shell's "xwayland: DISPLAY=" line
