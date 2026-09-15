@@ -1,6 +1,7 @@
 package wlsrv
 
 import (
+	_ "embed"
 	"syscall"
 	"time"
 
@@ -8,41 +9,37 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Minimal US keymap so foot/kitty will accept wl_keyboard.
-const xkbKeymap = `xkb_keymap {
-xkb_keycodes "(unnamed)" {
-    minimum = 8;
-    maximum = 255;
-    <ESC>  = 9;
-    <AE01> = 10; <AE02> = 11; <AE03> = 12; <AE04> = 13; <AE05> = 14;
-    <AE06> = 15; <AE07> = 16; <AE08> = 17; <AE09> = 18; <AE10> = 19;
-    <AD01> = 24; <AD02> = 25; <AD03> = 26; <AD04> = 27; <AD05> = 28;
-    <AD06> = 29; <AD07> = 30; <AD08> = 31; <AD09> = 32; <AD10> = 33;
-    <AC01> = 38; <AC02> = 39; <AC03> = 40; <AC04> = 41; <AC05> = 42;
-    <AC06> = 43; <AC07> = 44; <AC08> = 45; <AC09> = 46; <AC10> = 47;
-    <AB01> = 52; <AB02> = 53; <AB03> = 54; <AB04> = 55; <AB05> = 56;
-    <AB06> = 57; <AB07> = 58; <AB08> = 59; <AB09> = 60; <AB10> = 61;
-    <SPCE> = 65; <RTRN> = 36; <BKSP> = 22; <TAB> = 23; <LFSH> = 50; <RTSH> = 62;
-};
-xkb_types "(unnamed)" {
-    type "ONE_LEVEL" { modifiers = none; level_name[Level1] = "Any"; };
-    type "TWO_LEVEL" { modifiers = Shift; map[Shift] = Level2; level_name[Level1] = "Base"; level_name[Level2] = "Shift"; };
-};
-xkb_compatibility "(unnamed)" { interpret.repeat = False; interpret.locking = False; };
-xkb_symbols "(unnamed)" {
-    name[Group1] = "worldr-us";
-    key <ESC>  { [ Escape ] };
-    key <AE01> { [ 1, exclam ] }; key <AE02> { [ 2, at ] };
-    key <AD01> { [ q, Q ] }; key <AD02> { [ w, W ] }; key <AD03> { [ e, E ] };
-    key <AC01> { [ a, A ] }; key <AC02> { [ s, S ] }; key <AC03> { [ d, D ] };
-    key <AB01> { [ z, Z ] };
-    key <SPCE> { [ space ] }; key <RTRN> { [ Return ] };
-};
-};
-`
+// Full US keymap (evdev keycodes, XKB = evdev+8). Regenerated with:
+//
+//	setxkbmap -layout us -print | xkbcomp -xkb - keymap_us.xkb
+//
+// or: xkbcli compile-keymap --layout us
+//
+//go:embed keymap_us.xkb
+var xkbKeymap []byte
+
+// keymapBytes is the mmap payload: compiled text plus a trailing NUL
+// (required by wl_keyboard.keymap xkb_v1).
+func keymapBytes() []byte {
+	if len(xkbKeymap) == 0 || xkbKeymap[len(xkbKeymap)-1] != 0 {
+		out := make([]byte, len(xkbKeymap)+1)
+		copy(out, xkbKeymap)
+		return out
+	}
+	return xkbKeymap
+}
+
+// ToXKBKeycode maps a linux evdev scancode to a Wayland/XKB keycode (evdev+8).
+// Nested host seats already send XKB codes — pass those through.
+func ToXKBKeycode(code uint32, alreadyXKB bool) uint32 {
+	if alreadyXKB {
+		return code
+	}
+	return code + 8
+}
 
 func (c *Client) sendKeymap(kbd uint32) error {
-	b := []byte(xkbKeymap)
+	b := keymapBytes()
 	fd, err := unix.MemfdCreate("worldr-xkb", 0)
 	if err != nil {
 		return err
@@ -96,7 +93,7 @@ func (c *Client) keyboardLeave(sid uint32) {
 	_ = c.send(c.kbdID, 2, p, nil)
 }
 
-// KeyboardKey sends a linux evdev key code to the focused client (code is evdev, not xkb).
+// KeyboardKey sends a Wayland/XKB keycode (evdev+8) to the focused client.
 func (c *Client) KeyboardKey(code uint32, pressed bool) {
 	if c.kbdID == 0 {
 		return

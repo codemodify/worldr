@@ -72,8 +72,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on sticky launcher):
-git checkout fix/quit-chord
+# this branch (stacked on quit-chord):
+git checkout fix/full-xkb-keymap
 
 export CGO_ENABLED=1
 make build
@@ -360,7 +360,7 @@ disconnected cleanly** against the compositor.
 | Client | Buffer | Expected now | Notes |
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + xkb + SSD. Cursors (`wp_cursor_shape`), activation token `done`, primary-selection stub, and `wp_fractional_scale_manager_v1` (`preferred_scale` 120 = 1.0). Still expected: `xdg-toplevel-icon`, text-input/IME. Composite stays integer buffer scale for v0. |
+| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Cursors, activation, primary-selection stub, fractional-scale 120. Still expected: `xdg-toplevel-icon`, text-input/IME. |
 | `kitty` | linux-dmabuf (GL) | **Try** | GPU path: Vulkan import + CPU readback. Needs `linux-dmabuf: Vulkan import` in the shell log. LINEAR mmap fallback if the buffer is linear. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Needs clipboard, popups, subsurfaces, idle-inhibit, etc. |
@@ -404,7 +404,7 @@ Workaround — real display on **tty3**:
 - SSD is thicker accent + title gradient + focused glow (still not a toolkit)
 - Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)
 - Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY
-- Pointer/keyboard keymap sent to clients is a tiny US map
+- Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
 - Fractional scale stub: `preferred_scale` 120 (1.0); still integer composite. No `xdg-toplevel-icon` or IME (`zwp_text_input`)
 - Compiz theater v0 is hardcoded (no plugin graph); `--effects=off` disables
 - Launcher is a hardcoded list (no `.desktop` / menu scan)
