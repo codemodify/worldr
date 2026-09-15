@@ -3,6 +3,7 @@ package wlsrv
 import (
 	"time"
 
+	"github.com/codemodify/worldr/internal/engine"
 	"github.com/codemodify/worldr/internal/wayland"
 )
 
