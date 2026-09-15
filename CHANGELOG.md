@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.28-dev — icon theme Inherits= + librsvg
+
+- `index.theme` `[Icon Theme] Inherits=` is walked (comma list, recursive, cycle-safe) before hicolor. PNG still wins over SVG in each theme.
+- Optional CGO `librsvg-2.0` (`-tags=librsvg` when `pkg-config --exists librsvg-2.0`; `make build`/`make test`). Path-heavy breeze/adwaita SVGs raster through cairo. Without headers/tag, the simple SVG path stays.
+- No IME. No full `index.theme` Directory/Size inheritance graph.
+
 ## 0.9.27-dev — Chromium/Qt protocol surface
 
 - `zwp_linux_dmabuf_v1` feedback is LINEAR-only on nest/headless (`CanGPUComposite` false) so Chromium/Brave allocate mmap-able buffers instead of Intel-tiled ones that became a black `create_immed` placeholder. vk-display still advertises tiled modifiers.

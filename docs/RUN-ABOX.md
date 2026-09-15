@@ -42,6 +42,7 @@ sudo pacman -S --needed \
   go gcc pkgconf \
   vulkan-headers vulkan-icd-loader vulkan-intel vulkan-tools \
   mesa libdrm wayland wayland-protocols \
+  librsvg \
   weston \
   xorg-xwayland xorg-xeyes xterm xorg-xcalc
 ```
@@ -67,7 +68,9 @@ ls /dev/dri/
 
 ## Build
 
-Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored trees.
+Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). Optional `librsvg`
+(`pkg-config librsvg-2.0`) turns on `-tags=librsvg` in `make` for real SVG
+icons; without it the simple raster is used. No huge vendored trees.
 
 ```sh
 git clone https://github.com/codemodify/worldr.git
@@ -449,7 +452,7 @@ disconnected cleanly** against the compositor.
 | Client | Buffer | Expected now | Notes |
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.19): Ctrl+Shift+C / Ctrl+Shift+V `text/plain` between worldr clients and, when nested, Plasma ↔ foot. `image/png` (and `image/bmp`) between clients; nest host forwards png when advertised. Mouse-select + middle-click uses primary (bridged if the host advertises it). Cursors, activation, **fractional-scale** (0.9.16: nest follows Plasma HiDPI; `--scale` overrides). **Icons** (0.9.18): theme PNG from `.desktop` `Icon=` / `AppID` on launcher + SSD/panel; `xdg_toplevel_icon` buffer still wins. **Workspaces** (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. Still expected: text-input/IME. |
+| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.19): Ctrl+Shift+C / Ctrl+Shift+V `text/plain` between worldr clients and, when nested, Plasma ↔ foot. `image/png` (and `image/bmp`) between clients; nest host forwards png when advertised. Mouse-select + middle-click uses primary (bridged if the host advertises it). Cursors, activation, **fractional-scale** (0.9.16: nest follows Plasma HiDPI; `--scale` overrides). **Icons** (0.9.18 / **0.9.28**): theme PNG then SVG from `.desktop` `Icon=` / `AppID` (`Inherits=` + hicolor; librsvg if `make` found it); `xdg_toplevel_icon` buffer still wins. **Workspaces** (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. Still expected: text-input/IME. |
 | `kitty` | linux-dmabuf (GL) | **Try** | On **vk-display** (0.9.10+): Vulkan import + GPU blit. **0.9.17**: fullscreen ARGB/XRGB may KMS-scanout on `--backend=drm` (`kms scanout: primary dmabuf`). vk-display logs `kms scanout fallback` (Vulkan holds DRM master) then blits. Nested still CPU. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
@@ -501,7 +504,7 @@ Workaround — real display on **tty3**:
 - Fractional SSD (0.9.21): window geometry width/height crop CSD padding at non-integer scales (1.75 nest). Viewport dest + buffer-scale + preferred_scale still size the logical surface.
 - Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
 - Fractional scale (0.9.16 / 0.9.21): nest follows host `preferred_scale` / `wl_output.scale`. `--scale` overrides. vk-display/drm default 1.0. Viewport / `set_buffer_scale` / window geometry size the logical window. Single worldr output.
-- Window icons (0.9.18 / **0.9.25**): `xdg_toplevel_icon` shm buffers on SSD + panel win when set. Else XDG theme PNG, then a simple SVG raster (`Icon=` / `AppID` / `set_name`) in current theme + hicolor (`scalable/` included). No full `index.theme` inheritance. No IME (`zwp_text_input`).
+- Window icons (0.9.18 / **0.9.25** / **0.9.28**): `xdg_toplevel_icon` shm buffers on SSD + panel win when set. Else XDG theme PNG, then SVG (`Icon=` / `AppID` / `set_name`) walking `index.theme` `Inherits=` then hicolor. librsvg when built with `librsvg2-dev` + `make` (`-tags=librsvg`); else the simple raster. No full Directory/Size graph. No IME (`zwp_text_input`).
 - Compiz theater (**0.9.24**): hardcoded scale/fade/rise map-in, minimize-to-panel unmap, focus glow, ease-in-out workspace slide. No wobbly/cube. `--effects=off|low|high`. Frame loop reuses slices (no per-frame actor-list storm).
 - Launcher reads XDG `.desktop` files and theme PNGs for `Icon=` (0.9.18). `Terminal=true` apps skipped; no ibus/fcitx IME
 - Panel is CPU-composited chrome (not a toolkit)
