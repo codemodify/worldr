@@ -59,6 +59,63 @@ func TestLogicalSize(t *testing.T) {
 	}
 }
 
+func TestLogicalSizeScaledFractional(t *testing.T) {
+	// 1.75: 350×210 buffer, no dest, no integer scale → 200×120 logical
+	w, h := LogicalSizeScaled(350, 210, 0, 0, 1, 210)
+	if w != 200 || h != 120 {
+		t.Fatalf("1.75 infer %dx%d", w, h)
+	}
+	w, h = LogicalSizeScaled(350, 210, 200, 120, 1, 210)
+	if w != 200 || h != 120 {
+		t.Fatalf("dest still wins %dx%d", w, h)
+	}
+	w, h = LogicalSizeScaled(400, 200, 0, 0, 2, 210)
+	if w != 200 || h != 100 {
+		t.Fatalf("integer bufscale beats frac %dx%d", w, h)
+	}
+}
+
+func TestApplyWindowGeometryFractional(t *testing.T) {
+	// dest 200×120, buffer 350×210 (1.75), CSD inset (16,8,168,104)
+	logW, logH, sx, sy, sw, sh := ApplyWindowGeometry(350, 210, 200, 120, 1, 210, GeoRect{
+		X: 16, Y: 8, W: 168, H: 104, Set: true,
+	})
+	if logW != 168 || logH != 104 {
+		t.Fatalf("logical %dx%d want 168x104", logW, logH)
+	}
+	if sx != 28 || sy != 14 || sw != 294 || sh != 182 {
+		t.Fatalf("src crop %d,%d %dx%d want 28,14 294x182", sx, sy, sw, sh)
+	}
+}
+
+func TestApplyWindowGeometryNoGeo(t *testing.T) {
+	logW, logH, sx, sy, sw, sh := ApplyWindowGeometry(200, 100, 0, 0, 2, 0, GeoRect{})
+	if logW != 100 || logH != 50 || sx != 0 || sy != 0 || sw != 200 || sh != 100 {
+		t.Fatalf("no geo %dx%d src %d,%d %dx%d", logW, logH, sx, sy, sw, sh)
+	}
+}
+
+func TestApplyWindowGeometryRejectsEmpty(t *testing.T) {
+	logW, logH, _, _, sw, sh := ApplyWindowGeometry(200, 100, 200, 100, 1, 120, GeoRect{W: 0, H: 10, Set: true})
+	if logW != 200 || logH != 100 || sw != 200 || sh != 100 {
+		t.Fatalf("empty geo must not crop")
+	}
+}
+
+func TestCropBGRA(t *testing.T) {
+	// 4×2, crop (1,0,2,1)
+	src := make([]byte, 4*2*4)
+	src[1*4+0], src[1*4+1], src[1*4+2], src[1*4+3] = 1, 2, 3, 4
+	src[2*4+0], src[2*4+1], src[2*4+2], src[2*4+3] = 5, 6, 7, 8
+	out, stride := CropBGRA(src, 16, 4, 2, 1, 0, 2, 1)
+	if stride != 8 || len(out) != 8 {
+		t.Fatalf("stride %d len %d", stride, len(out))
+	}
+	if out[0] != 1 || out[4] != 5 {
+		t.Fatalf("crop pixels %v", out)
+	}
+}
+
 func TestCombineHostScale(t *testing.T) {
 	if CombineHostScale(0, 0) != 1 {
 		t.Fatal("default")

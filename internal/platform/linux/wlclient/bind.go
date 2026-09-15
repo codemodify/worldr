@@ -8,29 +8,31 @@ import (
 )
 
 const (
-	ifaceCompositor = "wl_compositor"
-	ifaceShm        = "wl_shm"
-	ifaceXdg        = "xdg_wm_base"
-	ifaceSeat       = "wl_seat"
-	ifaceDataDev    = "wl_data_device_manager"
-	ifacePrimary    = "zwp_primary_selection_device_manager_v1"
-	ifaceOutput     = "wl_output"
-	ifaceFracScale  = "wp_fractional_scale_manager_v1"
+	ifaceCompositor  = "wl_compositor"
+	ifaceShm         = "wl_shm"
+	ifaceXdg         = "xdg_wm_base"
+	ifaceSeat        = "wl_seat"
+	ifaceDataDev     = "wl_data_device_manager"
+	ifacePrimary     = "zwp_primary_selection_device_manager_v1"
+	ifaceOutput      = "wl_output"
+	ifaceFracScale   = "wp_fractional_scale_manager_v1"
+	ifaceCursorShape = "wp_cursor_shape_manager_v1"
 )
 
 // Max version we implement for each interface we actually bind.
-// Trap interfaces (output, viewporter, dmabuf, cursor-shape, …)
-// have max 0 so they are never bound — a too-high or v0 bind on those
-// is a common KWin "invalid arguments for wl_registry.bind" cause.
+// Trap interfaces (viewporter, dmabuf, …) have max 0 so they are never
+// bound — a too-high or v0 bind on those is a common KWin
+// "invalid arguments for wl_registry.bind" cause.
 var bindMaxVersion = map[string]uint32{
-	ifaceCompositor: 6, // damage_buffer is v4; we do not use v5 offset
-	ifaceShm:        1, // create_pool only (v2 is wl_shm.release)
-	ifaceXdg:        6, // client requests are v1; extra events are ignored
-	ifaceSeat:       5, // get_pointer + get_keyboard + pointer.frame
-	ifaceDataDev:    3, // create_data_source + get_data_device + selection
-	ifacePrimary:    1, // zwp_primary_selection if the host advertises it
-	ifaceOutput:     2, // geometry/mode/done/scale — not v3+ name/description
-	ifaceFracScale:  1, // get_fractional_scale on the nest surface
+	ifaceCompositor:  6, // damage_buffer is v4; we do not use v5 offset
+	ifaceShm:         1, // create_pool only (v2 is wl_shm.release)
+	ifaceXdg:         6, // client requests are v1; extra events are ignored
+	ifaceSeat:        5, // get_pointer + get_keyboard + pointer.frame
+	ifaceDataDev:     3, // create_data_source + get_data_device + selection
+	ifacePrimary:     1, // zwp_primary_selection if the host advertises it
+	ifaceOutput:      2, // geometry/mode/done/scale — not v3+ name/description
+	ifaceFracScale:   1, // get_fractional_scale on the nest surface
+	ifaceCursorShape: 1, // set_shape(default) so Plasma shows an arrow
 }
 
 type registryGlobal struct {

@@ -18,9 +18,12 @@ const (
 
 // wp_cursor_shape_v1 shapes (enum starts at 1).
 const (
-	cursorShapeDefault = 1
-	cursorShapeText    = 9
-	cursorShapePointer = 4
+	CursorShapeDefault uint32 = 1
+	CursorShapeText    uint32 = 9
+	CursorShapePointer uint32 = 4
+	cursorShapeDefault        = CursorShapeDefault
+	cursorShapeText           = CursorShapeText
+	cursorShapePointer        = CursorShapePointer
 )
 
 func (c *Client) reqPointer(o *object, op uint16, cur *wayland.Cursor) error {

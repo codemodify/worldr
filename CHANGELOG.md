@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.21-dev — nest cursor, Brave, fractional SSD
+
+- Nested Plasma: bind host `wp_cursor_shape_manager_v1` (v1) and `set_shape(default)` on pointer enter (shm arrow `set_cursor` fallback). Stop sending a null host cursor. Client `set_cursor` / cursor-shape still drive the software overlay; null `set_cursor` keeps the default arrow.
+- Chromium/Brave: `wl_output` v4 now sends `name` + `description` before `done`. `zxdg_decoration` `unset_mode` still ACKs SSD. `wp_viewport.set_source` is parsed (ignored crop; dest + geometry size the window). `zwp_linux_dmabuf_v1.create_immed` import failure installs a black placeholder instead of disconnecting the GPU process.
+- GTK4 / GNOME Disks at nest scale 1.75: honor `xdg_surface.set_window_geometry` width/height (was dropped). `ApplyWindowGeometry` crops CSD shadow padding so SSD hugs the real client edge. Pointer events stay in surface-local coords (geometry offset).
+- Temporary Brave flag if GPU bring-up still dies: `--ozone-platform=wayland --disable-gpu`. No IME.
+
 ## 0.9.20-dev — linux-drm-syncobj
 
 - Advertise `wp_linux_drm_syncobj_manager_v1` when a local DRM node reports `DRM_CAP_SYNCOBJ_TIMELINE`.

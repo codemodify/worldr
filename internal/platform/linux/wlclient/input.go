@@ -31,7 +31,9 @@ func (w *Window) handlePointer(msg wayland.Message) error {
 		w.ptrSerial = ser
 		w.hostX, w.hostY = fixedToInt(x), fixedToInt(y)
 		w.hostInside = true
-		w.hideHostCursor()
+		// Must set a cursor or Plasma shows none. Prefer the host arrow;
+		// the compositor software overlay covers client set_cursor / shape.
+		w.EnsureHostCursor()
 	case 1: // leave
 		w.hostInside = false
 		// Host implicit grab usually delivers the real release; if the
@@ -82,17 +84,6 @@ func (w *Window) handleKeyboard(msg wayland.Message) error {
 		w.hostKeys = append(w.hostKeys, HostKey{Code: code, Pressed: state == 1})
 	}
 	return nil
-}
-
-func (w *Window) hideHostCursor() {
-	if w.ptrID == 0 {
-		return
-	}
-	p := wayland.PutU32(nil, w.ptrSerial)
-	p = wayland.PutU32(p, 0) // null surface
-	p = wayland.PutI32(p, 0)
-	p = wayland.PutI32(p, 0)
-	_ = w.send(w.ptrID, 0, p, nil)
 }
 
 // TakeInput returns and clears host pointer/key edges.

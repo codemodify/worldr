@@ -137,8 +137,11 @@ func (c *Client) childOrigin(s *surface) (parent *engine.Actor, relX, relY int) 
 		pop := s.xdg.pop
 		relX, relY = int(pop.x), int(pop.y)
 		if pop.parent != nil && pop.parent.hasGeo {
-			relX += int(pop.parent.geoX)
-			relY += int(pop.parent.geoY)
+			// Cropped actors already sit on the geometry origin.
+			if pop.parent.surf == nil || !pop.parent.surf.cropped {
+				relX += int(pop.parent.geoX)
+				relY += int(pop.parent.geoY)
+			}
 		}
 		if pop.parent != nil && pop.parent.surf != nil && pop.parent.surf.actor != nil {
 			return pop.parent.surf.actor, relX, relY

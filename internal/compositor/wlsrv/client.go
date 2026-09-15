@@ -139,6 +139,7 @@ type surface struct {
 	bufScale int
 	fracID   uint32
 	xwayland bool
+	cropped  bool // actor is the window-geometry box (CSD inset)
 	sync     *syncSurface
 }
 
@@ -152,6 +153,8 @@ type xdgSurface struct {
 	pending bool
 	geoX    int32
 	geoY    int32
+	geoW    int32
+	geoH    int32
 	hasGeo  bool
 }
 
@@ -565,6 +568,13 @@ func (c *Client) sendOutput(id uint32) error {
 	if err := c.send(id, 3, p, nil); err != nil { // scale
 		return err
 	}
+	// v4 name + description must arrive before the first done (Chromium).
+	if err := c.send(id, 4, wayland.PutString(nil, "WL-1"), nil); err != nil {
+		return err
+	}
+	if err := c.send(id, 5, wayland.PutString(nil, "worldr nested output"), nil); err != nil {
+		return err
+	}
 	return c.send(id, 2, nil, nil) // done
 }
 
@@ -807,7 +817,25 @@ func (c *Client) mapSurface(s *surface) {
 		return
 	}
 	bufW, bufH := w, h
-	w, h = LogicalSize(bufW, bufH, s.destW, s.destH, s.bufScale)
+	geo := GeoRect{}
+	if s.xdg != nil && s.xdg.hasGeo {
+		geo = GeoRect{X: int(s.xdg.geoX), Y: int(s.xdg.geoY), W: int(s.xdg.geoW), H: int(s.xdg.geoH), Set: true}
+	}
+	scale120 := uint32(0)
+	if c.srv != nil {
+		scale120 = c.srv.PreferredScale120ths()
+	}
+	var srcX, srcY, srcW, srcH int
+	w, h, srcX, srcY, srcW, srcH = ApplyWindowGeometry(bufW, bufH, s.destW, s.destH, s.bufScale, scale120, geo)
+	s.cropped = geo.Set && geo.W > 0 && geo.H > 0
+	if s.cropped && len(pix) > 0 && (srcX != 0 || srcY != 0 || srcW != bufW || srcH != bufH) {
+		pix, stride = CropBGRA(pix, stride, bufW, bufH, srcX, srcY, srcW, srcH)
+		bufW, bufH = srcW, srcH
+	} else if s.cropped && len(pix) == 0 {
+		// GPU-only: do not scale the full texture into the geometry box.
+		w, h = LogicalSizeScaled(bufW, bufH, s.destW, s.destH, s.bufScale, scale120)
+		s.cropped = false
+	}
 	child := c.isChildSurface(s)
 	var x11 X11MapHints
 	var x11ok bool
@@ -942,9 +970,10 @@ func (c *Client) reqXdgSurface(o *object, op uint16, cur *wayland.Cursor) error 
 	case 3: // set_window_geometry
 		x, _ := cur.I32()
 		y, _ := cur.I32()
-		_, _ = cur.I32()
-		_, _ = cur.I32()
-		xs.geoX, xs.geoY, xs.hasGeo = x, y, true
+		gw, _ := cur.I32()
+		gh, _ := cur.I32()
+		xs.geoX, xs.geoY, xs.geoW, xs.geoH = x, y, gw, gh
+		xs.hasGeo = gw > 0 && gh > 0
 	case 4: // ack_configure
 		ser, err := cur.U32()
 		if err != nil {
@@ -1063,7 +1092,7 @@ func (c *Client) reqDeco(o *object, op uint16, cur *wayland.Cursor) error {
 	switch op {
 	case 0:
 		delete(c.objs, o.id)
-	case 1: // set_mode — we still force SSD
+	case 1, 2: // set_mode / unset_mode — still force SSD (Chromium sends both)
 		_ = c.send(o.id, 0, wayland.PutU32(nil, 2), nil)
 	}
 	return nil
@@ -1093,6 +1122,11 @@ func (c *Client) reqViewport(o *object, op uint16, cur *wayland.Cursor) error {
 	switch op {
 	case 0:
 		delete(c.objs, o.id)
+	case 1: // set_source (wl_fixed x,y,w,h) — crop is applied via dest + geometry
+		_, _ = cur.I32()
+		_, _ = cur.I32()
+		_, _ = cur.I32()
+		_, _ = cur.I32()
 	case 2: // set_destination
 		dw, _ := cur.I32()
 		dh, _ := cur.I32()

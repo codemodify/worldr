@@ -183,11 +183,13 @@ should reach the popup surface.
 works; `image/png` is forwarded both ways when the host advertises it
 (screenshot / Kate image paste). vk-display/drm stay in-compositor only.
 
-**Scale (0.9.16):** nested under Plasma, worldr reads host `wl_output.scale`
+**Scale (0.9.16 / 0.9.21):** nested under Plasma, worldr reads host `wl_output.scale`
 and `wp_fractional_scale` `preferred_scale` (120ths) and drives its own
 output. A 150% Plasma panel → `preferred_scale` 180, `wl_output.scale` 2.
+abox try saw **1.75** (`preferred_scale=210/120`, `wl_output.scale=2`).
 `--scale=1.5` (or `1.25` / `2`) still overrides. vk-display/drm stay **1.0**
-unless `--scale` is set.
+unless `--scale` is set. **0.9.21:** `xdg_surface.set_window_geometry` width/height
+crop the actor so GTK4 CSD shadows are not wrapped in SSD.
 
 **KMS scanout (0.9.17):** on a spare TTY, `--backend=drm`, start `kitty` (or
 another GL client) and fullscreen it. One opaque ARGB/XRGB buffer that covers
@@ -446,6 +448,8 @@ disconnected cleanly** against the compositor.
 | `kitty` | linux-dmabuf (GL) | **Try** | On **vk-display** (0.9.10+): Vulkan import + GPU blit. **0.9.17**: fullscreen ARGB/XRGB may KMS-scanout on `--backend=drm` (`kms scanout: primary dmabuf`). vk-display logs `kms scanout fallback` (Vulkan holds DRM master) then blits. Nested still CPU. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
+| `brave` / Chromium | ozone Wayland + dmabuf | **Try (0.9.21)** | 0.9.20 died in GPU bring-up (crashpad + clients disconnect). 0.9.21: output v4 `name`/`description`, decoration `unset_mode`, viewport `set_source`, `create_immed` failure → black placeholder (no disconnect). If it still dies: `brave --ozone-platform=wayland --disable-gpu`. |
+| `gnome-disks` | GTK4 + fractional scale | **Try (0.9.21)** | 0.9.20 at nest host scale **1.75** left a huge empty gap between content and SSD (window geometry width/height was dropped; CSD shadow counted as the client). 0.9.21 crops to `set_window_geometry`. |
 | X11 apps | XWayland | **Try (`--xwayland`)** | Rootless `Xwayland` + EWMH-ish XWM. `DISPLAY=:N xeyes` / `xterm` map as SSD actors with real titles. `xcalc` (or xterm’s Ctrl+right-click menu) should be chrome-less. Click-to-focus raises + `SetInputFocus`. |
 
 GPU-accelerated path (vk-display, 0.9.10): client dmabuf → Vulkan import → **sample/blit in the compositor pass**. **0.9.17 KMS scanout:** one fullscreen opaque ARGB/XRGB dmabuf on `--backend=drm` → `drmPrimeFDToHandle` + `AddFB2` + atomic/`SetCrtc` (Intel first; NVIDIA/AMD best-effort). Ineligible or `vk-display` (no second DRM master) → existing blit. Nested/shm unchanged.
@@ -462,8 +466,9 @@ into that window**.
 clear-only debug rectangle.
 
 Host binds (clamped): compositor, shm, `xdg_wm_base`, `wl_seat` ≤ v5 (pointer +
-keyboard forwarded into worldr). Still skipped: output, viewporter, dmabuf,
-cursor-shape.
+keyboard forwarded into worldr), `wl_output` ≤ v2, `wp_fractional_scale` when
+advertised, and `wp_cursor_shape_manager_v1` v1 (default arrow on enter; shm
+`set_cursor` fallback). Still skipped: viewporter, dmabuf.
 
 **Success:** window titled `worldr-shell (nested compositor)` + bottom panel
 with pager dots. **F1 → foot** on desktop 0, switch desktop, **F1 → foot**
@@ -484,10 +489,12 @@ Workaround — real display on **tty3**:
 - Clipboard (0.9.19): `text/plain` + `image/png` (`image/bmp` if offered) between worldr clients. Nested: Plasma ↔ worldr for text and png when the host advertises them. Primary bridged if advertised. No JPEG/WebP. vk-display/drm have no host to bind.
 - dmabuf (0.9.17+): GPU sample on vk-display; **KMS primary scanout** for one fullscreen ARGB/XRGB on `--backend=drm`. **0.9.20:** `wp_linux_drm_syncobj_manager_v1` when `DRM_CAP_SYNCOBJ_TIMELINE` (log `linux-drm-syncobj: … advertised`). Acquire wait + release signal via DRM ioctl; miss → implicit sync. No Vulkan timeline wait yet. Overlay planes later. Nested host still CPU-composites. Soak: spare TTY, `kitty` — look for the syncobj line plus `kms scanout` / blit.
 - SSD is thicker accent + title gradient + focused glow (still not a toolkit)
-- Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)
+- Software cursor (0.9.21): nest binds host `wp_cursor_shape_manager_v1` and `set_shape(default)` on enter (shm arrow fallback). Client `set_cursor` / cursor-shape still draw the software overlay; null `set_cursor` keeps the default arrow (does not hide). TTY/vk-display stay software-only. No hardware plane.
 - Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY. Unmatched host `wl_pointer.button` releases are dropped (foot stray-release warning should be gone).
+- Brave/Chromium (0.9.21): output v4 name/description, decoration unset_mode, viewport set_source, dmabuf `create_immed` placeholder on import miss. Temporary flag if GPU still dies: `--ozone-platform=wayland --disable-gpu`.
+- Fractional SSD (0.9.21): window geometry width/height crop CSD padding at non-integer scales (1.75 nest). Viewport dest + buffer-scale + preferred_scale still size the logical surface.
 - Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
-- Fractional scale (0.9.16): nest follows host `preferred_scale` / `wl_output.scale`. `--scale` overrides. vk-display/drm default 1.0. Viewport / `set_buffer_scale` size the logical window. Single worldr output.
+- Fractional scale (0.9.16 / 0.9.21): nest follows host `preferred_scale` / `wl_output.scale`. `--scale` overrides. vk-display/drm default 1.0. Viewport / `set_buffer_scale` / window geometry size the logical window. Single worldr output.
 - Window icons (0.9.18): `xdg_toplevel_icon` shm buffers on SSD + panel win when set. Else XDG theme PNG (`Icon=` / `AppID` / `set_name`) in current theme + hicolor. No SVG raster, no full `index.theme` inheritance. No IME (`zwp_text_input`).
 - Compiz theater v0 is hardcoded (no plugin graph); `--effects=off` disables
 - Launcher reads XDG `.desktop` files and theme PNGs for `Icon=` (0.9.18). `Terminal=true` apps skipped; no ibus/fcitx IME
