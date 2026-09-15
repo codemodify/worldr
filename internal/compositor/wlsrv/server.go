@@ -36,6 +36,7 @@ type Server struct {
 	clip       *selection
 	prim       *selection
 	clipExport func(primary bool, mimes []string)
+	drag       *dragSession
 
 	scale120 uint32 // wp_fractional_scale preferred_scale; 0 = 120 (1.0)
 
@@ -170,6 +171,9 @@ func (s *Server) PointerButton(sx, sy int, pressed bool) {
 	for _, c := range cl {
 		c.pointerButton(sx, sy, pressed)
 	}
+	if !pressed {
+		s.dragButtonUp(sx, sy)
+	}
 }
 
 // PointerMotion delivers pointer motion in screen space.
@@ -180,6 +184,7 @@ func (s *Server) PointerMotion(sx, sy int) {
 	for _, c := range cl {
 		c.pointerMotion(sx, sy)
 	}
+	s.dragMotion(sx, sy)
 }
 
 // SetPointerPos updates the software cursor location.
