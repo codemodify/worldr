@@ -110,7 +110,7 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 		if ssd {
 			decorations.Draw(dst, stride, w, h, a)
 		}
-		if gpuOverlay && a.GPUSlot > 0 && !a.ScaledBuffer() {
+		if a.PlaneSkip || (gpuOverlay && a.GPUSlot > 0 && !a.ScaledBuffer()) {
 			return
 		}
 		srcW, srcH := a.PixelSize()

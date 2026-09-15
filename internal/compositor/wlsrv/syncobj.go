@@ -4,6 +4,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/codemodify/worldr/internal/engine"
 	"github.com/codemodify/worldr/internal/syncobj"
 	"github.com/codemodify/worldr/internal/wayland"
 	"golang.org/x/sys/unix"
@@ -29,6 +30,8 @@ func (t *syncTimeline) close() {
 type syncSurface struct {
 	pendingAcq syncobj.Fence
 	pendingRel syncobj.Fence
+	readyAcq   syncobj.Fence
+	readyRel   syncobj.Fence
 }
 
 func (c *Client) reqSyncobjMgr(_ *object, op uint16, cur *wayland.Cursor) error {
@@ -98,6 +101,9 @@ func (c *Client) reqSyncobjSurface(o *object, op uint16, cur *wayland.Cursor) er
 	case 0: // destroy
 		ss.pendingAcq.CloseFD()
 		ss.pendingRel.CloseFD()
+		signalFence(ss.readyRel)
+		ss.readyAcq.CloseFD()
+		ss.readyRel.CloseFD()
 		if o.surf != nil && o.surf.sync == ss {
 			o.surf.sync = nil
 		}
@@ -132,12 +138,19 @@ func (c *Client) applySyncobjAcquire(s *surface) {
 	}
 	f := s.sync.pendingAcq
 	s.sync.pendingAcq = syncobj.Fence{}
-	// Best-effort DRM timeline wait. Failure → implicit sync (Intel).
-	// TODO: Vulkan VK_KHR_external_semaphore + timeline wait on vk-display.
-	if err := syncobj.WaitFence(f, 100*time.Millisecond); err != nil && c.srv != nil && c.srv.log != nil {
+	// Vulkan timeline wait (vkWaitSemaphores) when the importer can;
+	// DRM ioctl fallback. Failure → implicit sync (Intel).
+	var w syncobj.Waiter
+	if c.srv != nil {
+		if tw, ok := c.srv.Import.(syncobj.Waiter); ok {
+			w = tw
+		}
+	}
+	if err := syncobj.WaitAcquire(f, 100*time.Millisecond, w); err != nil && c.srv != nil && c.srv.log != nil {
 		c.srv.log.Printf("drm-syncobj acquire wait fallback (implicit sync): %v", err)
 	}
-	f.CloseFD()
+	s.sync.readyAcq.CloseFD()
+	s.sync.readyAcq = f
 }
 
 func (c *Client) applySyncobjRelease(s *surface) {
@@ -146,10 +159,45 @@ func (c *Client) applySyncobjRelease(s *surface) {
 	}
 	f := s.sync.pendingRel
 	s.sync.pendingRel = syncobj.Fence{}
-	// Signal immediately after import. GPU work may still be in flight —
-	// TODO: signal after vkCmdBlit / scanout completion.
-	if err := syncobj.SignalFence(f); err != nil && c.srv != nil && c.srv.log != nil {
-		c.srv.log.Printf("drm-syncobj release signal skipped: %v", err)
+	// Stash until after vkCmdBlit / sample / scanout (shell signals).
+	signalFence(s.sync.readyRel)
+	s.sync.readyRel.CloseFD()
+	s.sync.readyRel = f
+}
+
+func signalFence(f syncobj.Fence) {
+	if !f.Valid() {
+		return
 	}
-	f.CloseFD()
+	_ = syncobj.SignalFence(f)
+}
+
+func applyActorSync(a *engine.Actor, ss *syncSurface) {
+	if a == nil {
+		return
+	}
+	releaseActorSync(a)
+	if ss == nil {
+		return
+	}
+	a.AcqFD, a.AcqPoint = ss.readyAcq.FD, ss.readyAcq.Point
+	a.RelFD, a.RelPoint = ss.readyRel.FD, ss.readyRel.Point
+	ss.readyAcq = syncobj.Fence{}
+	ss.readyRel = syncobj.Fence{}
+}
+
+func releaseActorSync(a *engine.Actor) {
+	if a == nil {
+		return
+	}
+	if a.RelFD > 0 {
+		_ = syncobj.SignalFence(syncobj.Fence{FD: a.RelFD, Point: a.RelPoint})
+		f := syncobj.Fence{FD: a.RelFD}
+		f.CloseFD()
+	}
+	if a.AcqFD > 0 {
+		f := syncobj.Fence{FD: a.AcqFD}
+		f.CloseFD()
+	}
+	a.AcqFD, a.AcqPoint, a.RelFD, a.RelPoint = 0, 0, 0, 0
 }

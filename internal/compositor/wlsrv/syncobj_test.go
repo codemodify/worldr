@@ -144,3 +144,30 @@ func TestSyncobjPointHelper(t *testing.T) {
 		t.Fatal("lo")
 	}
 }
+
+func TestApplyActorSyncMovesFences(t *testing.T) {
+	acq, err := unix.MemfdCreate("t-acq", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel, err := unix.MemfdCreate("t-rel", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &engine.Actor{}
+	ss := &syncSurface{
+		readyAcq: syncobj.Fence{FD: acq, Point: 3},
+		readyRel: syncobj.Fence{FD: rel, Point: 4},
+	}
+	applyActorSync(a, ss)
+	if a.AcqFD != acq || a.AcqPoint != 3 || a.RelFD != rel || a.RelPoint != 4 {
+		t.Fatalf("actor %+v", a)
+	}
+	if ss.readyAcq.Valid() || ss.readyRel.Valid() {
+		t.Fatal("ready fences should move")
+	}
+	applyActorSync(a, nil)
+	if a.AcqFD != 0 || a.RelFD != 0 {
+		t.Fatalf("cleared %+v", a)
+	}
+}

@@ -1,10 +1,10 @@
 // Package scanout decides when a client dmabuf can be shown via KMS
 // primary-plane commit instead of the CPU desktop upload / Vulkan blit.
 //
-// Full multi-plane overlay assignment is out of scope. This is the
-// primary-fullscreen path: one opaque ARGB/XRGB buffer that covers the
-// output, then drmModeAtomicCommit (or SetCrtc fallback). Intel Arrow
-// Lake is first; NVIDIA/AMD are best-effort (same helpers, AddFB2 may fail).
+// Primary-fullscreen path: one opaque ARGB/XRGB buffer that covers the
+// output, then drmModeAtomicCommit (or SetCrtc fallback). Overlay / cursor
+// assignment lives in planes.go. Intel Arrow Lake is first; NVIDIA/AMD are
+// best-effort (same helpers, AddFB2 may fail).
 package scanout
 
 import (

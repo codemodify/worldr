@@ -23,8 +23,13 @@ func (v *VK) ClearPresent(r, g, b, a float32) error { return ErrUnavailable }
 func (v *VK) UploadPresent(bgra []byte, stride uint32) error {
 	return ErrUnavailable
 }
-func (v *VK) HasDMABuf() bool { return false }
-func (v *VK) IsDisplay() bool { return false }
+func (v *VK) HasDMABuf() bool    { return false }
+func (v *VK) IsDisplay() bool    { return false }
+func (v *VK) HasTimeline() bool  { return false }
+func (v *VK) DisplayPlanes() int { return 0 }
+func (v *VK) WaitTimeline(fd int, point uint64, timeoutNS uint64) error {
+	return ErrUnavailable
+}
 
 type DMABufPlane struct {
 	FD     int
@@ -68,3 +73,14 @@ func (d *DRM) ScanoutDMABuf(fd int, width, height, fourcc uint32, modifier uint6
 }
 func (d *DRM) RestoreScanout() error { return ErrUnavailable }
 func (d *DRM) ScanoutActive() bool   { return false }
+func (d *DRM) PlaneCaps() (bool, bool, uint32, uint32) {
+	return false, false, 0, 0
+}
+func (d *DRM) OverlayDMABuf(fd int, width, height, fourcc uint32, modifier uint64, offset, pitch uint32, x, y int) error {
+	return ErrUnavailable
+}
+func (d *DRM) OverlayDisable() error { return ErrUnavailable }
+func (d *DRM) CursorARGB(x, y int, width, height uint32, bgra []byte, stride uint32) error {
+	return ErrUnavailable
+}
+func (d *DRM) CursorDisable() error { return ErrUnavailable }
