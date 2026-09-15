@@ -43,6 +43,7 @@ struct worldr_drm {
 	uint32_t cursor_pitch;
 	uint32_t cursor_size;
 	int cursor_active;
+	int planes_only;
 };
 
 static void seterr(char *err, int errlen, const char *fmt, int e)
@@ -279,6 +280,126 @@ int worldr_drm_create(const char *card, worldr_drm **out, char *err, int errlen)
 	return 0;
 }
 
+static int drm_open_master(worldr_drm *d, const char *card, char *err, int errlen)
+{
+	if (card && card[0]) {
+		d->fd = open_card(card, d->card, sizeof(d->card), err, errlen);
+		if (d->fd < 0) {
+			return -1;
+		}
+		if (drmSetMaster(d->fd) != 0) {
+			seterr(err, errlen, "drmSetMaster failed — another compositor owns this card. Spare VT: Ctrl+Alt+F3 + scripts/try-tty.sh", errno);
+			close(d->fd);
+			d->fd = -1;
+			return -1;
+		}
+		return 0;
+	}
+	for (int i = 0; i < 8; i++) {
+		char path[64];
+		snprintf(path, sizeof(path), "/dev/dri/card%d", i);
+		int fd = open(path, O_RDWR | O_CLOEXEC);
+		if (fd < 0) {
+			continue;
+		}
+		if (drmSetMaster(fd) == 0) {
+			snprintf(d->card, sizeof(d->card), "%s", path);
+			d->fd = fd;
+			return 0;
+		}
+		close(fd);
+	}
+	seterr(err, errlen, "no DRM card we could drmSetMaster — another compositor owns the GPU, or no /dev/dri/cardN. Spare VT: Ctrl+Alt+F3 + scripts/try-tty.sh", EBUSY);
+	return -1;
+}
+
+static int drm_pick_output(worldr_drm *d, char *err, int errlen)
+{
+	drmModeRes *res = drmModeGetResources(d->fd);
+	if (!res) {
+		seterr(err, errlen, "drmModeGetResources failed", errno);
+		return -1;
+	}
+	drmModeConnector *conn = NULL;
+	for (int i = 0; i < res->count_connectors; i++) {
+		drmModeConnector *c = drmModeGetConnector(d->fd, res->connectors[i]);
+		if (!c) {
+			continue;
+		}
+		if (c->connection == DRM_MODE_CONNECTED && c->count_modes > 0) {
+			conn = c;
+			break;
+		}
+		drmModeFreeConnector(c);
+	}
+	if (!conn) {
+		drmModeFreeResources(res);
+		seterr(err, errlen, "no connected DRM connector", 0);
+		return -1;
+	}
+	d->connector_id = conn->connector_id;
+	d->mode = conn->modes[0];
+	for (int i = 0; i < conn->count_modes; i++) {
+		if (conn->modes[i].type & DRM_MODE_TYPE_PREFERRED) {
+			d->mode = conn->modes[i];
+			break;
+		}
+	}
+	if (conn->encoder_id) {
+		drmModeEncoder *enc = drmModeGetEncoder(d->fd, conn->encoder_id);
+		if (enc) {
+			d->crtc_id = enc->crtc_id;
+			drmModeFreeEncoder(enc);
+		}
+	}
+	if (!d->crtc_id && conn->count_encoders) {
+		drmModeEncoder *enc = drmModeGetEncoder(d->fd, conn->encoders[0]);
+		if (enc) {
+			d->crtc_id = enc->crtc_id;
+			if (!d->crtc_id && res->count_crtcs) {
+				d->crtc_id = res->crtcs[0];
+			}
+			drmModeFreeEncoder(enc);
+		}
+	}
+	if (!d->crtc_id && res->count_crtcs) {
+		d->crtc_id = res->crtcs[0];
+	}
+	d->crtc_mask = 1;
+	for (int i = 0; i < res->count_crtcs; i++) {
+		if (res->crtcs[i] == d->crtc_id) {
+			d->crtc_mask = 1u << i;
+			break;
+		}
+	}
+	drmModeFreeConnector(conn);
+	drmModeFreeResources(res);
+	return 0;
+}
+
+int worldr_drm_create_planes(const char *card, worldr_drm **out, char *err, int errlen)
+{
+	worldr_drm *d = (worldr_drm *)calloc(1, sizeof(*d));
+	if (!d) {
+		seterr(err, errlen, "oom", 0);
+		return -1;
+	}
+	d->fd = -1;
+	d->planes_only = 1;
+	if (drm_open_master(d, card, err, errlen) != 0) {
+		free(d);
+		return -1;
+	}
+	if (drm_pick_output(d, err, errlen) != 0) {
+		drmDropMaster(d->fd);
+		close(d->fd);
+		free(d);
+		return -1;
+	}
+	*out = d;
+	return 0;
+}
+
 void worldr_drm_destroy(worldr_drm *d)
 {
 	if (!d) {
@@ -341,6 +462,21 @@ void worldr_drm_destroy(worldr_drm *d)
 const char *worldr_drm_card(const worldr_drm *d)
 {
 	return d ? d->card : "";
+}
+
+int worldr_drm_fd(const worldr_drm *d)
+{
+	return d ? d->fd : -1;
+}
+
+uint32_t worldr_drm_connector_id(const worldr_drm *d)
+{
+	return d ? d->connector_id : 0;
+}
+
+int worldr_drm_planes_only(const worldr_drm *d)
+{
+	return d && d->planes_only;
 }
 
 uint32_t worldr_drm_width(const worldr_drm *d)
@@ -528,6 +664,10 @@ int worldr_drm_scanout_dmabuf(worldr_drm *d, int dmabuf_fd, uint32_t width, uint
 {
 	if (!d || d->fd < 0 || dmabuf_fd < 0) {
 		seterr(err, errlen, "drm scanout: missing session or dmabuf fd", 0);
+		return -1;
+	}
+	if (d->planes_only) {
+		seterr(err, errlen, "planes-only DRM (vk-display sidecar); no primary scanout", 0);
 		return -1;
 	}
 	if (width != d->mode.hdisplay || height != d->mode.vdisplay) {

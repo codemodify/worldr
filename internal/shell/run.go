@@ -80,7 +80,11 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		if p.vk != nil && p.vk.HasDMABuf() {
 			imp = vkDMABuf{p.vk}
 			if p.vk.IsDisplay() {
-				fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + GPU sample on vk-display; KMS primary scanout when a fullscreen dmabuf is eligible (else blit)")
+				if p.drm != nil && p.drm.PlanesOnly() {
+					fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + GPU sample on vk-display; overlay/cursor via DRM sidecar (primary stays blit)")
+				} else {
+					fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + GPU sample on vk-display; KMS primary scanout when a fullscreen dmabuf is eligible (else blit)")
+				}
 			} else if p.drm != nil {
 				fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + readback; KMS primary scanout for fullscreen ARGB/XRGB (tiled AddFB2 on Intel; NVIDIA/AMD best-effort)")
 			} else {
@@ -626,13 +630,13 @@ func (p *presenter) tryScanout(a *engine.Actor) error {
 	if uint32(a.Width) != sw || uint32(a.Height) != sh {
 		return fmt.Errorf("buffer size != CRTC")
 	}
+	if p.name == string(BackendVKDisplay) {
+		// Vulkan owns the primary plane. Overlay/cursor may share the
+		// master fd via the planes-only sidecar; primary stays GPU blit.
+		return fmt.Errorf("VK_KHR_display holds DRM master for primary; GPU blit fallback")
+	}
 	if p.drm != nil {
 		return p.drm.ScanoutDMABuf(a.ScanFD, sw, sh, a.ScanFourcc, a.ScanMod, a.ScanOff, a.ScanStride)
-	}
-	if p.name == string(BackendVKDisplay) {
-		// VK_KHR_display typically holds DRM master on the same card; a
-		// second fd cannot atomic-commit. Keep the GPU blit path.
-		return fmt.Errorf("VK_KHR_display holds DRM master; GPU blit fallback")
 	}
 	return fmt.Errorf("no KMS session")
 }
@@ -818,6 +822,29 @@ func openPresent(stdout, stderr io.Writer, opt Options, seat Seat) (*presenter, 
 	return nil, fmt.Errorf("no present backend worked: %v", errs)
 }
 
+// openVKDisplay prefers a planes-only DRM master + VK_EXT_acquire_drm_display
+// so overlay/cursor atomic commits share the fd. Falls back to plain
+// VK_KHR_display (compose) when master or the acquire extension is missing.
+func openVKDisplay(p *presenter, card string) (*native.VK, error) {
+	if p == nil {
+		return nil, fmt.Errorf("no presenter")
+	}
+	d, err := native.OpenDRMPlanes(card)
+	if err != nil {
+		p.note += " overlay/cursor: DRM master unavailable (" + err.Error() + ")."
+		return native.OpenVK(true, 0, 0)
+	}
+	vk, err := native.OpenVKOnDRM(d)
+	if err != nil {
+		d.Close()
+		p.note += " overlay/cursor: acquire-drm-display failed (" + err.Error() + "); compose fallback."
+		return native.OpenVK(true, 0, 0)
+	}
+	p.drm = d
+	p.note += " DRM overlay/cursor sidecar (master shared with VK_KHR_display)."
+	return vk, nil
+}
+
 // attachOffscreenVK opens a headless Vulkan session for timeline waits
 // and dmabuf import. Shared by nest, headless, and --backend=drm.
 // vk-display already owns a VK_KHR_display session and must not call this.
@@ -848,13 +875,19 @@ func openOne(opt Options, b Backend) (*presenter, error) {
 		if !HasDRM() {
 			return nil, fmt.Errorf("no /dev/dri/card* — vk-display needs a GPU node and DRM master. Spare TTY: Ctrl+Alt+F3 then scripts/try-tty.sh")
 		}
-		vk, err := native.OpenVK(true, 0, 0)
+		p := &presenter{name: string(b), color: opt.Color,
+			note: "VK_KHR_display GPU clear/present. First bring-up target: Intel / Mesa."}
+		vk, err := openVKDisplay(p, opt.Card)
 		if err != nil {
+			if p.drm != nil {
+				p.drm.Close()
+				p.drm = nil
+			}
 			return nil, err
 		}
 		w, h := vk.Size()
-		return &presenter{name: string(b), device: vk.DeviceName(), w: w, h: h, vk: vk, color: opt.Color,
-			note: "VK_KHR_display GPU clear/present. First bring-up target: Intel / Mesa."}, nil
+		p.vk, p.w, p.h, p.device = vk, w, h, vk.DeviceName()
+		return p, nil
 	case BackendDRM:
 		if !native.Available() {
 			return nil, fmt.Errorf("cgo/drm not in this binary")

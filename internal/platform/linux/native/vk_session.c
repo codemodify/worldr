@@ -54,8 +54,16 @@ struct worldr_vk {
 	int timeline_ok;
 	int ext_sem_fd;
 	uint32_t display_planes;
+	VkDisplayKHR acquired;
 	worldr_dma_slot dma[WORLDR_DMABUF_SLOTS];
 };
+
+#ifndef VK_EXT_ACQUIRE_DRM_DISPLAY_EXTENSION_NAME
+#define VK_EXT_ACQUIRE_DRM_DISPLAY_EXTENSION_NAME "VK_EXT_acquire_drm_display"
+#endif
+
+typedef VkResult(VKAPI_PTR *worldr_vk_get_drm_display_fn)(VkPhysicalDevice physicalDevice, int drmFd, uint32_t connectorId, VkDisplayKHR *display);
+typedef VkResult(VKAPI_PTR *worldr_vk_acquire_drm_display_fn)(VkPhysicalDevice physicalDevice, int drmFd, VkDisplayKHR display);
 
 static void seterr(char *err, int errlen, const char *fmt, VkResult r)
 {
@@ -99,11 +107,16 @@ static int prefer_score(const VkPhysicalDeviceProperties *p)
 	return score;
 }
 
-static int create_instance(int mode, VkInstance *out, char *err, int errlen)
+static int create_instance(int mode, int acquire_drm, VkInstance *out, char *err, int errlen)
 {
 	const char *exts_display[] = {
 		VK_KHR_SURFACE_EXTENSION_NAME,
 		VK_KHR_DISPLAY_EXTENSION_NAME,
+	};
+	const char *exts_acquire[] = {
+		VK_KHR_SURFACE_EXTENSION_NAME,
+		VK_KHR_DISPLAY_EXTENSION_NAME,
+		VK_EXT_ACQUIRE_DRM_DISPLAY_EXTENSION_NAME,
 	};
 	VkApplicationInfo app = {0};
 	app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -117,8 +130,13 @@ static int create_instance(int mode, VkInstance *out, char *err, int errlen)
 	ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	ci.pApplicationInfo = &app;
 	if (mode == WORLDR_VK_DISPLAY) {
-		ci.enabledExtensionCount = 2;
-		ci.ppEnabledExtensionNames = exts_display;
+		if (acquire_drm) {
+			ci.enabledExtensionCount = 3;
+			ci.ppEnabledExtensionNames = exts_acquire;
+		} else {
+			ci.enabledExtensionCount = 2;
+			ci.ppEnabledExtensionNames = exts_display;
+		}
 	}
 
 	VkResult r = vkCreateInstance(&ci, NULL, out);
@@ -297,8 +315,9 @@ static int create_display_surface(worldr_vk *vk, uint32_t prefer_w, uint32_t pre
 
 	/* Prefer a display that still has a free plane (currentDisplay == NULL).
 	   On a spare VT this is the usual case; on a live Plasma session every
-	   plane is held — we still fall back to display 0 so --take-over-display works. */
-	VkDisplayKHR display = disps[0].display;
+	   plane is held — we still fall back to display 0 so --take-over-display works.
+	   When VK_EXT_acquire_drm_display bound a connector, use that display. */
+	VkDisplayKHR display = vk->acquired ? vk->acquired : disps[0].display;
 	uint32_t plane = 0;
 	int picked_free = 0;
 	for (uint32_t i = 0; i < nplanes && planes; i++) {
@@ -672,7 +691,35 @@ static int submit_wait(worldr_vk *vk, VkSemaphore wait, VkPipelineStageFlags wai
 	return 0;
 }
 
-int worldr_vk_create(int mode, uint32_t prefer_w, uint32_t prefer_h, worldr_vk **out, char *err, int errlen)
+static int acquire_drm_display(worldr_vk *vk, int drm_fd, uint32_t connector_id, char *err, int errlen)
+{
+	if (!vk || !vk->instance || drm_fd < 0 || connector_id == 0) {
+		seterr(err, errlen, "VK_EXT_acquire_drm_display: missing fd or connector", VK_SUCCESS);
+		return -1;
+	}
+	worldr_vk_get_drm_display_fn get_disp = (worldr_vk_get_drm_display_fn)vkGetInstanceProcAddr(vk->instance, "vkGetDrmDisplayEXT");
+	worldr_vk_acquire_drm_display_fn acq = (worldr_vk_acquire_drm_display_fn)vkGetInstanceProcAddr(vk->instance, "vkAcquireDrmDisplayEXT");
+	if (!get_disp || !acq) {
+		seterr(err, errlen, "VK_EXT_acquire_drm_display entry points missing", VK_SUCCESS);
+		return -1;
+	}
+	VkDisplayKHR disp = VK_NULL_HANDLE;
+	VkResult r = get_disp(vk->phys, drm_fd, connector_id, &disp);
+	if (r != VK_SUCCESS || disp == VK_NULL_HANDLE) {
+		seterr(err, errlen, "vkGetDrmDisplayEXT failed", r);
+		return -1;
+	}
+	r = acq(vk->phys, drm_fd, disp);
+	if (r != VK_SUCCESS) {
+		seterr(err, errlen, "vkAcquireDrmDisplayEXT failed — not DRM master?", r);
+		return -1;
+	}
+	vk->acquired = disp;
+	return 0;
+}
+
+static int vk_create_ex(int mode, uint32_t prefer_w, uint32_t prefer_h, int drm_fd, uint32_t connector_id,
+			worldr_vk **out, char *err, int errlen)
 {
 	worldr_vk *vk = (worldr_vk *)calloc(1, sizeof(*vk));
 	if (!vk) {
@@ -682,7 +729,8 @@ int worldr_vk_create(int mode, uint32_t prefer_w, uint32_t prefer_h, worldr_vk *
 	vk->mode = mode;
 	vk->width = prefer_w;
 	vk->height = prefer_h;
-	if (create_instance(mode, &vk->instance, err, errlen) != 0) {
+	int acquire = mode == WORLDR_VK_DISPLAY && drm_fd >= 0 && connector_id != 0;
+	if (create_instance(mode, acquire, &vk->instance, err, errlen) != 0) {
 		free(vk);
 		return -1;
 	}
@@ -695,6 +743,12 @@ int worldr_vk_create(int mode, uint32_t prefer_w, uint32_t prefer_h, worldr_vk *
 	vkGetPhysicalDeviceProperties(vk->phys, &props);
 	vk->vendor_id = props.vendorID;
 	snprintf(vk->device_name, sizeof(vk->device_name), "%s", props.deviceName);
+
+	if (acquire && acquire_drm_display(vk, drm_fd, connector_id, err, errlen) != 0) {
+		vkDestroyInstance(vk->instance, NULL);
+		free(vk);
+		return -1;
+	}
 
 	if (create_device(vk, mode == WORLDR_VK_DISPLAY, err, errlen) != 0) {
 		vkDestroyInstance(vk->instance, NULL);
@@ -716,6 +770,21 @@ int worldr_vk_create(int mode, uint32_t prefer_w, uint32_t prefer_h, worldr_vk *
 	}
 	*out = vk;
 	return 0;
+}
+
+int worldr_vk_create(int mode, uint32_t prefer_w, uint32_t prefer_h, worldr_vk **out, char *err, int errlen)
+{
+	return vk_create_ex(mode, prefer_w, prefer_h, -1, 0, out, err, errlen);
+}
+
+int worldr_vk_create_on_drm(int drm_fd, uint32_t connector_id, uint32_t prefer_w, uint32_t prefer_h,
+			    worldr_vk **out, char *err, int errlen)
+{
+	if (drm_fd < 0 || connector_id == 0) {
+		seterr(err, errlen, "VK_EXT_acquire_drm_display needs a master DRM fd and connector", VK_SUCCESS);
+		return -1;
+	}
+	return vk_create_ex(WORLDR_VK_DISPLAY, prefer_w, prefer_h, drm_fd, connector_id, out, err, errlen);
 }
 
 void worldr_vk_destroy(worldr_vk *vk)
@@ -812,7 +881,7 @@ uint32_t worldr_vk_vendor_id(const worldr_vk *vk)
 int worldr_vk_list_devices(char *out, int outlen, char *err, int errlen)
 {
 	VkInstance inst;
-	if (create_instance(WORLDR_VK_HEADLESS, &inst, err, errlen) != 0) {
+	if (create_instance(WORLDR_VK_HEADLESS, 0, &inst, err, errlen) != 0) {
 		return -1;
 	}
 	uint32_t n = 0;

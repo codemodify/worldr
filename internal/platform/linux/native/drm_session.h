@@ -5,8 +5,14 @@
 typedef struct worldr_drm worldr_drm;
 
 int worldr_drm_create(const char *card, worldr_drm **out, char *err, int errlen);
+/* Planes-only sidecar: drmSetMaster + connector/CRTC, no primary SetCrtc.
+ * Used by vk-display so overlay/cursor can share the master fd. */
+int worldr_drm_create_planes(const char *card, worldr_drm **out, char *err, int errlen);
 void worldr_drm_destroy(worldr_drm *d);
 const char *worldr_drm_card(const worldr_drm *d);
+int worldr_drm_fd(const worldr_drm *d);
+uint32_t worldr_drm_connector_id(const worldr_drm *d);
+int worldr_drm_planes_only(const worldr_drm *d);
 uint32_t worldr_drm_width(const worldr_drm *d);
 uint32_t worldr_drm_height(const worldr_drm *d);
 uint32_t worldr_drm_stride(const worldr_drm *d);

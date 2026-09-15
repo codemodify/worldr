@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/codemodify/worldr/internal/engine"
+	"github.com/codemodify/worldr/internal/platform/linux/native"
 	"github.com/codemodify/worldr/internal/scanout"
 )
 
@@ -82,5 +83,43 @@ func TestPresenterTryCursorNeedsDRM(t *testing.T) {
 	err := p.tryCursor(CursorBlit{Visible: true, W: 32, H: 32, Pix: make([]byte, 32*32*4), Stride: 128})
 	if err == nil || !strings.Contains(err.Error(), "no KMS") {
 		t.Fatalf("vk-display cursor without drm: %v", err)
+	}
+}
+
+func TestPresenterTryOverlayVKDisplaySidecarUsesDRM(t *testing.T) {
+	p := &presenter{name: string(BackendVKDisplay), w: 800, h: 600, drm: &native.DRM{}}
+	a := &engine.Actor{
+		X: 40, Y: 50, Width: 320, Height: 200,
+		ScanFD: 4, ScanFourcc: scanout.FourccXRGB8888, ScanStride: 1280,
+	}
+	err := p.tryOverlay(a)
+	if err == nil || strings.Contains(err.Error(), "holds DRM master") {
+		t.Fatalf("sidecar must try libdrm overlay, not skip: %v", err)
+	}
+}
+
+func TestPresenterTryCursorVKDisplaySidecarUsesDRM(t *testing.T) {
+	p := &presenter{name: string(BackendVKDisplay), w: 800, h: 600, drm: &native.DRM{}}
+	err := p.tryCursor(CursorBlit{Visible: true, W: 32, H: 32, Pix: make([]byte, 32*32*4), Stride: 128})
+	if err == nil || strings.Contains(err.Error(), "no KMS") {
+		t.Fatalf("sidecar must try cursor plane: %v", err)
+	}
+}
+
+func TestPresenterTryScanoutVKDisplaySkipsPlanesOnly(t *testing.T) {
+	p := &presenter{name: string(BackendVKDisplay), w: 800, h: 600, drm: &native.DRM{}}
+	a := &engine.Actor{
+		X: 0, Y: 0, Width: 800, Height: 600,
+		ScanFD: 4, ScanFourcc: scanout.FourccXRGB8888, ScanStride: 3200,
+	}
+	err := p.tryScanout(a)
+	if err == nil || !strings.Contains(err.Error(), "primary") {
+		t.Fatalf("vk-display must keep primary on GPU blit: %v", err)
+	}
+}
+
+func TestOpenVKDisplayNilPresenter(t *testing.T) {
+	if _, err := openVKDisplay(nil, ""); err == nil {
+		t.Fatal("nil presenter")
 	}
 }

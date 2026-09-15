@@ -15,6 +15,7 @@ func ListDevices() (string, error) { return "", ErrUnavailable }
 type VK struct{}
 
 func OpenVK(display bool, w, h uint32) (*VK, error) { return nil, ErrUnavailable }
+func OpenVKOnDRM(d *DRM) (*VK, error)               { return nil, ErrUnavailable }
 func (v *VK) Close()                                {}
 func (v *VK) DeviceName() string                    { return "" }
 func (v *VK) Size() (uint32, uint32)                { return 0, 0 }
@@ -61,9 +62,11 @@ func (v *VK) HeadlessClear(r, g, b, a float32) (uint32, error) { return 0, ErrUn
 
 type DRM struct{}
 
-func OpenDRM(card string) (*DRM, error) { return nil, ErrUnavailable }
-func (d *DRM) Close()                   {}
-func (d *DRM) Card() string             { return "" }
+func OpenDRM(card string) (*DRM, error)       { return nil, ErrUnavailable }
+func OpenDRMPlanes(card string) (*DRM, error) { return nil, ErrUnavailable }
+func (d *DRM) PlanesOnly() bool               { return false }
+func (d *DRM) Close()                         {}
+func (d *DRM) Card() string                   { return "" }
 func (d *DRM) Size() (uint32, uint32, uint32) {
 	return 0, 0, 0
 }
