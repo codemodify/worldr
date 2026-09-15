@@ -324,6 +324,33 @@ func TestFractionalScalePreferredScaleOnePointFive(t *testing.T) {
 	if gotOut != 2 {
 		t.Fatalf("wl_output.scale %d want 2", gotOut)
 	}
+
+	s.SetOutputScale(2.0)
+	deadline = time.Now().Add(2 * time.Second)
+	var updFrac, updOut int
+	for time.Now().Before(deadline) && (updFrac == 0 || updOut == 0) {
+		_ = c.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		msg, err := rd.Next()
+		if err != nil {
+			continue
+		}
+		if msg.Object == fracID && msg.Opcode == 0 {
+			cur := wayland.NewCursor(msg.Payload, nil)
+			scale, _ := cur.U32()
+			updFrac = int(scale)
+		}
+		if msg.Object == outID && msg.Opcode == 3 {
+			cur := wayland.NewCursor(msg.Payload, nil)
+			sc, _ := cur.I32()
+			updOut = int(sc)
+		}
+	}
+	if updFrac != 240 {
+		t.Fatalf("broadcast preferred_scale %d want 240", updFrac)
+	}
+	if updOut != 2 {
+		t.Fatalf("broadcast wl_output.scale %d want 2", updOut)
+	}
 }
 
 func bindPayload(name uint32, iface string, ver, id uint32) []byte {

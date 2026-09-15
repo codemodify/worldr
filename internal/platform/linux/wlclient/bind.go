@@ -14,6 +14,8 @@ const (
 	ifaceSeat       = "wl_seat"
 	ifaceDataDev    = "wl_data_device_manager"
 	ifacePrimary    = "zwp_primary_selection_device_manager_v1"
+	ifaceOutput     = "wl_output"
+	ifaceFracScale  = "wp_fractional_scale_manager_v1"
 )
 
 // Max version we implement for each interface we actually bind.
@@ -27,6 +29,8 @@ var bindMaxVersion = map[string]uint32{
 	ifaceSeat:       5, // get_pointer + get_keyboard + pointer.frame
 	ifaceDataDev:    3, // create_data_source + get_data_device + selection
 	ifacePrimary:    1, // zwp_primary_selection if the host advertises it
+	ifaceOutput:     2, // geometry/mode/done/scale — not v3+ name/description
+	ifaceFracScale:  1, // get_fractional_scale on the nest surface
 }
 
 type registryGlobal struct {

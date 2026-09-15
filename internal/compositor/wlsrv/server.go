@@ -237,14 +237,35 @@ func (s *Server) setCursorShape(shape uint32) {
 }
 
 // SetOutputScale sets the single-output scale (1, 1.25, 1.5, 2, …).
-// Clients already bound see the next get_fractional_scale / new wl_output bind.
+// Already-bound clients get an updated wl_output.scale + preferred_scale.
 func (s *Server) SetOutputScale(scale float64) {
 	if s == nil {
 		return
 	}
+	n := ScaleTo120ths(scale)
 	s.mu.Lock()
-	s.scale120 = ScaleTo120ths(scale)
+	prev := s.scale120
+	if prev == 0 {
+		prev = PreferredScale120ths
+	}
+	s.scale120 = n
 	s.mu.Unlock()
+	if n != prev {
+		s.BroadcastScale()
+	}
+}
+
+// BroadcastScale pushes the current preferred / integer scale to bound clients.
+func (s *Server) BroadcastScale() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	cl := append([]*Client(nil), s.clients...)
+	s.mu.Unlock()
+	for _, c := range cl {
+		c.sendScaleUpdate()
+	}
 }
 
 // PreferredScale120ths is the current wp_fractional_scale_v1 value.

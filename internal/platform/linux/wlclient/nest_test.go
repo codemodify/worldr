@@ -57,6 +57,9 @@ func TestNestedClientAgainstWorldr(t *testing.T) {
 	if !win.HostPrimaryBound() {
 		t.Fatal("expected host zwp_primary_selection bind against worldr")
 	}
+	if win.HostScale() != 1 {
+		t.Fatalf("worldr default scale %v", win.HostScale())
+	}
 
 	cw, ch, stride := win.Size()
 	if cw < 1 || ch < 1 || stride < cw*4 {

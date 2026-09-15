@@ -79,11 +79,17 @@ func TestParseOverviewDemoFlag(t *testing.T) {
 
 func TestParseScaleFlag(t *testing.T) {
 	o, err := ParseFlags([]string{})
-	if err != nil || o.Scale != 0 || ResolveOutputScale(o.Scale) != 1 {
+	if err != nil || o.Scale != 0 || ResolveOutputScale(o.Scale, 0) != 1 {
 		t.Fatalf("default %+v %v", o, err)
 	}
+	if ResolveOutputScale(0, 1.5) != 1.5 {
+		t.Fatal("host auto")
+	}
+	if ResolveOutputScale(2, 1.5) != 2 {
+		t.Fatal("explicit overrides host")
+	}
 	o, err = ParseFlags([]string{"-scale=1.5"})
-	if err != nil || o.Scale != 1.5 || ResolveOutputScale(o.Scale) != 1.5 {
+	if err != nil || o.Scale != 1.5 || ResolveOutputScale(o.Scale, 2) != 1.5 {
 		t.Fatalf("1.5 %+v %v", o, err)
 	}
 	if _, err := ParseFlags([]string{"-scale=-1"}); err == nil {

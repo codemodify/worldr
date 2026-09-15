@@ -32,8 +32,11 @@ func TestClampBindVersion(t *testing.T) {
 		{ifaceDataDev, 1, 1, true},
 		{ifacePrimary, 1, 1, true},
 		{ifacePrimary, 0, 0, false},
+		{ifaceOutput, 4, 2, true}, // never bind v3+ name/description
+		{ifaceOutput, 2, 2, true},
+		{ifaceOutput, 1, 1, true},
+		{ifaceFracScale, 1, 1, true},
 		// common KWin traps — must never bind (v0 or too-high)
-		{"wl_output", 4, 0, false},
 		{"wp_viewporter", 1, 0, false},
 		{"zwp_linux_dmabuf_v1", 5, 0, false},
 		{"wp_cursor_shape_manager_v1", 2, 0, false},
