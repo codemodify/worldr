@@ -22,7 +22,7 @@ const (
 	globalViewporter uint32 = 8
 	globalDataDev    uint32 = 9
 	globalSubcomp    uint32 = 10
-	// 11–15 are in extras.go (cursor, activation, primary, xwayland_shell, fractional_scale)
+	// 11–16 are in extras.go (cursor, activation, primary, xwayland_shell, fractional_scale, text-input)
 )
 
 type objectKind int
@@ -67,6 +67,8 @@ const (
 	kindXwSurface
 	kindFracScaleMgr
 	kindFracScale
+	kindTextInputMgr
+	kindTextInput
 )
 
 type object struct {
@@ -78,6 +80,7 @@ type object struct {
 	xdgS *xdgSurface
 	xdgT *xdgToplevel
 	dma  *dmaBuf
+	ti   *textInput
 }
 
 type shmPool struct {
@@ -318,6 +321,10 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqFracScaleMgr(o, msg.Opcode, cur)
 	case kindFracScale:
 		return c.reqFracScale(o, msg.Opcode, cur)
+	case kindTextInputMgr:
+		return c.reqTextInputMgr(o, msg.Opcode, cur)
+	case kindTextInput:
+		return c.reqTextInput(o, msg.Opcode, cur)
 	case kindKeyboard, kindOutput, kindDataDevice, kindPositioner, kindCallback, kindDmaFeedback, kindSubsurface, kindPrimSource:
 		return nil
 	default:
@@ -367,6 +374,7 @@ func (c *Client) advertise(reg uint32) error {
 		{globalPrimary, "zwp_primary_selection_device_manager_v1", 1},
 		{globalXwayland, "xwayland_shell_v1", 1},
 		{globalFractionalScale, "wp_fractional_scale_manager_v1", 1},
+		{globalTextInput, "zwp_text_input_manager_v3", 1},
 	}
 	for _, gl := range globals {
 		p := wayland.PutU32(nil, gl.name)
@@ -446,10 +454,14 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 		o.kind = kindXwShell
 	case globalFractionalScale:
 		o.kind = kindFracScaleMgr
+	case globalTextInput:
+		o.kind = kindTextInputMgr
 	default:
 		switch iface {
 		case "wl_data_device_manager":
 			o.kind = kindDataDeviceManager
+		case "zwp_text_input_manager_v3":
+			o.kind = kindTextInputMgr
 		default:
 			c.srv.log.Printf("bind unknown %s name=%d", iface, name)
 		}
@@ -585,6 +597,10 @@ func (c *Client) reqSurface(o *object, op uint16, cur *wayland.Cursor) error {
 	case 0: // destroy
 		if c.entered == o.id {
 			c.pointerLeaveCurrent()
+		}
+		if c.kbdSurf == o.id {
+			c.keyboardLeave(o.id)
+			c.kbdSurf = 0
 		}
 		if s.actor != nil {
 			c.srv.Scene.Remove(s.actor)

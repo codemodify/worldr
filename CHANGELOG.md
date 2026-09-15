@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.6-dev — zwp_text_input_v3 (IME stub)
+
+- Advertise `zwp_text_input_manager_v3`. Clients can `get_text_input`, `enable` / `disable`, and `commit` (acked with `done`).
+- `enter` / `leave` follow `wl_keyboard` focus. No ibus/fcitx bridge; compose stays on the US xkb keymap via `wl_keyboard.key` (avoids double-insert).
+- Foot’s `text input interface not implemented by compositor; IME will be disabled` warning should be gone. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
+
 ## 0.9.5-dev — pointer button press/release hygiene
 
 - Track per-client `wl_pointer.button` state. A client only gets a release if it previously got the matching press while focused.

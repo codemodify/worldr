@@ -12,6 +12,7 @@ const (
 	globalPrimary         uint32 = 13
 	globalXwayland        uint32 = 14
 	globalFractionalScale uint32 = 15
+	globalTextInput       uint32 = 16
 )
 
 // PreferredScale120ths is 1.0 in wp_fractional_scale_v1 units (scale / 120).

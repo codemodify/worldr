@@ -3,7 +3,7 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** 0.9.5-dev on `cursor/pointer-button-hygiene-c92c` (stacked on full US keymap). Pointer press/release hygiene; **Ctrl+Q** quits.
+**Status:** 0.9.6-dev on `cursor/text-input-v3-c92c` (stacked on pointer hygiene). `zwp_text_input_v3` advertised; compose still xkb; **Ctrl+Q** quits.
 Nested compositor is the safe demo. Real display: spare TTY via `scripts/try-tty.sh`.
 Human history: [CHANGELOG.md](CHANGELOG.md). Abox notes: [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 

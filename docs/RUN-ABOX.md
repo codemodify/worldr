@@ -72,8 +72,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on full US keymap):
-git checkout cursor/pointer-button-hygiene-c92c
+# this branch (stacked on pointer hygiene):
+git checkout cursor/text-input-v3-c92c
 
 export CGO_ENABLED=1
 make build
@@ -363,7 +363,7 @@ disconnected cleanly** against the compositor.
 | Client | Buffer | Expected now | Notes |
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). Cursors, activation, primary-selection stub, fractional-scale 120. Still expected: `xdg-toplevel-icon`, text-input/IME. |
+| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client (0.9.5). `zwp_text_input_manager_v3` is advertised (0.9.6) — the `text input interface not implemented; IME will be disabled` warning should be gone. Compose still uses xkb (no ibus/fcitx bridge). Cursors, activation, primary-selection stub, fractional-scale 120. Still expected: `xdg-toplevel-icon`. |
 | `kitty` | linux-dmabuf (GL) | **Try** | GPU path: Vulkan import + CPU readback. Needs `linux-dmabuf: Vulkan import` in the shell log. LINEAR mmap fallback if the buffer is linear. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Needs clipboard, popups, subsurfaces, idle-inhibit, etc. |
@@ -407,8 +407,8 @@ Workaround — real display on **tty3**:
 - SSD is thicker accent + title gradient + focused glow (still not a toolkit)
 - Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)
 - Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY. Unmatched host `wl_pointer.button` releases are dropped (foot stray-release warning should be gone).
-- Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
-- Fractional scale stub: `preferred_scale` 120 (1.0); still integer composite. No `xdg-toplevel-icon` or IME (`zwp_text_input`)
+- Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. `zwp_text_input_v3` is advertised (enable/enter/leave/done). No ibus/fcitx bridge yet — compose stays on xkb.
+- Fractional scale stub: `preferred_scale` 120 (1.0); still integer composite. No `xdg-toplevel-icon`.
 - Compiz theater v0 is hardcoded (no plugin graph); `--effects=off` disables
 - Launcher is a hardcoded list (no `.desktop` / menu scan)
 - Panel is CPU-composited chrome (not a toolkit)
