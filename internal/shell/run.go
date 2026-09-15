@@ -182,7 +182,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	case engine.TierLow:
 		fmt.Fprintln(stdout, "theater: effects=low (fade-only map/unmap)")
 	default:
-		fmt.Fprintf(stdout, "theater: effects=high (scale+fade map %s / unmap %s, focus pulse)\n",
+		fmt.Fprintf(stdout, "theater: effects=high (scale+fade+rise map %s / minimize-to-panel unmap %s, focus glow)\n",
 			engine.MapInDuration, engine.MapOutDuration)
 	}
 
@@ -258,22 +258,29 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		}
 		wcons := handleWorkspaceKeys(scene, ptr, now, &ctrlHeld, &altHeld, &shiftHeld)
 		consume := handleOverviewKeys(&ov, ptr, scene, now, int(w), deskH, &metaHeld, ln.Open, &ctrlHeld, &altHeld)
+		p.consume = resetKeySet(p.consume)
+		for code, ok := range consume {
+			if ok {
+				p.consume[code] = true
+			}
+		}
 		for code, ok := range wcons {
 			if ok {
-				consume[code] = true
+				p.consume[code] = true
 			}
 		}
 		for code, ok := range lcons {
 			if ok {
-				consume[code] = true
+				p.consume[code] = true
 			}
 		}
 		quit, qcons := handleQuitKeys(ptr, ctrlHeld, ov.Want || ln.Open, desktopHasClient(scene))
 		for code, ok := range qcons {
 			if ok {
-				consume[code] = true
+				p.consume[code] = true
 			}
 		}
+		consume = p.consume
 		if quit {
 			fmt.Fprintln(stdout, "quit key")
 			return nil
@@ -376,8 +383,16 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 					cur.Visible = custom
 				}
 			}
-			actors := scene.Actors()
-			desk := desktopActors(scene)
+			actors := scene.ActorsInto(p.actors)
+			p.actors = actors
+			desk := p.desk[:0]
+			active := scene.ActiveWorkspace()
+			for _, a := range actors {
+				if a != nil && a.Workspace == active {
+					desk = append(desk, a)
+				}
+			}
+			p.desk = desk
 			FillThemeIcons(actors, ln.Items)
 			var ld *LauncherDraw
 			if ln.Open {
@@ -479,17 +494,19 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				OverviewOn: ov.Want,
 				Launcher:   ld,
 				WS:         scene.WorkspacePose(now),
-				Occupied:   scene.Occupied(),
+				Occupied:   scene.OccupiedInto(p.occupied),
 			}
 			if fa := focusedActor(desk); fa != nil {
 				ch.Icon, ch.IconW, ch.IconH, ch.IconStride = fa.IconPix, fa.IconW, fa.IconH, fa.IconStride
 			}
+			p.occupied = ch.Occupied
 			p.waitActorsSync(actors)
 			CompositeDesktop(fb, stride, int(w), int(h), pixel, actors, opt.SSD, cur,
-				Theater{Now: now, Tier: opt.Effects},
+				Theater{Now: now, Tier: opt.Effects, PanelH: PanelH},
 				OverviewDraw{T: ov.Progress(now), Select: ov.Select},
 				ch, gpuOverlay)
-			layers := gpuLayers(actors, ch, int(w), gpuOverlay)
+			layers := gpuLayersInto(p.layersBuf, actors, ch, int(w), gpuOverlay)
+			p.layersBuf = layers
 			if err := p.upload(fb, uint32(stride), layers); err != nil {
 				return err
 			}
@@ -521,6 +538,11 @@ type presenter struct {
 	overlayMiss bool
 	cursorOn    bool
 	cursorMiss  bool
+	actors      []*engine.Actor
+	desk        []*engine.Actor
+	occupied    []bool
+	layersBuf   []native.GPULayer
+	consume     map[uint32]bool
 }
 
 func nestedPresent(name string) bool {
@@ -566,10 +588,18 @@ func (p *presenter) clear(c [4]float32) error {
 }
 
 func gpuLayers(actors []*engine.Actor, ch ChromeDraw, screenW int, on bool) []native.GPULayer {
-	if !on {
+	out := gpuLayersInto(nil, actors, ch, screenW, on)
+	if len(out) == 0 {
 		return nil
 	}
-	var out []native.GPULayer
+	return out
+}
+
+func gpuLayersInto(dst []native.GPULayer, actors []*engine.Actor, ch ChromeDraw, screenW int, on bool) []native.GPULayer {
+	dst = dst[:0]
+	if !on {
+		return dst
+	}
 	for _, a := range actors {
 		if a == nil || a.GPUSlot <= 0 || a.ScaledBuffer() || a.PlaneSkip {
 			continue
@@ -578,9 +608,9 @@ func gpuLayers(actors []*engine.Actor, ch ChromeDraw, screenW int, on bool) []na
 		if !show {
 			continue
 		}
-		out = append(out, native.GPULayer{Slot: a.GPUSlot, X: a.X + ox, Y: a.Y, W: a.Width, H: a.Height})
+		dst = append(dst, native.GPULayer{Slot: a.GPUSlot, X: a.X + ox, Y: a.Y, W: a.Width, H: a.Height})
 	}
-	return out
+	return dst
 }
 
 func (p *presenter) tryScanout(a *engine.Actor) error {

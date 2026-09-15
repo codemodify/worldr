@@ -119,9 +119,10 @@ foot
 
 You should see a bottom panel (clock + **apps** / **grid**) and foot (or the
 shm client) with a cyan/magenta SSD frame inside the
-`worldr-shell (nested compositor)` window. On map it **scale+fades in** (~260ms);
-on close it scale+fades out (~220ms). Clicking another window gives a short
-lift/shadow pulse. Pointer and keys while that window is focused are forwarded
+`worldr-shell (nested compositor)` window. On map it **scale+fades+rises in** (~280ms);
+on close it scale+fades toward the panel (~240ms, minimize-to-panel).
+Clicking another window gives a short lift/shadow/glow pulse. Workspace
+switch is ease-in-out with a light dim. Pointer and keys while that window is focused are forwarded
 into worldr (title-bar drag still works). Pointer buttons are paired
 per client: a nested host release is forwarded only after a matching
 press, and leave-while-down emits that matching release. Foot should
@@ -499,7 +500,7 @@ Workaround — real display on **tty3**:
 - Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
 - Fractional scale (0.9.16 / 0.9.21): nest follows host `preferred_scale` / `wl_output.scale`. `--scale` overrides. vk-display/drm default 1.0. Viewport / `set_buffer_scale` / window geometry size the logical window. Single worldr output.
 - Window icons (0.9.18): `xdg_toplevel_icon` shm buffers on SSD + panel win when set. Else XDG theme PNG (`Icon=` / `AppID` / `set_name`) in current theme + hicolor. No SVG raster, no full `index.theme` inheritance. No IME (`zwp_text_input`).
-- Compiz theater v0 is hardcoded (no plugin graph); `--effects=off` disables
+- Compiz theater (**0.9.24**): hardcoded scale/fade/rise map-in, minimize-to-panel unmap, focus glow, ease-in-out workspace slide. No wobbly/cube. `--effects=off|low|high`. Frame loop reuses slices (no per-frame actor-list storm).
 - Launcher reads XDG `.desktop` files and theme PNGs for `Icon=` (0.9.18). `Terminal=true` apps skipped; no ibus/fcitx IME
 - Panel is CPU-composited chrome (not a toolkit)
 - Workspaces (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. No Super+1..N, no drag-to-desktop, no per-output set. Overview is current-desktop only (shows `desk N/M`). Empty desktops stay addressable.

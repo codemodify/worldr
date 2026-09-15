@@ -16,11 +16,12 @@ type CursorBlit struct {
 	Visible      bool
 }
 
-// Theater is the v0 Compiz-style pose applied on the shared present path
+// Theater is the Compiz-style pose applied on the shared present path
 // (nested wayland-client, vk-display, drm).
 type Theater struct {
-	Now  time.Time
-	Tier engine.Tier
+	Now    time.Time
+	Tier   engine.Tier
+	PanelH int // minimize-to-panel target
 }
 
 // CompositeDesktop draws the cinematic clear, window actors, optional SSD,
@@ -32,9 +33,9 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 	deskH := usableHeight(h, ch.PanelH)
 	if ov.T > 0 {
 		if ch.WS.Count > 1 {
-			actors = filterWorkspace(actors, ch.WS.Active)
+			actors = compactWorkspace(actors, ch.WS.Active)
 		}
-		actors = filterChromeActors(actors)
+		actors = compactChrome(actors)
 		engine.FillRectAlpha(dst, stride, w, h, 0, 0, w, deskH, 0xff000000, 0.38*ov.T)
 		if ch.WS.Count > 1 {
 			lbl := "desk " + engine.WorkspaceLabel(ch.WS.Active, ch.WS.Count)
@@ -72,24 +73,28 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 	}
 }
 
-func filterWorkspace(actors []*engine.Actor, ws int) []*engine.Actor {
-	out := make([]*engine.Actor, 0, len(actors))
+// compactWorkspace filters in-place (snapshot only; no new alloc).
+func compactWorkspace(actors []*engine.Actor, ws int) []*engine.Actor {
+	n := 0
 	for _, a := range actors {
 		if a != nil && a.Workspace == ws {
-			out = append(out, a)
+			actors[n] = a
+			n++
 		}
 	}
-	return out
+	return actors[:n]
 }
 
-func filterChromeActors(actors []*engine.Actor) []*engine.Actor {
-	out := make([]*engine.Actor, 0, len(actors))
+// compactChrome filters in-place (snapshot only).
+func compactChrome(actors []*engine.Actor) []*engine.Actor {
+	n := 0
 	for _, a := range actors {
 		if a != nil && !a.NoChrome {
-			out = append(out, a)
+			actors[n] = a
+			n++
 		}
 	}
-	return out
+	return actors[:n]
 }
 
 func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theater, ox int, gpuOverlay bool) {
@@ -105,8 +110,13 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 	if v.Gone {
 		return
 	}
+	mx, my := 0, 0
+	if fx.Tier == engine.TierHigh && v.Phase == engine.PhaseMapOut {
+		mx, my = engine.MinimizeDelta(a, v, w, h, fx.PanelH)
+	}
+	slideA := engine.SlideFade(ox, w)
 	ssd = ssd && !a.NoChrome
-	if v.Identity() {
+	if v.Identity() && slideA >= 0.999 && mx == 0 && my == 0 {
 		if ssd {
 			decorations.Draw(dst, stride, w, h, a)
 		}
@@ -126,19 +136,23 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 	if !ssd {
 		fw, fh = a.Width, a.Height
 	}
-	cx := a.X + a.Width/2
-	cy := a.Y + a.Height/2
+	cx := a.X + a.Width/2 + v.SlideX + mx
+	cy := a.Y + a.Height/2 + v.SlideY + my
 	if ssd {
-		cx = a.X - decorations.Border + fw/2
-		cy = a.Y - decorations.TitleH + fh/2
+		cx = a.X - decorations.Border + fw/2 + v.SlideX + mx
+		cy = a.Y - decorations.TitleH + fh/2 + v.SlideY + my
 	}
 	sw := scaleI(fw, v.Scale)
 	sh := scaleI(fh, v.Scale)
 	sx := cx - sw/2
 	sy := cy - sh/2 - v.Lift
+	alpha := v.Alpha * slideA
 	if v.Shadow > 0 {
 		pad := 10
 		engine.FillRectAlpha(dst, stride, w, h, sx-pad, sy-pad+6, sw+2*pad, sh+2*pad, 0xff000010, v.Shadow)
+	}
+	if v.Glow > 0 {
+		drawFocusGlow(dst, stride, w, h, sx, sy, sw, sh, v.Glow)
 	}
 	if ssd {
 		th := scaleI(decorations.TitleH, v.Scale)
@@ -150,18 +164,32 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 			bd = 1
 		}
 		frame, title := decorations.FrameColors(a.Focused)
-		engine.FillRectAlpha(dst, stride, w, h, sx, sy, sw, th, title, v.Alpha)
-		engine.FillRectAlpha(dst, stride, w, h, sx, sy, sw, scaleI(decorations.AccentH, v.Scale), decorations.TitleStripe(), v.Alpha)
-		engine.FillRectAlpha(dst, stride, w, h, sx, sy, bd, sh, frame, v.Alpha)
-		engine.FillRectAlpha(dst, stride, w, h, sx+sw-bd, sy, bd, sh, frame, v.Alpha)
-		engine.FillRectAlpha(dst, stride, w, h, sx, sy+sh-bd, sw, bd, frame, v.Alpha)
+		engine.FillRectAlpha(dst, stride, w, h, sx, sy, sw, th, title, alpha)
+		engine.FillRectAlpha(dst, stride, w, h, sx, sy, sw, scaleI(decorations.AccentH, v.Scale), decorations.TitleStripe(), alpha)
+		engine.FillRectAlpha(dst, stride, w, h, sx, sy, bd, sh, frame, alpha)
+		engine.FillRectAlpha(dst, stride, w, h, sx+sw-bd, sy, bd, sh, frame, alpha)
+		engine.FillRectAlpha(dst, stride, w, h, sx, sy+sh-bd, sw, bd, frame, alpha)
 		cw, ch := scaleI(a.Width, v.Scale), scaleI(a.Height, v.Scale)
 		srcW, srcH := a.PixelSize()
-		engine.BlitBGRAScaledAlpha(dst, stride, w, h, sx+bd, sy+th, cw, ch, a.Pixels, a.Stride, srcW, srcH, v.Alpha)
+		engine.BlitBGRAScaledAlpha(dst, stride, w, h, sx+bd, sy+th, cw, ch, a.Pixels, a.Stride, srcW, srcH, alpha)
 		return
 	}
 	srcW, srcH := a.PixelSize()
-	engine.BlitBGRAScaledAlpha(dst, stride, w, h, sx, sy, sw, sh, a.Pixels, a.Stride, srcW, srcH, v.Alpha)
+	engine.BlitBGRAScaledAlpha(dst, stride, w, h, sx, sy, sw, sh, a.Pixels, a.Stride, srcW, srcH, alpha)
+}
+
+func drawFocusGlow(dst []byte, stride, w, h, x, y, fw, fh int, glow float64) {
+	if glow <= 0 {
+		return
+	}
+	pixel := decorations.FocusGlow()
+	for i, a := range []float64{0.28, 0.16, 0.08} {
+		pad := (i + 1) * 2
+		engine.FillRectAlpha(dst, stride, w, h, x-pad, y-pad, fw+2*pad, 2, pixel, a*glow)
+		engine.FillRectAlpha(dst, stride, w, h, x-pad, y+fh+pad-2, fw+2*pad, 2, pixel, a*glow)
+		engine.FillRectAlpha(dst, stride, w, h, x-pad, y-pad, 2, fh+2*pad, pixel, a*glow)
+		engine.FillRectAlpha(dst, stride, w, h, x+fw+pad-2, y-pad, 2, fh+2*pad, pixel, a*glow)
+	}
 }
 
 // OverviewDraw is the expose pose (T=0 is the normal desktop).

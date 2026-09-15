@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.24-dev — Compiz theater polish
+
+- Map-in: slightly longer ease-out scale+fade, plus a short rise on `--effects=high`. Map-out scales/fades toward the panel title slot (cheap minimize-to-panel). Focus pulse adds a magenta glow ring (lift+shadow kept).
+- Workspace switch uses ease-in-out (softer start/settle) and a light dim on the sliding desktops. `--effects=low` stays fade-only; `off` is still instant.
+- Frame loop reuses actor/occupancy/GPU-layer slices and the key-consume map. Overview filters compact in-place. No IME. No Brave/Ark.
+
 ## 0.9.23-dev — Vulkan timeline wait + overlay/cursor planes
 
 - `wp_linux_drm_syncobj` acquire points wait on a Vulkan timeline semaphore (`VK_KHR_external_semaphore_fd` + `vkWaitSemaphores`) before dmabuf sample, `vkCmdBlit`, and KMS scanout. DRM `SYNCOBJ_TIMELINE` ioctl remains the fallback. Release is signaled after present, not at commit.

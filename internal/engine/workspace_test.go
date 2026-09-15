@@ -142,8 +142,8 @@ func TestWorkspacePoseSettledAndSlide(t *testing.T) {
 	}
 	s.SwitchTo(1, now)
 	mid := s.WorkspacePose(now.Add(WorkspaceDuration / 2))
-	if mid.From != 0 || mid.To != 1 || mid.Dir != 1 || mid.T <= 0.5 {
-		t.Fatalf("mid %+v", mid)
+	if mid.From != 0 || mid.To != 1 || mid.Dir != 1 || mid.T < 0.4 || mid.T > 0.6 {
+		t.Fatalf("ease-in-out mid %+v", mid)
 	}
 	done := s.WorkspacePose(now.Add(WorkspaceDuration))
 	if done.Active != 1 || done.T != 1 || done.From != done.To {
