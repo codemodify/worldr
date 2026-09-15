@@ -83,6 +83,7 @@ func fallbackCatalog(xwayland bool) []LaunchItem {
 		out = append(out,
 			LaunchItem{Label: "xeyes", Bin: "xeyes", X11: true},
 			LaunchItem{Label: "xterm", Bin: "xterm", X11: true},
+			LaunchItem{Label: "xcalc", Bin: "xcalc", X11: true},
 		)
 	}
 	return out
@@ -125,18 +126,18 @@ func desktopID(rel string) string {
 }
 
 type desktopEntry struct {
-	Type         string
-	Name         string
-	Exec         string
-	Icon         string
-	TryExec      string
-	NoDisplay    bool
-	Hidden       bool
-	Terminal     bool
-	OnlyShowIn   []string
-	NotShowIn    []string
-	inEntry      bool
-	sawDesktop   bool
+	Type       string
+	Name       string
+	Exec       string
+	Icon       string
+	TryExec    string
+	NoDisplay  bool
+	Hidden     bool
+	Terminal   bool
+	OnlyShowIn []string
+	NotShowIn  []string
+	inEntry    bool
+	sawDesktop bool
 }
 
 func parseDesktopFile(path, currentDesktop string, xwayland bool) (LaunchItem, bool) {

@@ -35,6 +35,11 @@ type Server struct {
 
 	clip *selection
 	prim *selection
+
+	// X11OnMap is set by the shell when a tiny XWM is running.
+	X11OnMap func(bufW, bufH int) (X11MapHints, bool)
+	// X11OnFocus tells the XWM which X11 window should receive input.
+	X11OnFocus func(win uint32)
 }
 
 // Listen opens $XDG_RUNTIME_DIR/<name>. Empty name → first free wayland-N (from 1).

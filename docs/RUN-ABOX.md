@@ -43,10 +43,10 @@ sudo pacman -S --needed \
   vulkan-headers vulkan-icd-loader vulkan-intel vulkan-tools \
   mesa libdrm wayland wayland-protocols \
   weston \
-  xorg-xwayland xorg-xeyes xterm
+  xorg-xwayland xorg-xeyes xterm xorg-xcalc
 ```
 
-`weston` provides `weston-simple-shm`. `xorg-xwayland` + `xterm` / `xorg-xeyes` are for `--xwayland`.
+`weston` provides `weston-simple-shm`. `xorg-xwayland` + `xterm` / `xorg-xeyes` / `xorg-xcalc` are for `--xwayland`.
 
 `vulkan-radeon` / `nvidia-utils` are fine later; **abox is Intel first**.
 
@@ -194,7 +194,7 @@ The list is scanned from XDG `.desktop` files (`~/.local/share/applications`
 and `$XDG_DATA_DIRS/applications`). `Name=` is shown; `Exec=` is launched
 with `%f` / `%F` / `%u` / `%U` field codes stripped. `Hidden` / `NoDisplay`
 / `Terminal=true` entries are skipped. If the scan is empty, the fallback
-is `foot`, `weston-simple-shm`, and `xeyes` / `xterm` when `--xwayland`
+is `foot`, `weston-simple-shm`, and `xeyes` / `xterm` / `xcalc` when `--xwayland`
 is on. Missing binaries log `launcher: … not on PATH` and the shell keeps
 running.
 
@@ -235,7 +235,9 @@ If the host window fails to map, paste those lines. Workaround: spare TTY
 Same nested window, plus a rootless Xwayland child attached to the **worldr**
 socket (not Plasma’s Xwayland) and a tiny compositing XWM (`-wm` fd,
 `CompositeRedirectSubwindows` + MapRequest / ConfigureRequest).
-X11 windows become actors + SSD via `xwayland_shell_v1`.
+X11 windows become actors via `xwayland_shell_v1`. Managed normals get SSD;
+titles come from `WM_NAME` / `_NET_WM_NAME` and `WM_CLASS`. Override-redirect
+and transients (menus, tooltips) skip SSD and keep the client position.
 
 ```sh
 ./bin/worldr-shell --backend=wayland-client --xwayland --duration=60s
@@ -248,15 +250,18 @@ export DISPLAY=:N          # the number the shell printed — not $DISPLAY from 
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 xeyes
 # or: xterm
+# harder: xcalc (menus should appear without SSD; click another xterm to restack)
 ```
 
 Do **not** set `WAYLAND_DISPLAY` for xeyes/xterm (they are X11 clients).
 Do **not** use the host `DISPLAY=:0` — that is Plasma, not worldr.
 
 If `Xwayland` is missing: `pacman -S xorg-xwayland`. X11 clients are **not** on
-a stock Arch desktop — also `sudo pacman -S xorg-xeyes xterm`. The compositor
-still hosts foot. Known spike limits: no full EWMH (no `_NET_WM_*` desktop, no
-reparenting), override-redirect / popups may mis-size, titles default to `X11`.
+a stock Arch desktop — also `sudo pacman -S xorg-xeyes xterm xorg-xcalc`. The compositor
+still hosts foot. 0.9.11: `_NET_SUPPORTED` / active window / titles / click-to-focus
+and raise; override-redirect and `WM_TRANSIENT_FOR` skip SSD. Still not a full
+ICCCM WM (no reparenting, no pager/struts, no IME). xterm Ctrl+right-click or
+xcalc menus are the harder check.
 worldr now requests a free `DISPLAY` starting at `:1` so it does not clash with
 Plasma’s `:0` (avoids `_XSERVTransSocketUNIXCreateListener: server already running`).
 
@@ -406,7 +411,7 @@ disconnected cleanly** against the compositor.
 | `kitty` | linux-dmabuf (GL) | **Try** | On **vk-display** (0.9.10): Vulkan import + GPU blit into the compositor pass (ARGB/XRGB). Nested/drm still readback or LINEAR mmap. Log: `linux-dmabuf: Vulkan import + GPU sample`. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
-| X11 apps | XWayland | **Try (`--xwayland`)** | Rootless `Xwayland` + tiny XWM on the worldr socket. `DISPLAY=:N xeyes` / `xterm` should map as SSD actors. |
+| X11 apps | XWayland | **Try (`--xwayland`)** | Rootless `Xwayland` + EWMH-ish XWM. `DISPLAY=:N xeyes` / `xterm` map as SSD actors with real titles. `xcalc` (or xterm’s Ctrl+right-click menu) should be chrome-less. Click-to-focus raises + `SetInputFocus`. |
 
 GPU-accelerated path (vk-display, 0.9.10): client dmabuf → Vulkan import → **sample/blit in the compositor pass**. Nested/drm: import → linear readback or mmap → CPU composite. shm remains the fallback.
 
@@ -439,7 +444,7 @@ Workaround — real display on **tty3**:
 
 ## Known gaps
 
-- XWayland spike: `--xwayland` rootless + tiny XWM + `xwayland_shell_v1` (not a full EWMH WM)
+- XWayland (0.9.11): `--xwayland` rootless + tiny XWM + `xwayland_shell_v1`. EWMH basics (`_NET_SUPPORTED`, active window, titles/class, delete/take-focus). Not a full ICCCM WM (no reparenting/pager). Overlay menus skip SSD.
 - `xdg_popup` + `wl_subsurface` stacking (0.9.8): menus/tooltips/dropdowns. Positioner uses size + anchor + offset (no constraint/flip). Foot right-click menu is the abox check.
 - Clipboard (0.9.9): `text/plain` between worldr clients. Nested host clipboard (Plasma ↔ worldr) is a follow-up — the nest client does not bind host `wl_data_device`.
 - dmabuf (0.9.10): GPU sample on vk-display only. No KMS scanout bypass, no explicit `linux-drm-syncobj` (Intel implicit sync via image layout). Nested host still CPU-composites.

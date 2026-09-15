@@ -734,9 +734,19 @@ func (c *Client) mapSurface(s *surface) {
 		w, h = s.destW, s.destH
 	}
 	child := c.isChildSurface(s)
+	var x11 X11MapHints
+	var x11ok bool
+	if s.xwayland && c.srv.X11OnMap != nil {
+		x11, x11ok = c.srv.X11OnMap(w, h)
+	}
+	noChrome := child || (x11ok && x11.NoChrome)
 	if s.actor == nil {
-		s.actor = &engine.Actor{NoChrome: child}
-		if child {
+		s.actor = &engine.Actor{NoChrome: noChrome}
+		if noChrome && !child && x11ok {
+			s.actor.X, s.actor.Y = x11.X, x11.Y
+			c.srv.Scene.Add(s.actor)
+			c.srv.Scene.Raise(s.actor)
+		} else if child {
 			c.placeChild(s)
 			c.srv.Scene.Add(s.actor)
 			c.srv.Scene.Raise(s.actor)
@@ -747,12 +757,15 @@ func (c *Client) mapSurface(s *surface) {
 	} else if child {
 		c.placeChild(s)
 		c.srv.Scene.Raise(s.actor)
+	} else if noChrome && x11ok {
+		s.actor.X, s.actor.Y = x11.X, x11.Y
+		c.srv.Scene.Raise(s.actor)
 	}
 	s.actor.Width = w
 	s.actor.Height = h
 	s.actor.Stride = stride
 	s.actor.Pixels = pix
-	s.actor.NoChrome = child
+	s.actor.NoChrome = noChrome
 	s.actor.GPUSlot = 0
 	if o.dma != nil {
 		s.actor.GPUSlot = o.dma.gpuSlot
@@ -761,13 +774,16 @@ func (c *Client) mapSurface(s *surface) {
 		s.actor.Title = s.xdg.top.title
 		s.actor.AppID = s.xdg.top.app
 	} else if s.xwayland {
+		if x11ok {
+			applyX11Hints(s.actor, x11, c.srv.Scene)
+		}
 		if s.actor.Title == "" {
 			s.actor.Title = "X11"
 		}
 		if s.actor.AppID == "" {
 			s.actor.AppID = "xwayland"
 		}
-		c.srv.log.Printf("mapped X11 actor %dx%d", w, h)
+		c.srv.log.Printf("mapped X11 actor %dx%d title=%q class=%q chrome=%v", w, h, s.actor.Title, s.actor.AppID, !s.actor.NoChrome)
 	}
 	_ = c.send(o.id, 0, nil, nil) // wl_buffer.release
 }

@@ -70,6 +70,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	}
 
 	var srv *compositor.Server
+	var x11WM *xwayland.XWM
 	waylandName := ""
 	x11Display := ""
 	if opt.Compositor {
@@ -113,7 +114,9 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 					x11Display = xw.Display
 					fmt.Fprintf(stdout, "xwayland: DISPLAY=%s  (example: DISPLAY=%s xeyes)\n", xw.Display, xw.Display)
 					if xw.WM != nil {
-						fmt.Fprintln(stdout, "xwayland: tiny XWM ready — managed X11 windows map as worldr actors + SSD. Do not use the host DISPLAY.")
+						x11WM = xw.WM
+						wireX11WM(srv, xw.WM)
+						fmt.Fprintln(stdout, "xwayland: XWM + EWMH ready — titles/class, focus/stacking, override-redirect without SSD. Do not use the host DISPLAY.")
 					} else {
 						fmt.Fprintln(stderr, "xwayland: running without XWM; override-redirect clients only. Do not use the host DISPLAY.")
 					}
@@ -181,6 +184,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		if srv != nil {
 			srv.Dispatch()
 		}
+		drainX11WM(scene, x11WM)
 		scene.Sweep(time.Now())
 		w, h = p.size()
 		deskH := usableHeight(int(h), PanelH)
@@ -288,6 +292,12 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		if ptr.Click {
 			a := scene.FocusAt(ptr.X, ptr.Y, decorations.TitleH, decorations.Border)
 			top := scene.HitTop(ptr.X, ptr.Y, decorations.TitleH, decorations.Border)
+			if a != nil && a.X11Win != 0 {
+				scene.Raise(a)
+				if srv != nil && srv.X11OnFocus != nil {
+					srv.X11OnFocus(a.X11Win)
+				}
+			}
 			if a != nil && decorations.HitTitle(a, ptr.X, ptr.Y) && (top == nil || !top.NoChrome) {
 				dragging = true
 				drag = a
@@ -591,5 +601,49 @@ func openOne(opt Options, b Backend) (*presenter, error) {
 		return p, nil
 	default:
 		return nil, fmt.Errorf("unknown backend %s", b)
+	}
+}
+
+func wireX11WM(srv *compositor.Server, wm *xwayland.XWM) {
+	if srv == nil || wm == nil {
+		return
+	}
+	srv.X11OnMap = func(w, h int) (compositor.X11MapHints, bool) {
+		sh, ok := wm.ConsumeMap(w, h)
+		return surfaceHintsToMap(sh), ok
+	}
+	srv.X11OnFocus = wm.FocusWindow
+}
+
+func drainX11WM(scene *engine.Scene, wm *xwayland.XWM) {
+	if wm == nil || scene == nil {
+		return
+	}
+	changes, activates := wm.Drain()
+	for _, sh := range changes {
+		compositor.ApplyX11Hints(scene, surfaceHintsToMap(sh))
+	}
+	for _, win := range activates {
+		for _, a := range scene.Actors() {
+			if a != nil && a.X11Win == win {
+				scene.FocusActor(a)
+				scene.Raise(a)
+				break
+			}
+		}
+	}
+}
+
+func surfaceHintsToMap(h xwayland.SurfaceHints) compositor.X11MapHints {
+	return compositor.X11MapHints{
+		Win:          h.Win,
+		TransientFor: h.TransientFor,
+		Title:        h.Title,
+		AppID:        h.AppID,
+		NoChrome:     h.NoChrome,
+		X:            h.X,
+		Y:            h.Y,
+		W:            h.W,
+		H:            h.H,
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -12,11 +13,17 @@ import (
 // Spec: X Window System Protocol, X11R6.
 
 const (
+	xOpCreateWindow           = 1
 	xOpChangeWindowAttributes = 2
+	xOpGetWindowAttributes    = 3
 	xOpMapWindow              = 8
 	xOpConfigureWindow        = 12
+	xOpGetGeometry            = 14
 	xOpInternAtom             = 16
 	xOpChangeProperty         = 18
+	xOpGetProperty            = 20
+	xOpSendEvent              = 25
+	xOpSetInputFocus          = 42
 	xOpQueryExtension         = 98
 
 	xCompositeRedirectSubwindows = 2
@@ -24,34 +31,58 @@ const (
 
 	xCWEventMask = 1 << 11
 
+	xEventStructureNotify      = 1 << 17
 	xEventSubstructureNotify   = 1 << 19
 	xEventSubstructureRedirect = 1 << 20
+	xEventPropertyChange       = 1 << 22
 
 	xEvError            = 0
 	xEvReply            = 1
+	xEvDestroyNotify    = 17
+	xEvUnmapNotify      = 18
+	xEvMapNotify        = 19
 	xEvMapRequest       = 20
+	xEvConfigureNotify  = 22
 	xEvConfigureRequest = 23
+	xEvPropertyNotify   = 28
+	xEvClientMessage    = 33
 
-	xCfgX         = 1 << 0
-	xCfgY         = 1 << 1
-	xCfgWidth     = 1 << 2
-	xCfgHeight    = 1 << 3
-	xCfgBorder    = 1 << 4
-	xCfgSibling   = 1 << 5
-	xCfgStackMode = 1 << 6
-	xPropReplace  = 0
-	xNormalState  = 1
-	xAtomCardinal = 6
+	xCfgX          = 1 << 0
+	xCfgY          = 1 << 1
+	xCfgWidth      = 1 << 2
+	xCfgHeight     = 1 << 3
+	xCfgBorder     = 1 << 4
+	xCfgSibling    = 1 << 5
+	xCfgStackMode  = 1 << 6
+	xStackAbove    = 0
+	xPropReplace   = 0
+	xNormalState   = 1
+	xAtomAtom      = 4
+	xAtomCardinal  = 6
+	xAtomString    = 31
+	xAtomWindow    = 33
+	xRevertToPtr   = 1
+	xClassInputOut = 1
 )
+
+type queuedMsg struct {
+	kind    byte
+	payload []byte
+}
 
 type xConn struct {
 	c            net.Conn
+	wmu          sync.Mutex
 	seq          uint16
 	root         uint32
+	ridBase      uint32
+	ridMask      uint32
+	nextRID      uint32
 	wmState      uint32
 	allowCommits uint32
 	compositeOp  byte
 	byteOrder    binary.ByteOrder
+	q            []queuedMsg
 }
 
 func dialX11(displayNum int, timeout time.Duration) (net.Conn, error) {
@@ -87,18 +118,6 @@ func x11ConnectConn(raw net.Conn) (*xConn, error) {
 		_ = raw.Close()
 		return nil, err
 	}
-	atom, err := xc.internAtom("WM_STATE")
-	if err != nil {
-		_ = raw.Close()
-		return nil, fmt.Errorf("InternAtom WM_STATE: %w", err)
-	}
-	xc.wmState = atom
-	allow, err := xc.internAtom("_XWAYLAND_ALLOW_COMMITS")
-	if err != nil {
-		_ = raw.Close()
-		return nil, fmt.Errorf("InternAtom _XWAYLAND_ALLOW_COMMITS: %w", err)
-	}
-	xc.allowCommits = allow
 	if err := xc.queryComposite(); err != nil {
 		_ = raw.Close()
 		return nil, err
@@ -117,23 +136,15 @@ func (x *xConn) queryComposite() error {
 	if err := x.send(pkt); err != nil {
 		return err
 	}
-	want := x.seq
-	for {
-		kind, seq, payload, err := x.readMsg()
-		if err != nil {
-			return fmt.Errorf("QueryExtension Composite: %w", err)
-		}
-		if kind == xEvError {
-			return fmt.Errorf("QueryExtension Composite: X11 error")
-		}
-		if kind == xEvReply && seq == want {
-			if len(payload) < 10 || payload[8] == 0 {
-				return fmt.Errorf("Xwayland has no Composite extension (needed for rootless surfaces)")
-			}
-			x.compositeOp = payload[9]
-			return nil
-		}
+	payload, err := x.waitReply(x.seq)
+	if err != nil {
+		return fmt.Errorf("QueryExtension Composite: %w", err)
 	}
+	if len(payload) < 10 || payload[8] == 0 {
+		return fmt.Errorf("Xwayland has no Composite extension (needed for rootless surfaces)")
+	}
+	x.compositeOp = payload[9]
+	return nil
 }
 
 func (x *xConn) compositeRedirectSubwindows() error {
@@ -185,6 +196,8 @@ func (x *xConn) handshake() error {
 	if len(body) < 32 {
 		return fmt.Errorf("X11 setup body too short (%d)", len(body))
 	}
+	x.ridBase = binary.LittleEndian.Uint32(body[4:])
+	x.ridMask = binary.LittleEndian.Uint32(body[8:])
 	vendorLen := int(binary.LittleEndian.Uint16(body[16:]))
 	nRoots := int(body[20])
 	nFormats := int(body[21])
@@ -207,22 +220,14 @@ func (x *xConn) internAtom(name string) (uint32, error) {
 	if err := x.send(pkt); err != nil {
 		return 0, err
 	}
-	want := x.seq
-	for {
-		kind, seq, payload, err := x.readMsg()
-		if err != nil {
-			return 0, err
-		}
-		if kind == xEvError {
-			return 0, fmt.Errorf("X11 error intern %q code=%d", name, payload[1])
-		}
-		if kind == xEvReply && seq == want {
-			if len(payload) < 12 {
-				return 0, fmt.Errorf("InternAtom reply short")
-			}
-			return binary.LittleEndian.Uint32(payload[8:]), nil
-		}
+	payload, err := x.waitReply(x.seq)
+	if err != nil {
+		return 0, fmt.Errorf("intern %q: %w", name, err)
 	}
+	if len(payload) < 12 {
+		return 0, fmt.Errorf("InternAtom reply short")
+	}
+	return binary.LittleEndian.Uint32(payload[8:]), nil
 }
 
 func (x *xConn) selectSubstructure() error {
@@ -323,7 +328,160 @@ func (x *xConn) configureFromRequest(ev []byte) error {
 	return x.send(pkt)
 }
 
+func (x *xConn) allocID() uint32 {
+	id := x.ridBase | (x.nextRID & x.ridMask)
+	x.nextRID++
+	return id
+}
+
+func (x *xConn) createInputOutput(parent uint32, w, h uint16) (uint32, error) {
+	id := x.allocID()
+	pkt := make([]byte, 32)
+	pkt[0] = xOpCreateWindow
+	binary.LittleEndian.PutUint16(pkt[2:], 8)
+	binary.LittleEndian.PutUint32(pkt[4:], id)
+	binary.LittleEndian.PutUint32(pkt[8:], parent)
+	binary.LittleEndian.PutUint16(pkt[16:], w)
+	binary.LittleEndian.PutUint16(pkt[18:], h)
+	binary.LittleEndian.PutUint16(pkt[22:], xClassInputOut)
+	return id, x.send(pkt)
+}
+
+func (x *xConn) selectWindowEvents(win uint32) error {
+	mask := uint32(xEventStructureNotify | xEventPropertyChange)
+	pkt := make([]byte, 16)
+	pkt[0] = xOpChangeWindowAttributes
+	binary.LittleEndian.PutUint16(pkt[2:], 4)
+	binary.LittleEndian.PutUint32(pkt[4:], win)
+	binary.LittleEndian.PutUint32(pkt[8:], xCWEventMask)
+	binary.LittleEndian.PutUint32(pkt[12:], mask)
+	return x.send(pkt)
+}
+
+func (x *xConn) getOverrideRedirect(win uint32) (bool, error) {
+	pkt := make([]byte, 8)
+	pkt[0] = xOpGetWindowAttributes
+	binary.LittleEndian.PutUint16(pkt[2:], 2)
+	binary.LittleEndian.PutUint32(pkt[4:], win)
+	if err := x.send(pkt); err != nil {
+		return false, err
+	}
+	payload, err := x.waitReply(x.seq)
+	if err != nil {
+		return false, err
+	}
+	if len(payload) < 28 {
+		return false, nil
+	}
+	return payload[27] != 0, nil
+}
+
+func (x *xConn) getGeometry(win uint32) (xx, yy, w, h int, err error) {
+	pkt := make([]byte, 8)
+	pkt[0] = xOpGetGeometry
+	binary.LittleEndian.PutUint16(pkt[2:], 2)
+	binary.LittleEndian.PutUint32(pkt[4:], win)
+	if err := x.send(pkt); err != nil {
+		return 0, 0, 0, 0, err
+	}
+	payload, err := x.waitReply(x.seq)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if len(payload) < 20 {
+		return 0, 0, 0, 0, nil
+	}
+	xx = int(int16(binary.LittleEndian.Uint16(payload[12:])))
+	yy = int(int16(binary.LittleEndian.Uint16(payload[14:])))
+	w = int(binary.LittleEndian.Uint16(payload[16:]))
+	h = int(binary.LittleEndian.Uint16(payload[18:]))
+	return xx, yy, w, h, nil
+}
+
+func (x *xConn) getProperty(win, prop uint32) (typ uint32, format byte, val []byte, err error) {
+	pkt := make([]byte, 24)
+	pkt[0] = xOpGetProperty
+	binary.LittleEndian.PutUint16(pkt[2:], 6)
+	binary.LittleEndian.PutUint32(pkt[4:], win)
+	binary.LittleEndian.PutUint32(pkt[8:], prop)
+	binary.LittleEndian.PutUint32(pkt[20:], 0xffff)
+	if err := x.send(pkt); err != nil {
+		return 0, 0, nil, err
+	}
+	payload, err := x.waitReply(x.seq)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	if len(payload) < 32 {
+		return 0, 0, nil, nil
+	}
+	format = payload[1]
+	typ = binary.LittleEndian.Uint32(payload[8:])
+	n := binary.LittleEndian.Uint32(payload[16:])
+	if typ == 0 || n == 0 {
+		return typ, format, nil, nil
+	}
+	nbytes := int(n)
+	switch format {
+	case 16:
+		nbytes = int(n) * 2
+	case 32:
+		nbytes = int(n) * 4
+	}
+	if 32+nbytes > len(payload) {
+		nbytes = len(payload) - 32
+		if nbytes < 0 {
+			return typ, format, nil, nil
+		}
+	}
+	val = make([]byte, nbytes)
+	copy(val, payload[32:32+nbytes])
+	return typ, format, val, nil
+}
+
+func (x *xConn) changeProp8(win, prop, typ uint32, data []byte) error {
+	pkt := make([]byte, 24+pad4(len(data)))
+	pkt[0] = xOpChangeProperty
+	pkt[1] = xPropReplace
+	binary.LittleEndian.PutUint16(pkt[2:], uint16(len(pkt)/4))
+	binary.LittleEndian.PutUint32(pkt[4:], win)
+	binary.LittleEndian.PutUint32(pkt[8:], prop)
+	binary.LittleEndian.PutUint32(pkt[12:], typ)
+	pkt[16] = 8
+	binary.LittleEndian.PutUint32(pkt[20:], uint32(len(data)))
+	copy(pkt[24:], data)
+	return x.send(pkt)
+}
+
+func (x *xConn) setInputFocus(win uint32) error {
+	pkt := make([]byte, 12)
+	pkt[0] = xOpSetInputFocus
+	pkt[1] = xRevertToPtr
+	binary.LittleEndian.PutUint16(pkt[2:], 3)
+	binary.LittleEndian.PutUint32(pkt[4:], win)
+	return x.send(pkt)
+}
+
+func (x *xConn) sendClientMessage(win, typ uint32, data [5]uint32) error {
+	ev := make([]byte, 32)
+	ev[0] = xEvClientMessage
+	ev[1] = 32
+	binary.LittleEndian.PutUint32(ev[4:], win)
+	binary.LittleEndian.PutUint32(ev[8:], typ)
+	for i := 0; i < 5; i++ {
+		binary.LittleEndian.PutUint32(ev[12+4*i:], data[i])
+	}
+	pkt := make([]byte, 44)
+	pkt[0] = xOpSendEvent
+	binary.LittleEndian.PutUint16(pkt[2:], 11)
+	binary.LittleEndian.PutUint32(pkt[4:], win)
+	copy(pkt[12:], ev)
+	return x.send(pkt)
+}
+
 func (x *xConn) send(pkt []byte) error {
+	x.wmu.Lock()
+	defer x.wmu.Unlock()
 	x.seq++
 	if x.seq == 0 {
 		x.seq = 1
@@ -336,7 +494,34 @@ func (x *xConn) writeAll(b []byte) error {
 	return err
 }
 
+func (x *xConn) waitReply(want uint16) ([]byte, error) {
+	for {
+		kind, seq, payload, err := x.readMsg()
+		if err != nil {
+			return nil, err
+		}
+		if kind == xEvError && seq == want {
+			code := byte(0)
+			if len(payload) > 1 {
+				code = payload[1]
+			}
+			return nil, fmt.Errorf("X11 error code=%d", code)
+		}
+		if kind == xEvReply && seq == want {
+			return payload, nil
+		}
+		if kind != xEvReply && kind != xEvError {
+			x.q = append(x.q, queuedMsg{kind: kind, payload: payload})
+		}
+	}
+}
+
 func (x *xConn) readEvent() (kind byte, payload []byte, err error) {
+	if len(x.q) > 0 {
+		ev := x.q[0]
+		x.q = x.q[1:]
+		return ev.kind, ev.payload, nil
+	}
 	kind, _, payload, err = x.readMsg()
 	return kind, payload, err
 }

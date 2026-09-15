@@ -20,6 +20,7 @@ type Actor struct {
 	Focused       bool
 	NoChrome      bool      // popup / subsurface — no SSD title or frame
 	Owner         *Actor    // parent toplevel for transients
+	X11Win        uint32    // X11 window id when this actor is rootless Xwayland
 	GPUSlot       int       // 1-based retained dmabuf; 0 = CPU pixels only
 	Born          time.Time // map-in start (zero = already settled)
 	UnmapAt       time.Time // map-out start (zero = mapped)
