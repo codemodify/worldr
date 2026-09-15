@@ -67,16 +67,40 @@ int worldr_drm_create(const char *card, worldr_drm **out, char *err, int errlen)
 		seterr(err, errlen, "oom", 0);
 		return -1;
 	}
-	d->fd = open_card(card, d->card, sizeof(d->card), err, errlen);
-	if (d->fd < 0) {
-		free(d);
-		return -1;
-	}
-	if (drmSetMaster(d->fd) != 0) {
-		seterr(err, errlen, "drmSetMaster failed — another compositor owns the GPU. Use a spare VT (docs/RUN-ABOX.md)", errno);
-		close(d->fd);
-		free(d);
-		return -1;
+	if (card && card[0]) {
+		d->fd = open_card(card, d->card, sizeof(d->card), err, errlen);
+		if (d->fd < 0) {
+			free(d);
+			return -1;
+		}
+		if (drmSetMaster(d->fd) != 0) {
+			seterr(err, errlen, "drmSetMaster failed — another compositor owns this card. Spare VT: Ctrl+Alt+F3 + scripts/try-tty.sh", errno);
+			close(d->fd);
+			free(d);
+			return -1;
+		}
+	} else {
+		int got = -1;
+		for (int i = 0; i < 8; i++) {
+			char path[64];
+			snprintf(path, sizeof(path), "/dev/dri/card%d", i);
+			int fd = open(path, O_RDWR | O_CLOEXEC);
+			if (fd < 0) {
+				continue;
+			}
+			if (drmSetMaster(fd) == 0) {
+				snprintf(d->card, sizeof(d->card), "%s", path);
+				d->fd = fd;
+				got = fd;
+				break;
+			}
+			close(fd);
+		}
+		if (got < 0) {
+			seterr(err, errlen, "no DRM card we could drmSetMaster — another compositor owns the GPU, or no /dev/dri/cardN. Spare VT: Ctrl+Alt+F3 + scripts/try-tty.sh", EBUSY);
+			free(d);
+			return -1;
+		}
 	}
 
 	drmModeRes *res = drmModeGetResources(d->fd);

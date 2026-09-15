@@ -18,8 +18,8 @@ backends unless you pass `--take-over-display`.
 (`--backend=wayland-client` or `--backend=nested`), then `foot` on the printed
 `WAYLAND_DISPLAY`.
 
-**Preferred real-display try:** a **spare TTY** (tty2), not the VT that is
-already running Hyprland/Sway/GNOME/KDE.
+**Preferred real-display try:** a **spare TTY** (tty3 via **Ctrl+Alt+F3**),
+not the VT that is already running Plasma/Hyprland/Sway/GNOME.
 
 | Key | What it does |
 | --- | --- |
@@ -31,8 +31,9 @@ already running Hyprland/Sway/GNOME/KDE.
 | Ctrl+Alt+←/→ | Switch virtual desktop (pager dots if the host steals this combo). |
 | `--duration=15s` | Always exits — use this the first time on a TTY. |
 
-If the TTY appears wedged: another TTY (`Ctrl+Alt+F3`), `pkill worldr-shell`,
-then switch back. The DRM backend tries to restore the previous CRTC on exit.
+If the TTY appears wedged: another TTY (`Ctrl+Alt+F4`), `pkill worldr-shell`,
+then **Ctrl+Alt+F1** or **F2** back to Plasma. The DRM backend tries to restore
+the previous CRTC on exit.
 
 ## Packages (Arch)
 
@@ -71,8 +72,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on panel / launcher):
-git checkout feat/workspaces-v0
+# this branch (stacked on workspaces):
+git checkout feat/tty-seat-harden
 
 export CGO_ENABLED=1
 make build
@@ -212,7 +213,7 @@ Host-side bind is still clamped (`min(our_max, advertised)`): compositor, shm,
 to stderr as `wayland-client: global …` / `bind …`.
 
 If the host window fails to map, paste those lines. Workaround: spare TTY
-`--backend=vk-display --duration=15s`.
+`scripts/try-tty.sh`.
 
 ### X11 apps via XWayland (spike)
 
@@ -252,55 +253,61 @@ Fullscreen nested (still inside your compositor):
 
 ## Real display on a spare TTY (tryable compositor)
 
-1. Leave your desktop running. Switch to tty2: **Ctrl+Alt+F2**.
-2. Log in on that TTY (a real logind session).
-3. Ensure a runtime dir:
+`vk-display` / `drm` take DRM master. The nested path is unchanged and still
+the safe desktop demo. This path is the architecture’s real compositor seat.
+
+`--backend=auto` prefers **nested** when `WAYLAND_DISPLAY` is set; on a TTY
+with `/dev/dri/card*` and no graphical session env it tries **vk-display**,
+then **drm**. Takeover is refused unless `--take-over-display` (or those env
+vars / `XDG_SESSION_TYPE=wayland|x11` are absent).
+
+Panel, overview, launcher, workspaces, and effects use the same
+`CompositeDesktop` path as nested.
+
+### Script (abox)
+
+1. Leave Plasma running. Switch to **tty3**: **Ctrl+Alt+F3**.
+2. Log in (a real logind session).
+3. `cd` to the worldr tree and run:
 
 ```sh
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-mkdir -p "$XDG_RUNTIME_DIR"
-cd /path/to/worldr
+./scripts/try-tty.sh
+# optional: DURATION=20s BACKEND=drm ./scripts/try-tty.sh
 ```
 
-4. First time, time-box it:
+The script builds `bin/worldr-shell` if needed, refuses to run when
+`WAYLAND_DISPLAY`/`DISPLAY` or a graphical `XDG_SESSION_TYPE` is set, sets
+`XDG_RUNTIME_DIR`, and starts **`--duration=15s`** the first time.
 
-```sh
-./bin/worldr-shell --backend=vk-display --duration=15s --color=#0b1020
-```
-
-If `VK_KHR_display` is missing or not DRM master:
-
-```sh
-./bin/worldr-shell --backend=drm --duration=15s
-```
-
-`auto` on a TTY (no `WAYLAND_DISPLAY`/`DISPLAY`) tries `vk-display`, then `drm`,
-then headless.
-
-You should see a dark cinematic clear. The process also advertises a Wayland
-socket (default `wayland-1`, never `wayland-0` if that name is taken):
+4. You should see a dark cinematic clear plus the bottom panel. The process
+   advertises a Wayland socket (default `wayland-1`):
 
 ```
+present: backend=vk-display …
+seat: kind=tty …
+desktop: CompositeDesktop (panel, overview, launcher, workspaces, effects) …
 wayland compositor: WAYLAND_DISPLAY=wayland-1
 ```
 
-5. From **another TTY or SSH session** (not from the desktop that still owns
-   `wayland-0` unless you export the new display):
+5. From **another TTY or SSH** (same user):
 
 ```sh
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 export WAYLAND_DISPLAY=wayland-1
-weston-simple-shm          # shm path (always)
-foot                       # CONFIRMED on abox: connect + disconnect clean
-kitty                      # GPU path: linux-dmabuf import (needs Vulkan on the shell)
+foot                       # or F1 on the TTY if evdev keys work
 ```
 
-A client surface should appear as a window actor with a cyan/magenta SSD frame.
-`linux-dmabuf` is advertised (LINEAR + common Intel modifiers). Tiled GPU buffers
-are imported via Vulkan and read back into the same SSD/composite path as shm.
+6. When the duration expires (or Ctrl+C / Esc): **Ctrl+Alt+F1** or **F2**
+   back to Plasma. If the TTY looks wedged: **Ctrl+Alt+F4**, `pkill worldr-shell`.
 
-6. Switch back to your desktop VT (often **Ctrl+Alt+F1** or F7) after the
-   process exits.
+Manual equivalent (if you do not want the script):
+
+```sh
+unset WAYLAND_DISPLAY DISPLAY
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+./bin/worldr-shell --backend=vk-display --duration=15s --color=#0b1020
+# fallback: --backend=drm --duration=15s
+```
 
 ### If you insist on running from the graphical session
 
@@ -308,7 +315,7 @@ are imported via Vulkan and read back into the same SSD/composite path as shm.
 ./bin/worldr-shell --backend=vk-display --take-over-display --duration=10s
 ```
 
-This can yank the GPU from your running compositor. Prefer tty2.
+This can yank the GPU from your running compositor. Prefer **tty3**.
 
 ## Headless / CI
 
@@ -325,7 +332,7 @@ without `/dev/dri`.
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `--backend` | `auto` | `vk-display` \| `drm` \| `wayland-client` \| `nested` \| `headless` |
-| `--take-over-display` | false | Allow DRM/Vulkan display while a session env is set |
+| `--take-over-display` | false | Allow vk-display/drm while WAYLAND_DISPLAY/DISPLAY or XDG_SESSION_TYPE=wayland\|x11 |
 | `--duration` | 0 (until signal) | Safety timer |
 | `--color` | `#0b1020` | Clear color |
 | `--compositor` | true | Listen as Wayland server (on for `wayland-client`/`nested` too) |
@@ -381,13 +388,11 @@ with pager dots. **F1 → foot** on desktop 0, switch desktop, **F1 → foot**
 on desktop 1.
 
 **If the host window dies:** paste `wayland-client: global/bind` lines.
-Workaround — real display on **tty2**:
+Workaround — real display on **tty3**:
 
 ```sh
-# Ctrl+Alt+F2, login, then:
-unset WAYLAND_DISPLAY DISPLAY
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-./bin/worldr-shell --backend=vk-display --duration=15s
+# Ctrl+Alt+F3, login, then:
+./scripts/try-tty.sh
 ```
 
 ## Known gaps
@@ -405,4 +410,5 @@ export XDG_RUNTIME_DIR=/run/user/$(id -u)
 - Launcher is a hardcoded list (no `.desktop` / menu scan)
 - Panel is CPU-composited chrome (not a toolkit)
 - Workspaces v0: no drag-to-desktop, no per-output set, overview is current-desktop only
+- vk-display/drm need DRM master on a spare VT (scripts/try-tty.sh); CI exercises refuse/no-DRM paths only
 - UI toolkit still deferred

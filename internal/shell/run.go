@@ -35,6 +35,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		return nil
 	}
 
+	seat := ProbeSeat()
 	if err := CheckTakeover(opt.Backend, opt.TakeOverDisplay); err != nil {
 		return err
 	}
@@ -52,7 +53,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	scene.SetWorkspaces(opt.Workspaces)
 	pixel := PackBGRA(opt.Color)
 
-	p, err := openPresent(stdout, stderr, opt)
+	p, err := openPresent(stdout, stderr, opt, seat)
 	if err != nil {
 		return err
 	}
@@ -60,8 +61,12 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 
 	w, h := p.size()
 	fmt.Fprintf(stdout, "present: backend=%s size=%dx%d device=%s\n", p.name, w, h, p.device)
+	fmt.Fprintf(stdout, "seat: %s\n", seat)
 	if p.note != "" {
 		fmt.Fprintln(stdout, p.note)
+	}
+	if TakesDisplay(Backend(p.name)) {
+		fmt.Fprintln(stdout, "desktop: CompositeDesktop (panel, overview, launcher, workspaces, effects) on the real display path — same as nested.")
 	}
 
 	var srv *compositor.Server
@@ -149,7 +154,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 
 	fmt.Fprintln(stdout, "running. Exit: Ctrl+C, or --duration, or Esc/Q on an evdev keyboard.")
 	if TakesDisplay(Backend(p.name)) {
-		fmt.Fprintln(stdout, "WARNING: this process may own the VT display. Prefer a spare TTY (Ctrl+Alt+F2). See docs/RUN-ABOX.md")
+		fmt.Fprintln(stdout, "WARNING: this process may own the VT display. Spare TTY: Ctrl+Alt+F3 + scripts/try-tty.sh. Back to Plasma: Ctrl+Alt+F1 or F2. See docs/RUN-ABOX.md")
 	}
 
 	frames := 0
@@ -304,7 +309,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			srv.SetPointerPos(ptr.X, ptr.Y)
 		}
 
-		needFB := scene.HasActors() || srv != nil || nestedPresent(p.name) || p.name == string(BackendDRM)
+		needFB := scene.HasActors() || srv != nil || nestedPresent(p.name) || TakesDisplay(Backend(p.name))
 		if needFB {
 			cur := CursorBlit{}
 			if srv != nil {
@@ -421,19 +426,18 @@ func (v vkDMABuf) ImportDMABuf(width, height, fourcc uint32, modifier uint64, pl
 	return v.VK.ImportDMABuf(width, height, fourcc, modifier, np)
 }
 
-func openPresent(stdout, stderr io.Writer, opt Options) (*presenter, error) {
+func openPresent(stdout, stderr io.Writer, opt Options, seat Seat) (*presenter, error) {
 	order := []Backend{opt.Backend}
 	if opt.Backend == BackendAuto {
-		wl, x11 := GraphicalSession()
-		if (wl || x11) && !opt.TakeOverDisplay {
-			if wl {
-				order = []Backend{BackendWaylandClient, BackendHeadless}
-			} else {
-				order = []Backend{BackendHeadless}
-			}
-			fmt.Fprintln(stdout, "auto: graphical session detected; using nested/headless (pass --take-over-display for DRM/Vulkan display)")
+		order = AutoPresentOrder(seat.Wayland, seat.X11, opt.TakeOverDisplay, len(seat.DRMCards) > 0)
+		if seat.Wayland && !opt.TakeOverDisplay {
+			fmt.Fprintln(stdout, "auto: WAYLAND_DISPLAY set; using nested compositor (pass --take-over-display for vk-display/drm)")
+		} else if seat.X11 && !opt.TakeOverDisplay {
+			fmt.Fprintln(stdout, "auto: DISPLAY set without Wayland; staying headless (unset DISPLAY on a spare TTY for vk-display)")
+		} else if len(seat.DRMCards) > 0 {
+			fmt.Fprintln(stdout, "auto: no graphical session env; trying vk-display then drm (spare TTY / DRM master)")
 		} else {
-			order = []Backend{BackendVKDisplay, BackendDRM, BackendWaylandClient, BackendHeadless}
+			fmt.Fprintln(stdout, "auto: no /dev/dri/card*; headless")
 		}
 	}
 
@@ -466,6 +470,9 @@ func openOne(opt Options, b Backend) (*presenter, error) {
 		if !native.Available() {
 			return nil, fmt.Errorf("cgo/vulkan not in this binary")
 		}
+		if !HasDRM() {
+			return nil, fmt.Errorf("no /dev/dri/card* — vk-display needs a GPU node and DRM master. Spare TTY: Ctrl+Alt+F3 then scripts/try-tty.sh")
+		}
 		vk, err := native.OpenVK(true, 0, 0)
 		if err != nil {
 			return nil, err
@@ -476,6 +483,9 @@ func openOne(opt Options, b Backend) (*presenter, error) {
 	case BackendDRM:
 		if !native.Available() {
 			return nil, fmt.Errorf("cgo/drm not in this binary")
+		}
+		if !HasDRM() && opt.Card == "" {
+			return nil, fmt.Errorf("no /dev/dri/card* — drm backend needs a KMS device. Spare TTY: Ctrl+Alt+F3 then scripts/try-tty.sh")
 		}
 		d, err := native.OpenDRM(opt.Card)
 		if err != nil {

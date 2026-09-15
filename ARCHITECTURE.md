@@ -34,8 +34,9 @@ tryable `worldr-shell`.
 5. Compiz-style theater v0 — done (hardcoded map/unmap scale+fade)
 6. Expose/overview v0 — done (F12 grid)
 7. Panel + launcher v0 — done (bottom bar, F1 spawn)
-8. Workspaces v0 — **this branch** (2–4 desktops, pager, slide)
-9. Revisit UI toolkit
+8. Workspaces v0 — done (2–4 desktops, pager, slide)
+9. TTY/seat harden — **this branch** (spare VT vk-display/drm)
+10. Revisit UI toolkit
 
 ## Layers
 
@@ -132,7 +133,8 @@ Rejected as the foundation:
 
 `VK_KHR_display` is the primary GPU present path (`--backend=vk-display`).
 `--backend=drm` is a libdrm dumb-buffer KMS path (CPU blit) if display WSI fails.
-`--backend=wayland-client` is **debug-only** nested convenience.
+`--backend=wayland-client` is the **safe nested demo**. `--backend=vk-display`
+is the real-display path on a spare TTY (`scripts/try-tty.sh`).
 `--backend=headless` is for CI / no `/dev/dri`.
 
 ## linux-dmabuf
