@@ -369,8 +369,10 @@ DURATION=15s BACKEND=vk-display ./scripts/try-tty.sh
 # CARD=/dev/dri/card1 DURATION=15s BACKEND=drm ./scripts/try-tty.sh
 ```
 
-The script builds `bin/worldr-shell` if needed, refuses a graphical session
-env, sets `XDG_RUNTIME_DIR`, and runs `--duration=15s`.
+The script builds `bin/worldr-shell` + `bin/worldr-session` if needed, refuses a
+graphical session env, sets `XDG_RUNTIME_DIR`, and runs
+`worldr-session --shell … -- --duration=15s` (XDG session type `wayland`,
+desktop `worldr`).
 
 5. Success looks like a dark cinematic clear + bottom panel, and:
 
@@ -450,6 +452,21 @@ without `/dev/dri`.
 | `--card` | first `/dev/dri/cardN` | DRM device |
 | `--list-devices` | | Print Vulkan devices and exit |
 
+`worldr-session` (0.9.34) wraps the shell for a login/session:
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--shell` | sibling / PATH | `worldr-shell` binary |
+| `--login` | false | Prompt for username (must be the current uid; no PAM) |
+| `--user` | empty | Autologin that name (same uid rule) |
+| `--desktop` | `worldr` | `XDG_CURRENT_DESKTOP` / `XDG_SESSION_DESKTOP` |
+| `--print-env` | false | Print session env and exit |
+| `--dry-run` | false | Resolve env/shell and exit |
+| `--` | | Remaining args go to `worldr-shell` |
+
+Display managers: copy `contrib/wayland-sessions/worldr.desktop` to
+`/usr/share/wayland-sessions/`.
+
 ## Binding choice
 
 Vulkan and DRM are a **thin owned C wrapper** (`internal/platform/linux/native`)
@@ -523,5 +540,6 @@ Workaround — real display on **tty3**:
 - Launcher reads XDG `.desktop` files and theme PNGs for `Icon=` (0.9.18). `Terminal=true` apps skipped; no ibus/fcitx IME
 - Panel is CPU-composited chrome (not a toolkit)
 - Workspaces (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. No Super+1..N, no drag-to-desktop, no per-output workspace set. Overview is current-desktop only (shows `desk N/M`). Empty desktops stay addressable.
+- Session / login (**0.9.34**): `worldr-session` sets XDG session env and starts `worldr-shell`. `--login` / `--user` only accept the current uid (no PAM, no greetd, no user switch). `contrib/wayland-sessions/worldr.desktop` is the DM entry. Isolation still later. No IME.
 - vk-display/drm need DRM master on a spare VT (scripts/try-tty.sh). CI exercises refuse / no-DRM / render-node `--card` paths only; soak vk-display on abox after merge.
 - UI toolkit still deferred

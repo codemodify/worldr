@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Spare-TTY smoke for worldr-shell (Intel Mesa / abox).
+# Spare-TTY smoke for worldr-session → worldr-shell (Intel Mesa / abox).
 #
 # From Plasma:
 #   1. Ctrl+Alt+F3  → log in on tty3
@@ -52,14 +52,14 @@ if [[ -z "${XDG_RUNTIME_DIR:-}" ]]; then
 fi
 
 cd "$ROOT"
-if [[ ! -x bin/worldr-shell ]]; then
-	echo "building bin/worldr-shell (CGO_ENABLED=1)…"
+if [[ ! -x bin/worldr-shell || ! -x bin/worldr-session ]]; then
+	echo "building bin/worldr-shell + bin/worldr-session (CGO_ENABLED=1)…"
 	export CGO_ENABLED=1
 	make build
 fi
 
 echo
-echo "Starting worldr-shell. First soak is duration-capped ($DURATION)."
+echo "Starting worldr-session → worldr-shell. First soak is duration-capped ($DURATION)."
 echo "Preferred: BACKEND=vk-display (Intel iGPU / Mesa). Fallback: BACKEND=drm."
 echo "Panel / overview / launcher / workspaces / effects use CompositeDesktop on this path too."
 echo "When it exits: Ctrl+Alt+F1 or F2 → Plasma. If wedged: Ctrl+Alt+F4, pkill worldr-shell."
@@ -69,4 +69,4 @@ args=(--backend="$BACKEND" --duration="$DURATION")
 if [[ -n "$CARD" ]]; then
 	args+=(--card="$CARD")
 fi
-exec ./bin/worldr-shell "${args[@]}" "$@"
+exec ./bin/worldr-session --shell ./bin/worldr-shell -- "${args[@]}" "$@"

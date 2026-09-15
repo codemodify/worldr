@@ -3,7 +3,7 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** 0.9.33-dev. Logical multi-monitor + per-output scale; **Ctrl+Q** quits.
+**Status:** 0.9.34-dev. Session/login wrapper (`worldr-session`); **Ctrl+Q** quits.
 Nested compositor is the safe demo. Real display: spare TTY via `scripts/try-tty.sh`.
 Human history: [CHANGELOG.md](CHANGELOG.md). Abox notes: [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
@@ -44,6 +44,14 @@ DISPLAY=:N xeyes    # N from the shell's "xwayland: DISPLAY=" line
 ```
 
 `--backend=auto` picks nested when `WAYLAND_DISPLAY` is set.
+
+Session wrapper (sets XDG session env, then the shell):
+
+```sh
+./bin/worldr-session --dry-run -- --backend=wayland-client --duration=30s
+./bin/worldr-session -- --backend=wayland-client
+# optional name gate (must be this uid; no PAM): --login or --user "$USER"
+```
 
 ## Spare TTY (real display)
 
