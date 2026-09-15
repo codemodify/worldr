@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.8-dev — xdg_popup + wl_subsurface
+
+- `xdg_surface.get_popup` sends `xdg_popup.configure` + `xdg_surface.configure`. `reposition` (v3) sends `repositioned` then a new configure. `grab` dismisses the popup on an outside click.
+- `wl_subcompositor` / `wl_subsurface`: position, sync (apply on parent commit) and desync. Child actors stack above the parent.
+- Pointer hit-test prefers the top-most buffer (menus get enter/button). SSD chrome is skipped for popups and subsurfaces.
+- No IME.
+
 ## 0.9.7-dev — TTY / vk-display soak
 
 - Finite 2s GPU waits on `vk-display` acquire/present/teardown so a lost DRM master does not hang the spare VT forever.

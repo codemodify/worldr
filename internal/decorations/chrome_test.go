@@ -6,6 +6,21 @@ import (
 	"github.com/codemodify/worldr/internal/engine"
 )
 
+func TestDrawSkipsNoChrome(t *testing.T) {
+	const w, h, stride = 80, 60, 320
+	dst := make([]byte, stride*h)
+	a := &engine.Actor{X: 20, Y: 32, Width: 20, Height: 16, Focused: true, NoChrome: true}
+	Draw(dst, stride, w, h, a)
+	for _, b := range dst {
+		if b != 0 {
+			t.Fatal("popup/subsurface must not paint SSD")
+		}
+	}
+	if HitTitle(a, 20, 10) {
+		t.Fatal("NoChrome has no title hit")
+	}
+}
+
 func TestChromeGeometry(t *testing.T) {
 	if TitleH != 28 || AccentH != 4 || Border != 6 {
 		t.Fatalf("ssd v0 chrome TitleH=%d AccentH=%d Border=%d", TitleH, AccentH, Border)

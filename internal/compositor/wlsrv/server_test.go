@@ -49,7 +49,7 @@ func TestAdvertiseGlobals(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(2 * time.Second)
-	var sawComp, sawXdg, sawDma, sawCursor, sawAct, sawPrim, sawXw, sawFrac, sawDone bool
+	var sawComp, sawXdg, sawSub, sawDma, sawCursor, sawAct, sawPrim, sawXw, sawFrac, sawDone bool
 	for time.Now().Before(deadline) && !sawDone {
 		_ = c.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		msg, err := rd.Next()
@@ -65,6 +65,8 @@ func TestAdvertiseGlobals(t *testing.T) {
 				sawComp = true
 			case "xdg_wm_base":
 				sawXdg = true
+			case "wl_subcompositor":
+				sawSub = true
 			case "zwp_linux_dmabuf_v1":
 				sawDma = true
 			case "wp_cursor_shape_manager_v1":
@@ -83,8 +85,8 @@ func TestAdvertiseGlobals(t *testing.T) {
 			sawDone = true
 		}
 	}
-	if !sawComp || !sawXdg || !sawDma || !sawCursor || !sawAct || !sawPrim || !sawXw || !sawFrac || !sawDone {
-		t.Fatalf("globals compositor=%v xdg=%v dmabuf=%v cursor=%v activation=%v primary=%v xwayland=%v fractional=%v done=%v",
-			sawComp, sawXdg, sawDma, sawCursor, sawAct, sawPrim, sawXw, sawFrac, sawDone)
+	if !sawComp || !sawXdg || !sawSub || !sawDma || !sawCursor || !sawAct || !sawPrim || !sawXw || !sawFrac || !sawDone {
+		t.Fatalf("globals compositor=%v xdg=%v subcomp=%v dmabuf=%v cursor=%v activation=%v primary=%v xwayland=%v fractional=%v done=%v",
+			sawComp, sawXdg, sawSub, sawDma, sawCursor, sawAct, sawPrim, sawXw, sawFrac, sawDone)
 	}
 }

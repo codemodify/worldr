@@ -34,6 +34,7 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 		if ch.WS.Count > 1 {
 			actors = filterWorkspace(actors, ch.WS.Active)
 		}
+		actors = filterChromeActors(actors)
 		engine.FillRectAlpha(dst, stride, w, h, 0, 0, w, deskH, 0xff000000, 0.38*ov.T)
 		cells := engine.LayoutGrid(len(actors), w, deskH)
 		for i, a := range actors {
@@ -77,6 +78,16 @@ func filterWorkspace(actors []*engine.Actor, ws int) []*engine.Actor {
 	return out
 }
 
+func filterChromeActors(actors []*engine.Actor) []*engine.Actor {
+	out := make([]*engine.Actor, 0, len(actors))
+	for _, a := range actors {
+		if a != nil && !a.NoChrome {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theater, ox int) {
 	if a == nil {
 		return
@@ -90,6 +101,7 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 	if v.Gone {
 		return
 	}
+	ssd = ssd && !a.NoChrome
 	if v.Identity() {
 		if ssd {
 			decorations.Draw(dst, stride, w, h, a)
@@ -148,6 +160,7 @@ func drawActorIn(dst []byte, stride, w, h int, a *engine.Actor, dest engine.Grid
 	if a == nil || dest.W <= 0 || dest.H <= 0 {
 		return
 	}
+	ssd = ssd && !a.NoChrome
 	if selected {
 		pad := 6
 		engine.FillRectAlpha(dst, stride, w, h, dest.X-pad, dest.Y-pad, dest.W+2*pad, dest.H+2*pad, 0xffff6ad5, 0.22*alpha)

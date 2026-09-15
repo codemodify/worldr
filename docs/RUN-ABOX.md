@@ -172,6 +172,10 @@ press **F1** (or click **apps**), highlight `foot`, Enter. The child gets
 the printed `WAYLAND_DISPLAY` (host `wayland-0` is stripped). Super+Space
 is the same bind when KWin does not steal Super.
 
+**Menus (0.9.8):** in foot, right-click the terminal. The context menu is an
+`xdg_popup` (no SSD title bar) stacked above the window. Clicks on the menu
+should reach the popup surface.
+
 | Key / click | Action |
 | --- | --- |
 | F1 | Toggle launcher |
@@ -394,10 +398,10 @@ disconnected cleanly** against the compositor.
 | Client | Buffer | Expected now | Notes |
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). Cursors, activation, primary-selection stub, fractional-scale 120. Still expected: `xdg-toplevel-icon`, text-input/IME. |
+| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. Cursors, activation, primary-selection stub, fractional-scale 120. Still expected: `xdg-toplevel-icon`, text-input/IME. |
 | `kitty` | linux-dmabuf (GL) | **Try** | GPU path: Vulkan import + CPU readback. Needs `linux-dmabuf: Vulkan import` in the shell log. LINEAR mmap fallback if the buffer is linear. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
-| `firefox` | dmabuf + gtk extras | **Unlikely** | Needs clipboard, popups, subsurfaces, idle-inhibit, etc. |
+| `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
 | X11 apps | XWayland | **Try (`--xwayland`)** | Rootless `Xwayland` + tiny XWM on the worldr socket. `DISPLAY=:N xeyes` / `xterm` should map as SSD actors. |
 
 GPU-accelerated path: client dmabuf → `VK_EXT_external_memory_dma_buf` import → copy to linear host image → actor pixels → existing SSD + focus + present. shm remains the fallback.
@@ -432,7 +436,7 @@ Workaround — real display on **tty3**:
 ## Known gaps
 
 - XWayland spike: `--xwayland` rootless + tiny XWM + `xwayland_shell_v1` (not a full EWMH WM)
-- No `xdg_popup` / real subsurface stacking
+- `xdg_popup` + `wl_subsurface` stacking (0.9.8): menus/tooltips/dropdowns. Positioner uses size + anchor + offset (no constraint/flip). Foot right-click menu is the abox check.
 - Clipboard / primary selection objects bind; no MIME transfer yet
 - No zero-copy GPU composite (import is readback)
 - SSD is thicker accent + title gradient + focused glow (still not a toolkit)

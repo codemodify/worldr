@@ -41,7 +41,7 @@ func Insets() (l, r, t, b int) {
 
 // Draw paints chrome for actor a onto the destination framebuffer.
 func Draw(dst []byte, stride, dW, dH int, a *engine.Actor) {
-	if a == nil {
+	if a == nil || a.NoChrome {
 		return
 	}
 	frame, _ := FrameColors(a.Focused)
@@ -98,7 +98,7 @@ func lerpBGRA(a, b uint32, t float64) uint32 {
 
 // HitTitle reports whether (px,py) is on the title bar (not the client buffer).
 func HitTitle(a *engine.Actor, px, py int) bool {
-	if a == nil {
+	if a == nil || a.NoChrome {
 		return false
 	}
 	return px >= a.X-Border && px < a.X+a.Width+Border && py >= a.Y-TitleH && py < a.Y

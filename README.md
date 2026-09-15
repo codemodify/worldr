@@ -3,7 +3,7 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** 0.9.7-dev on `cursor/tty-vk-display-soak-c92c` (stacked on .desktop launcher). TTY / vk-display soak harden; **Ctrl+Q** quits.
+**Status:** 0.9.8-dev on `cursor/xdg-popup-subsurfaces-c92c` (stacked on TTY soak). `xdg_popup` + `wl_subsurface` for menus/tooltips; **Ctrl+Q** quits.
 Nested compositor is the safe demo. Real display: spare TTY via `scripts/try-tty.sh`.
 Human history: [CHANGELOG.md](CHANGELOG.md). Abox notes: [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 

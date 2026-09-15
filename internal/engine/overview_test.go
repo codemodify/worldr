@@ -138,6 +138,14 @@ func TestHomeFrameSSD(t *testing.T) {
 	}
 }
 
+func TestHomeFrameNoChrome(t *testing.T) {
+	a := &Actor{X: 20, Y: 30, Width: 100, Height: 50, NoChrome: true}
+	f := HomeFrame(a, true, 6, 28)
+	if f.X != 20 || f.Y != 30 || f.W != 100 || f.H != 50 {
+		t.Fatalf("%+v", f)
+	}
+}
+
 func overlap(a, b GridCell) bool {
 	return a.X < b.X+b.W && a.X+a.W > b.X && a.Y < b.Y+b.H && a.Y+a.H > b.Y
 }
