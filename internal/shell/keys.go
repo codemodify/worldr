@@ -45,6 +45,16 @@ func isMeta(code uint32) bool {
 	return isEvdev(code, keyLeftMeta) || isEvdev(code, keyRightMeta)
 }
 
+func resetKeySet(m map[uint32]bool) map[uint32]bool {
+	if m == nil {
+		return make(map[uint32]bool, 8)
+	}
+	for k := range m {
+		delete(m, k)
+	}
+	return m
+}
+
 func isOverviewToggle(code uint32, metaHeld bool) bool {
 	if isEvdev(code, keyF12) {
 		return true

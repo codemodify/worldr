@@ -36,6 +36,9 @@ func FrameColors(focused bool) (frame, title uint32) {
 // TitleStripe is the thick accent on the title bar.
 func TitleStripe() uint32 { return colTitleStripe }
 
+// FocusGlow is the magenta ring used by the theater focus pulse.
+func FocusGlow() uint32 { return colFrameFocus }
+
 // Insets around the client surface (left, right, top, bottom).
 func Insets() (l, r, t, b int) {
 	return Border, Border, TitleH, Border

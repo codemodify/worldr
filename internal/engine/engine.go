@@ -108,11 +108,39 @@ func (s *Scene) Theater() Tier {
 
 // Actors returns a snapshot of current actors (the slice is a copy; actors are live).
 func (s *Scene) Actors() []*Actor {
+	return s.ActorsInto(nil)
+}
+
+// ActorsInto copies actors into dst (reuses cap). The slice is a snapshot;
+// actors themselves are live.
+func (s *Scene) ActorsInto(dst []*Actor) []*Actor {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]*Actor, len(s.actors))
-	copy(out, s.actors)
-	return out
+	return append(dst[:0], s.actors...)
+}
+
+// OccupiedInto writes occupancy into dst (reuses cap). See Occupied.
+func (s *Scene) OccupiedInto(dst []bool) []bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.wsN
+	if n < WorkspaceMin {
+		n = WorkspaceDefault
+	}
+	if cap(dst) < n {
+		dst = make([]bool, n)
+	} else {
+		dst = dst[:n]
+		for i := range dst {
+			dst[i] = false
+		}
+	}
+	for _, a := range s.actors {
+		if a != nil && a.Workspace >= 0 && a.Workspace < n {
+			dst[a.Workspace] = true
+		}
+	}
+	return dst
 }
 
 // Add registers an actor and starts map-in when theater is on.
@@ -171,6 +199,18 @@ func (s *Scene) HasActors() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.actors) > 0
+}
+
+// HasVisibleOn is true when workspace ws has at least one actor.
+func (s *Scene) HasVisibleOn(ws int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, a := range s.actors {
+		if a != nil && a.Workspace == ws {
+			return true
+		}
+	}
+	return false
 }
 
 // HitTop returns the top-most actor whose frame contains (px,py).

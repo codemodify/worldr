@@ -157,19 +157,7 @@ func WorkspaceLabel(active, count int) string {
 
 // Occupied is true per desktop when at least one actor lives there.
 func (s *Scene) Occupied() []bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	n := s.wsN
-	if n < WorkspaceMin {
-		n = WorkspaceDefault
-	}
-	out := make([]bool, n)
-	for _, a := range s.actors {
-		if a != nil && a.Workspace >= 0 && a.Workspace < n {
-			out[a.Workspace] = true
-		}
-	}
-	return out
+	return s.OccupiedInto(nil)
 }
 
 // SwitchTo jumps to desktop i (clamped, no wrap). Starts a slide when i changes.
@@ -295,7 +283,7 @@ func (s *Scene) WorkspacePose(now time.Time) WorkspaceDraw {
 		if p > 1 {
 			p = 1
 		}
-		t = EaseOutCubic(p)
+		t = EaseInOutCubic(p)
 		from, to, dir = s.wsFrom, s.wsActive, s.wsDir
 		if p >= 1 {
 			from, to, dir = s.wsActive, s.wsActive, 0
