@@ -284,6 +284,40 @@ func (d *DRM) PresentBGRA(bgra []byte, stride uint32) error {
 	return nil
 }
 
+// ScanoutDMABuf presents a client dmabuf on the primary plane (atomic, then SetCrtc).
+func (d *DRM) ScanoutDMABuf(fd int, width, height, fourcc uint32, modifier uint64, offset, pitch uint32) error {
+	if d == nil || d.ptr == nil {
+		return fmt.Errorf("drm session closed")
+	}
+	if fd < 0 {
+		return fmt.Errorf("dmabuf fd")
+	}
+	errb := make([]C.char, errBuf)
+	if C.worldr_drm_scanout_dmabuf(d.ptr, C.int(fd), C.uint32_t(width), C.uint32_t(height),
+		C.uint32_t(fourcc), C.uint64_t(modifier), C.uint32_t(offset), C.uint32_t(pitch),
+		&errb[0], C.int(len(errb))) != 0 {
+		return cErr(errb)
+	}
+	return nil
+}
+
+// RestoreScanout puts the dumb-buffer FB back on the CRTC.
+func (d *DRM) RestoreScanout() error {
+	if d == nil || d.ptr == nil {
+		return fmt.Errorf("drm session closed")
+	}
+	errb := make([]C.char, errBuf)
+	if C.worldr_drm_scanout_restore(d.ptr, &errb[0], C.int(len(errb))) != 0 {
+		return cErr(errb)
+	}
+	return nil
+}
+
+// ScanoutActive is true while a client dmabuf is on the primary plane.
+func (d *DRM) ScanoutActive() bool {
+	return d != nil && d.ptr != nil && C.worldr_drm_scanout_active(d.ptr) != 0
+}
+
 // SummarizeDevices is a one-line helper for logs.
 func SummarizeDevices(listing string) string {
 	return strings.TrimSpace(listing)

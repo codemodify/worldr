@@ -16,6 +16,7 @@ import (
 	"github.com/codemodify/worldr/internal/input"
 	"github.com/codemodify/worldr/internal/platform/linux/native"
 	"github.com/codemodify/worldr/internal/platform/linux/wlclient"
+	"github.com/codemodify/worldr/internal/scanout"
 	"github.com/codemodify/worldr/internal/version"
 )
 
@@ -78,10 +79,12 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		if p.vk != nil && p.vk.HasDMABuf() {
 			imp = vkDMABuf{p.vk}
 			if p.vk.IsDisplay() {
-				fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + GPU sample on vk-display (shm/readback fallback; no KMS scanout bypass)")
+				fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + GPU sample on vk-display; KMS primary scanout when a fullscreen dmabuf is eligible (else blit)")
 			} else {
 				fmt.Fprintln(stdout, "linux-dmabuf: Vulkan import + readback enabled (shm remains fallback)")
 			}
+		} else if p.drm != nil {
+			fmt.Fprintln(stdout, "linux-dmabuf: LINEAR mmap + KMS primary scanout for fullscreen ARGB/XRGB (tiled AddFB2 on Intel; NVIDIA/AMD best-effort)")
 		} else {
 			fmt.Fprintln(stdout, "linux-dmabuf: advertised; LINEAR mmap works, tiled GPU buffers need Vulkan import (unavailable on this device)")
 		}
@@ -361,6 +364,38 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			if ln.Open {
 				ld = &LauncherDraw{Items: ln.labels(), Select: ln.Select}
 			}
+			vendor := uint32(0)
+			if p.vk != nil {
+				vendor = p.vk.VendorID()
+			}
+			if cand := scanout.Evaluate(scanout.Frame{
+				Backend:  p.name,
+				ScreenW:  int(w),
+				ScreenH:  int(h),
+				Actors:   actors,
+				WS:       scene.WorkspacePose(now),
+				Overview: ov.Want || ov.Progress(now) > 0,
+				Launcher: ln.Open,
+				Theater:  opt.Effects,
+				Now:      now,
+				VendorID: vendor,
+			}); cand.OK {
+				if err := p.tryScanout(cand.Actor); err == nil {
+					if !p.scanoutOn {
+						fmt.Fprintln(stdout, "kms scanout: primary dmabuf (atomic/SetCrtc); panel/cursor skipped while fullscreen")
+						p.scanoutOn = true
+					}
+					frames++
+					continue
+				} else if !p.scanoutMiss {
+					fmt.Fprintf(stdout, "kms scanout fallback: %v\n", err)
+					p.scanoutMiss = true
+				}
+			}
+			if p.scanoutOn {
+				p.restoreScanout()
+				p.scanoutOn = false
+			}
 			gpuOverlay := p.vk != nil && p.name == string(BackendVKDisplay) && ov.Progress(now) == 0
 			ch := ChromeDraw{
 				PanelH:     PanelH,
@@ -394,14 +429,16 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 }
 
 type presenter struct {
-	name   string
-	device string
-	note   string
-	w, h   uint32
-	vk     *native.VK
-	drm    *native.DRM
-	wl     *wlclient.Window
-	color  [4]float32
+	name        string
+	device      string
+	note        string
+	w, h        uint32
+	vk          *native.VK
+	drm         *native.DRM
+	wl          *wlclient.Window
+	color       [4]float32
+	scanoutOn   bool
+	scanoutMiss bool
 }
 
 func nestedPresent(name string) bool {
@@ -419,6 +456,7 @@ func (p *presenter) size() (uint32, uint32) {
 }
 
 func (p *presenter) close() {
+	p.restoreScanout()
 	if p.vk != nil {
 		p.vk.Close()
 	}
@@ -461,6 +499,31 @@ func gpuLayers(actors []*engine.Actor, ch ChromeDraw, screenW int, on bool) []na
 		out = append(out, native.GPULayer{Slot: a.GPUSlot, X: a.X + ox, Y: a.Y, W: a.Width, H: a.Height})
 	}
 	return out
+}
+
+func (p *presenter) tryScanout(a *engine.Actor) error {
+	if p == nil || a == nil || a.ScanFD <= 0 {
+		return fmt.Errorf("no scan fd")
+	}
+	sw, sh := p.size()
+	if uint32(a.Width) != sw || uint32(a.Height) != sh {
+		return fmt.Errorf("buffer size != CRTC")
+	}
+	if p.drm != nil {
+		return p.drm.ScanoutDMABuf(a.ScanFD, sw, sh, a.ScanFourcc, a.ScanMod, a.ScanOff, a.ScanStride)
+	}
+	if p.name == string(BackendVKDisplay) {
+		// VK_KHR_display typically holds DRM master on the same card; a
+		// second fd cannot atomic-commit. Keep the GPU blit path.
+		return fmt.Errorf("VK_KHR_display holds DRM master; GPU blit fallback")
+	}
+	return fmt.Errorf("no KMS session")
+}
+
+func (p *presenter) restoreScanout() {
+	if p != nil && p.drm != nil && p.drm.ScanoutActive() {
+		_ = p.drm.RestoreScanout()
+	}
 }
 
 func (p *presenter) upload(bgra []byte, stride uint32, layers []native.GPULayer) error {
@@ -581,7 +644,7 @@ func openOne(opt Options, b Backend) (*presenter, error) {
 		}
 		w, h, _ := d.Size()
 		return &presenter{name: string(b), device: d.Card(), w: w, h: h, drm: d, color: opt.Color,
-			note: "DRM/KMS dumb buffer present (CPU blit). Vulkan is used when --backend=vk-display."}, nil
+			note: "DRM/KMS dumb buffer present (CPU blit). Fullscreen ARGB/XRGB dmabuf uses primary-plane scanout when eligible."}, nil
 	case BackendWaylandClient, BackendNested:
 		title := "worldr-shell (nested compositor)"
 		note := "SAFE DEMO: nested window on the host session + worldr compositor socket. Run clients with the printed WAYLAND_DISPLAY (not the host's)."
