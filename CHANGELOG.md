@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.19-dev — image clipboard MIME
+
+- `wl_data_device` and `zwp_primary_selection` offer/receive `image/png` (and `image/bmp` when advertised). In-compositor paste is exact-MIME.
+- Nest host bridge forwards `image/png` both ways when the host offers it, alongside `text/plain` (text path unchanged). Caps: 1MiB text, 8MiB image.
+- No IME. No JPEG/WebP.
+
 ## 0.9.18-dev — XDG icon theme
 
 - Resolve `.desktop` `Icon=` (and window `AppID` / `xdg_toplevel_icon.set_name`) via the current theme + **hicolor** under `$XDG_DATA_HOME` / `$XDG_DATA_DIRS` (png-first; absolute paths; pixmaps fallback). SVG is not rasterized.

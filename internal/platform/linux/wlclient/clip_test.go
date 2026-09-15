@@ -27,7 +27,7 @@ func TestHandleHostOfferPicksText(t *testing.T) {
 		t.Fatalf("%+v", o)
 	}
 	called := false
-	w.onClipImport = func(primary bool, text []byte) { called = true }
+	w.onClipImport = func(primary bool, mime string, data []byte) { called = true }
 	// wr is nil: receive is skipped, import must not run
 	p = wayland.PutU32(nil, 42)
 	if err := w.handleClip(wayland.Message{Object: 10, Opcode: wlDataDevSelection, Payload: p}); err != nil {
@@ -44,7 +44,7 @@ func TestHandleHostSelectionIgnoresOwn(t *testing.T) {
 	}}
 	w.ownHost.Set(false, true)
 	imported := false
-	w.onClipImport = func(primary bool, text []byte) { imported = true }
+	w.onClipImport = func(primary bool, mime string, data []byte) { imported = true }
 	p := wayland.PutU32(nil, 7)
 	if err := w.handleClip(wayland.Message{Object: 10, Opcode: wlDataDevSelection, Payload: p}); err != nil {
 		t.Fatal(err)
@@ -57,7 +57,7 @@ func TestHandleHostSelectionIgnoresOwn(t *testing.T) {
 func TestHandleHostSelectionClearsOnZero(t *testing.T) {
 	w := &Window{dataDev: 10, hostOffers: map[uint32]*hostOffer{}}
 	imported := false
-	w.onClipImport = func(primary bool, text []byte) { imported = true }
+	w.onClipImport = func(primary bool, mime string, data []byte) { imported = true }
 	p := wayland.PutU32(nil, 0)
 	if err := w.handleClip(wayland.Message{Object: 10, Opcode: wlDataDevSelection, Payload: p}); err != nil {
 		t.Fatal(err)

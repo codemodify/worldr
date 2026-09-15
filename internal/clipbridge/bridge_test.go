@@ -33,6 +33,53 @@ func TestPickPlainMime(t *testing.T) {
 	}
 }
 
+func TestPickImageMime(t *testing.T) {
+	if PickImageMime(nil) != "" {
+		t.Fatal("empty")
+	}
+	if PickImageMime([]string{"text/plain", "image/png"}) != MimePNG {
+		t.Fatal("png")
+	}
+	if PickImageMime([]string{"image/bmp"}) != MimeBMP {
+		t.Fatal("bmp")
+	}
+	if PickImageMime([]string{"text/plain"}) != "" {
+		t.Fatal("text only")
+	}
+	if !IsImage("image/png") || !IsImage("image/bmp") || IsImage("text/plain") {
+		t.Fatal("IsImage")
+	}
+}
+
+func TestHostOfferMimes(t *testing.T) {
+	if !Bridgeable([]string{"image/png"}) || !Bridgeable([]string{"text/plain"}) {
+		t.Fatal("bridgeable")
+	}
+	if Bridgeable([]string{"application/octet-stream"}) {
+		t.Fatal("unknown")
+	}
+	got := HostOfferMimes([]string{"text/plain", "image/png"})
+	hasText, hasPNG := false, false
+	for _, m := range got {
+		if m == MimeTextPlain {
+			hasText = true
+		}
+		if m == MimePNG {
+			hasPNG = true
+		}
+	}
+	if !hasText || !hasPNG {
+		t.Fatalf("%v", got)
+	}
+	got = HostOfferMimes([]string{"image/png"})
+	if len(got) != 1 || got[0] != MimePNG {
+		t.Fatalf("png only %v", got)
+	}
+	if CapFor(MimePNG) != MaxImageBytes || CapFor(MimeTextPlain) != MaxTextBytes {
+		t.Fatal("caps")
+	}
+}
+
 func TestHostOwnEcho(t *testing.T) {
 	var h HostOwn
 	if h.Owns(false) || h.Owns(true) {

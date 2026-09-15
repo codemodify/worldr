@@ -176,12 +176,12 @@ is the same bind when KWin does not steal Super.
 `xdg_popup` (no SSD title bar) stacked above the window. Clicks on the menu
 should reach the popup surface.
 
-**Clipboard (0.9.15):** in foot, select text, Ctrl+Shift+C, then Ctrl+Shift+V
+**Clipboard (0.9.19):** in foot, select text, Ctrl+Shift+C, then Ctrl+Shift+V
 (or another worldr client). Middle-click pastes the primary selection.
-Nested under Plasma: copy in foot appears on the host clipboard; copy in
-Kate/Konsole (or any Plasma app) pastes in foot. Primary is bridged when
-the host advertises `zwp_primary_selection`. vk-display/drm stay
-in-compositor only.
+**Images:** copy a PNG in a worldr client that offers `image/png` (or
+`image/bmp`) and paste in another. Nested under Plasma: `text/plain` still
+works; `image/png` is forwarded both ways when the host advertises it
+(screenshot / Kate image paste). vk-display/drm stay in-compositor only.
 
 **Scale (0.9.16):** nested under Plasma, worldr reads host `wl_output.scale`
 and `wp_fractional_scale` `preferred_scale` (120ths) and drives its own
@@ -442,7 +442,7 @@ disconnected cleanly** against the compositor.
 | Client | Buffer | Expected now | Notes |
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.15): Ctrl+Shift+C / Ctrl+Shift+V between worldr clients and, when nested, Plasma ↔ foot (`text/plain`). Mouse-select + middle-click uses primary (bridged if the host advertises it). Cursors, activation, **fractional-scale** (0.9.16: nest follows Plasma HiDPI; `--scale` overrides). **Icons** (0.9.18): theme PNG from `.desktop` `Icon=` / `AppID` on launcher + SSD/panel; `xdg_toplevel_icon` buffer still wins. **Workspaces** (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. Still expected: text-input/IME. |
+| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.19): Ctrl+Shift+C / Ctrl+Shift+V `text/plain` between worldr clients and, when nested, Plasma ↔ foot. `image/png` (and `image/bmp`) between clients; nest host forwards png when advertised. Mouse-select + middle-click uses primary (bridged if the host advertises it). Cursors, activation, **fractional-scale** (0.9.16: nest follows Plasma HiDPI; `--scale` overrides). **Icons** (0.9.18): theme PNG from `.desktop` `Icon=` / `AppID` on launcher + SSD/panel; `xdg_toplevel_icon` buffer still wins. **Workspaces** (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. Still expected: text-input/IME. |
 | `kitty` | linux-dmabuf (GL) | **Try** | On **vk-display** (0.9.10+): Vulkan import + GPU blit. **0.9.17**: fullscreen ARGB/XRGB may KMS-scanout on `--backend=drm` (`kms scanout: primary dmabuf`). vk-display logs `kms scanout fallback` (Vulkan holds DRM master) then blits. Nested still CPU. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
@@ -481,7 +481,7 @@ Workaround — real display on **tty3**:
 
 - XWayland (0.9.11): `--xwayland` rootless + tiny XWM + `xwayland_shell_v1`. EWMH basics (`_NET_SUPPORTED`, active window, titles/class, delete/take-focus). Not a full ICCCM WM (no reparenting/pager). Overlay menus skip SSD.
 - `xdg_popup` + `wl_subsurface` stacking (0.9.8): menus/tooltips/dropdowns. Positioner uses size + anchor + offset (no constraint/flip). Foot right-click menu is the abox check.
-- Clipboard (0.9.15): `text/plain` between worldr clients and, when nested, Plasma ↔ worldr via host `wl_data_device`. Primary bridged if advertised. No image MIME. vk-display/drm have no host to bind.
+- Clipboard (0.9.19): `text/plain` + `image/png` (`image/bmp` if offered) between worldr clients. Nested: Plasma ↔ worldr for text and png when the host advertises them. Primary bridged if advertised. No JPEG/WebP. vk-display/drm have no host to bind.
 - dmabuf (0.9.17): GPU sample on vk-display; **KMS primary scanout** for one fullscreen ARGB/XRGB on `--backend=drm` (atomic + SetCrtc fallback). vk-display tries eligibility then blits (`VK_KHR_display` holds master). No overlay planes, no `linux-drm-syncobj` (Intel implicit sync). Nested host still CPU-composites. Soak: spare TTY, `scripts/try-tty.sh`, `kitty` fullscreen — look for `kms scanout: primary dmabuf` (`--backend=drm`) or `kms scanout fallback` then GPU blit (`vk-display`).
 - SSD is thicker accent + title gradient + focused glow (still not a toolkit)
 - Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)

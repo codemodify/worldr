@@ -84,6 +84,51 @@ func TestClipboardOfferSetSelectionReceive(t *testing.T) {
 	}
 }
 
+func TestClipboardOfferReceivePNG(t *testing.T) {
+	src, srcRD, srcConn, dst, dstRD, dstConn := newClipboardPair(t)
+	src.objs[20] = &object{id: 20, kind: kindDataSource, src: &dataSource{id: 20, client: src}}
+	src.dataDev = 21
+	src.objs[21] = &object{id: 21, kind: kindDataDevice}
+	dst.dataDev = 31
+	dst.objs[31] = &object{id: 31, kind: kindDataDevice}
+
+	_ = src.reqDataSource(src.objs[20], 0, wayland.NewCursor(wayland.PutString(nil, "image/png"), nil))
+	p := wayland.PutU32(nil, 20)
+	p = wayland.PutU32(p, 1)
+	if err := src.reqDataDevice(src.objs[21], 1, wayland.NewCursor(p, nil)); err != nil {
+		t.Fatal(err)
+	}
+	got := drainDataDev(t, dstConn, dstRD, 31)
+	if !got.mimes["image/png"] {
+		t.Fatalf("mimes %v", got.mimes)
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	wfd, err := syscall.Dup(int(w.Fd()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	if err := dst.reqDataOffer(dst.objs[got.offerID], 1, wayland.NewCursor(wayland.PutString(nil, "image/png"), []int{wfd})); err != nil {
+		t.Fatal(err)
+	}
+	sendFD := drainSourceSend(t, srcConn, srcRD, 20)
+	if sendFD < 0 {
+		t.Fatal("send")
+	}
+	png := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3}
+	if _, err := syscall.Write(sendFD, png); err != nil {
+		t.Fatal(err)
+	}
+	_ = syscall.Close(sendFD)
+	if string(readAll(t, r)) != string(png) {
+		t.Fatal("png paste")
+	}
+}
+
 func TestClipboardReplaceCancelsOldSource(t *testing.T) {
 	src, srcRD, srcConn, _, _, _ := newClipboardPair(t)
 	src.objs[20] = &object{id: 20, kind: kindDataSource, src: &dataSource{id: 20, client: src}}
