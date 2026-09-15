@@ -32,6 +32,9 @@ type Server struct {
 	cursorStride       int
 	cursorShape        uint32
 	cursorVisible      bool
+
+	clip *selection
+	prim *selection
 }
 
 // Listen opens $XDG_RUNTIME_DIR/<name>. Empty name → first free wayland-N (from 1).

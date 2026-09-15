@@ -176,6 +176,10 @@ is the same bind when KWin does not steal Super.
 `xdg_popup` (no SSD title bar) stacked above the window. Clicks on the menu
 should reach the popup surface.
 
+**Clipboard (0.9.9):** in foot, select text, Ctrl+Shift+C, then Ctrl+Shift+V
+(or another worldr client). Middle-click pastes the primary selection.
+This stays inside worldr — it does not copy into the Plasma/KWin clipboard.
+
 | Key / click | Action |
 | --- | --- |
 | F1 | Toggle launcher |
@@ -398,7 +402,7 @@ disconnected cleanly** against the compositor.
 | Client | Buffer | Expected now | Notes |
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. Cursors, activation, primary-selection stub, fractional-scale 120. Still expected: `xdg-toplevel-icon`, text-input/IME. |
+| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.9): Ctrl+Shift+C / Ctrl+Shift+V between worldr clients (`text/plain`); mouse-select + middle-click uses primary. Not bridged to Plasma’s clipboard yet. Cursors, activation, fractional-scale 120. Still expected: `xdg-toplevel-icon`, text-input/IME. |
 | `kitty` | linux-dmabuf (GL) | **Try** | GPU path: Vulkan import + CPU readback. Needs `linux-dmabuf: Vulkan import` in the shell log. LINEAR mmap fallback if the buffer is linear. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
@@ -437,7 +441,7 @@ Workaround — real display on **tty3**:
 
 - XWayland spike: `--xwayland` rootless + tiny XWM + `xwayland_shell_v1` (not a full EWMH WM)
 - `xdg_popup` + `wl_subsurface` stacking (0.9.8): menus/tooltips/dropdowns. Positioner uses size + anchor + offset (no constraint/flip). Foot right-click menu is the abox check.
-- Clipboard / primary selection objects bind; no MIME transfer yet
+- Clipboard (0.9.9): `text/plain` between worldr clients. Nested host clipboard (Plasma ↔ worldr) is a follow-up — the nest client does not bind host `wl_data_device`.
 - No zero-copy GPU composite (import is readback)
 - SSD is thicker accent + title gradient + focused glow (still not a toolkit)
 - Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)

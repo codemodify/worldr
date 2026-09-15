@@ -82,6 +82,7 @@ func (c *Client) keyboardEnter(s *surface) {
 	p = wayland.PutU32(p, 0)
 	p = wayland.PutU32(p, 0)
 	_ = c.send(c.kbdID, 4, p, nil) // modifiers
+	c.sendCurrentSelections()
 }
 
 func (c *Client) keyboardLeave(sid uint32) {
