@@ -152,7 +152,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		fmt.Fprintln(stdout, "overview: --overview-demo will auto-enter after the first window maps")
 	}
 	fmt.Fprintln(stdout, "panel: bottom bar always visible (worldr, apps, focused title, pager, grid, clock).")
-	fmt.Fprintln(stdout, "launcher: F1 or Super+Space (or panel apps). Enter/click spawns with this WAYLAND_DISPLAY. Esc closes the list.")
+	fmt.Fprintf(stdout, "launcher: F1 or Super+Space (or panel apps). %d apps from XDG .desktop (fallback if none). Enter/click spawns with this WAYLAND_DISPLAY. Esc closes the list.\n", len(ln.Items))
 	fmt.Fprintf(stdout, "workspaces: %d desktops (Ctrl+Alt+←/→ or pager dots). New windows spawn on the active desktop. Overview is current-desktop only.\n", scene.WorkspaceCount())
 
 	fmt.Fprintln(stdout, "running. Exit: Ctrl+Q, Ctrl+C, or --duration. Bare Q/Esc never quit while a client is on the desktop (type in foot freely). Esc on an empty desktop still quits.")

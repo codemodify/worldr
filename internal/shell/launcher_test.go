@@ -9,19 +9,12 @@ import (
 	"github.com/codemodify/worldr/internal/input"
 )
 
-func TestCatalogXwayland(t *testing.T) {
-	c := Catalog(false)
-	if len(c) != 2 || c[0].Bin != "foot" || c[1].X11 {
-		t.Fatalf("%+v", c)
-	}
-	c = Catalog(true)
-	if len(c) < 3 || c[2].Bin != "xeyes" || !c[2].X11 {
-		t.Fatalf("x11 %+v", c)
-	}
+func testLauncherItems() []LaunchItem {
+	return fallbackCatalog(false)
 }
 
 func TestHandleLauncherKeysF1AndEsc(t *testing.T) {
-	ln := Launcher{Items: Catalog(false)}
+	ln := Launcher{Items: testLauncherItems()}
 	meta := false
 	now := time.Unix(1, 0)
 	ptr := &input.Pointer{Keys: []input.Key{{Code: keyF1, Pressed: true}}}
@@ -40,7 +33,7 @@ func TestHandleLauncherKeysF1AndEsc(t *testing.T) {
 }
 
 func TestHandleLauncherKeysSuperSpaceAndEnter(t *testing.T) {
-	ln := Launcher{Items: Catalog(false)}
+	ln := Launcher{Items: testLauncherItems()}
 	meta := true
 	now := time.Unix(1, 0)
 	ptr := &input.Pointer{Keys: []input.Key{{Code: keySpace, Pressed: true}}}
@@ -65,7 +58,7 @@ func TestHandleLauncherKeysSuperSpaceAndEnter(t *testing.T) {
 }
 
 func TestHandleLauncherKeysF1WaylandOffset(t *testing.T) {
-	ln := Launcher{Items: Catalog(false)}
+	ln := Launcher{Items: testLauncherItems()}
 	meta := false
 	ptr := &input.Pointer{Keys: []input.Key{{Code: keyF1 + 8, Pressed: true}}}
 	handleLauncherKeys(&ln, ptr, time.Unix(1, 0), &meta, nil)
@@ -75,7 +68,7 @@ func TestHandleLauncherKeysF1WaylandOffset(t *testing.T) {
 }
 
 func TestLauncherOutsideCloseSuppressedUntilRelease(t *testing.T) {
-	ln := Launcher{Items: Catalog(false)}
+	ln := Launcher{Items: testLauncherItems()}
 	var g launcherGate
 	now := time.Unix(1, 0)
 	const w, h = 800, 600
@@ -109,7 +102,7 @@ func TestLauncherOutsideCloseSuppressedUntilRelease(t *testing.T) {
 }
 
 func TestPanelAppsExplicitCloseAfterDebounce(t *testing.T) {
-	ln := Launcher{Items: Catalog(false)}
+	ln := Launcher{Items: testLauncherItems()}
 	var g launcherGate
 	now := time.Unix(1, 0)
 
@@ -126,7 +119,7 @@ func TestPanelAppsExplicitCloseAfterDebounce(t *testing.T) {
 }
 
 func TestHandleLauncherKeysF1ArmsIgnoreOutside(t *testing.T) {
-	ln := Launcher{Items: Catalog(false)}
+	ln := Launcher{Items: testLauncherItems()}
 	var g launcherGate
 	meta := false
 	ptr := &input.Pointer{Keys: []input.Key{{Code: keyF1, Pressed: true}}}

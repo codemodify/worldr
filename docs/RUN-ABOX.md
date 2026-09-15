@@ -72,8 +72,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on full US keymap):
-git checkout cursor/pointer-button-hygiene-c92c
+# this branch (stacked on pointer hygiene):
+git checkout cursor/desktop-launcher-c92c
 
 export CGO_ENABLED=1
 make build
@@ -182,9 +182,13 @@ is the same bind when KWin does not steal Super.
 | Enter / click row | Spawn that command |
 | Esc | Close launcher (does not quit) |
 
-Hardcoded list (no `.desktop` scan): `foot`, `weston-simple-shm`, and
-`xeyes` / `xterm` when `--xwayland` is on. Missing binaries log
-`launcher: … not on PATH` and the shell keeps running.
+The list is scanned from XDG `.desktop` files (`~/.local/share/applications`
+and `$XDG_DATA_DIRS/applications`). `Name=` is shown; `Exec=` is launched
+with `%f` / `%F` / `%u` / `%U` field codes stripped. `Hidden` / `NoDisplay`
+/ `Terminal=true` entries are skipped. If the scan is empty, the fallback
+is `foot`, `weston-simple-shm`, and `xeyes` / `xterm` when `--xwayland`
+is on. Missing binaries log `launcher: … not on PATH` and the shell keeps
+running.
 
 ### Workspaces (v0)
 
@@ -410,7 +414,7 @@ Workaround — real display on **tty3**:
 - Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
 - Fractional scale stub: `preferred_scale` 120 (1.0); still integer composite. No `xdg-toplevel-icon` or IME (`zwp_text_input`)
 - Compiz theater v0 is hardcoded (no plugin graph); `--effects=off` disables
-- Launcher is a hardcoded list (no `.desktop` / menu scan)
+- Launcher reads XDG `.desktop` files (no icon theme yet; `Terminal=true` apps skipped; no ibus/fcitx IME)
 - Panel is CPU-composited chrome (not a toolkit)
 - Workspaces v0: no drag-to-desktop, no per-output set, overview is current-desktop only
 - vk-display/drm need DRM master on a spare VT (scripts/try-tty.sh); CI exercises refuse/no-DRM paths only

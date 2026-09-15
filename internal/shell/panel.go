@@ -314,14 +314,18 @@ func LayoutLauncher(n, screenW, screenH, panelH int) (card engine.GridCell, rows
 	if card.Y < 8 {
 		card.Y = 8
 	}
-	rows = make([]engine.GridCell, n)
+	rows = make([]engine.GridCell, 0, n)
 	for i := 0; i < n; i++ {
-		rows[i] = engine.GridCell{
+		y := card.Y + head + i*rowH
+		if y+rowH > card.Y+card.H {
+			break
+		}
+		rows = append(rows, engine.GridCell{
 			X: card.X + 8,
-			Y: card.Y + head + i*rowH,
+			Y: y,
 			W: card.W - 16,
 			H: rowH,
-		}
+		})
 	}
 	return card, rows
 }
