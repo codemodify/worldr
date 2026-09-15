@@ -26,6 +26,12 @@ func TestOverviewToggleKeys(t *testing.T) {
 	}
 }
 
+func TestCtrlAltEvdevOffset(t *testing.T) {
+	if !isCtrl(29) || !isCtrl(37) || !isAlt(56) || !isAlt(64) {
+		t.Fatal("ctrl/alt evdev+8")
+	}
+}
+
 func TestLauncherToggleKeys(t *testing.T) {
 	if !isLauncherToggle(59, false) || !isLauncherToggle(67, false) {
 		t.Fatal("F1")

@@ -894,14 +894,18 @@ func (c *Client) send(object uint32, opcode uint16, payload []byte, fds []int) e
 }
 
 func (c *Client) focusedSurface() *surface {
+	ws := 0
+	if c.srv != nil && c.srv.Scene != nil {
+		ws = c.srv.Scene.ActiveWorkspace()
+	}
 	for _, o := range c.objs {
-		if o.surf != nil && o.surf.actor != nil && o.surf.actor.Focused {
+		if o.surf != nil && o.surf.actor != nil && o.surf.actor.Focused && o.surf.actor.Workspace == ws {
 			return o.surf
 		}
 	}
-	// first mapped
+	// first mapped on the active desktop
 	for _, o := range c.objs {
-		if o.surf != nil && o.surf.actor != nil {
+		if o.surf != nil && o.surf.actor != nil && o.surf.actor.Workspace == ws {
 			return o.surf
 		}
 	}

@@ -29,6 +29,22 @@ func TestLayoutPanelHits(t *testing.T) {
 	}
 }
 
+func TestLayoutPanelPagerHits(t *testing.T) {
+	r := LayoutPanelWS(800, 600, 3)
+	if len(r.Dots) != 3 {
+		t.Fatal(len(r.Dots))
+	}
+	if HitPager(r, r.Dots[2].X+2, r.Dots[2].Y+2) != 2 {
+		t.Fatal("dot 2")
+	}
+	if HitPanel(r, r.Dots[1].X+2, r.Dots[1].Y+2) != PanelHitPager {
+		t.Fatal("zone")
+	}
+	if inCell(r.Dots[0], r.Overview.X+1, r.Overview.Y+1) {
+		t.Fatal("pager/overview overlap")
+	}
+}
+
 func TestClockStringLocal(t *testing.T) {
 	now := time.Date(2026, 9, 15, 14, 5, 9, 0, time.FixedZone("x", 0))
 	s := ClockString(now)

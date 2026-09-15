@@ -15,7 +15,19 @@ const (
 	keyDown      uint32 = 108
 	keyLeftMeta  uint32 = 125
 	keyRightMeta uint32 = 126
+	keyLeftCtrl  uint32 = 29
+	keyRightCtrl uint32 = 97
+	keyLeftAlt   uint32 = 56
+	keyRightAlt  uint32 = 100
 )
+
+func isCtrl(code uint32) bool {
+	return isEvdev(code, keyLeftCtrl) || isEvdev(code, keyRightCtrl)
+}
+
+func isAlt(code uint32) bool {
+	return isEvdev(code, keyLeftAlt) || isEvdev(code, keyRightAlt)
+}
 
 func isEvdev(code, evdev uint32) bool {
 	return code == evdev || code == evdev+8
