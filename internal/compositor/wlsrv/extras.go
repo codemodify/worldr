@@ -81,11 +81,31 @@ func (c *Client) reqActivation(_ *object, op uint16, cur *wayland.Cursor) error 
 	case 2: // activate(token, surface)
 		_, _ = cur.String()
 		sid, _ := cur.U32()
-		if so := c.objs[sid]; so != nil && so.surf != nil && so.surf.actor != nil {
-			c.srv.Scene.FocusAt(so.surf.actor.X+1, so.surf.actor.Y+1, 26, 6)
-		}
+		c.activateSurface(sid)
 	}
 	return nil
+}
+
+func (c *Client) activateSurface(sid uint32) {
+	so := c.objs[sid]
+	if so == nil || so.surf == nil {
+		return
+	}
+	s := so.surf
+	if s.actor != nil && c.srv != nil && c.srv.Scene != nil {
+		c.srv.Scene.FocusActor(s.actor)
+	}
+	if s.xdg != nil && s.xdg.top != nil {
+		s.xdg.top.inactive = false
+		_ = c.configure(s.xdg)
+	}
+	if c.kbdID != 0 && c.kbdSurf != s.id {
+		if c.kbdSurf != 0 {
+			c.keyboardLeave(c.kbdSurf)
+		}
+		c.keyboardEnter(s)
+		c.kbdSurf = s.id
+	}
 }
 
 func (c *Client) reqActToken(o *object, op uint16, cur *wayland.Cursor) error {

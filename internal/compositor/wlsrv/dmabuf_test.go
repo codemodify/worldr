@@ -10,6 +10,68 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+func TestDmabufFormatTableLinearWithoutGPU(t *testing.T) {
+	nest := dmabufFormatTable(false)
+	if dmabufTableHasTiled(nest) {
+		t.Fatal("nest/headless feedback must be LINEAR-only (Chromium tiled → black)")
+	}
+	if len(nest)/16 != 4 {
+		t.Fatalf("linear entries %d", len(nest)/16)
+	}
+	gpu := dmabufFormatTable(true)
+	if !dmabufTableHasTiled(gpu) {
+		t.Fatal("vk-display feedback should include Intel tiled modifiers")
+	}
+}
+
+func TestWantTiledDmabuf(t *testing.T) {
+	c := &Client{srv: &Server{}}
+	if c.wantTiledDmabuf() {
+		t.Fatal("no Import")
+	}
+	c.srv.Import = fakeGPU{gpu: false}
+	if c.wantTiledDmabuf() {
+		t.Fatal("CanGPUComposite false")
+	}
+	c.srv.Import = fakeGPU{gpu: true}
+	if !c.wantTiledDmabuf() {
+		t.Fatal("vk-display")
+	}
+}
+
+func TestCreateImmedKeepsFD(t *testing.T) {
+	c := &Client{objs: map[uint32]*object{}, srv: &Server{log: log.New(io.Discard, "", 0)}}
+	d := &dmaBuf{w: 8, h: 8, fourcc: 0x11111111, planes: []dmaPlane{{fd: 7, stride: 32}}}
+	c.installDmaKeepFD(50, d)
+	o := c.objs[50]
+	if o == nil || o.dma == nil || len(o.dma.planes) == 0 || o.dma.planes[0].fd != 7 || !o.dma.resolved {
+		t.Fatalf("keep fd %+v", o)
+	}
+	if !dmaHasUsableFD(&dmaBuf{planes: []dmaPlane{{fd: 3}}}) || dmaHasUsableFD(&dmaBuf{}) {
+		t.Fatal("usable fd")
+	}
+}
+
+type fakeGPU struct{ gpu bool }
+
+func (f fakeGPU) ImportDMABuf(uint32, uint32, uint32, uint64, []DMABufPlane) ([]byte, int, error) {
+	return nil, 0, errFakeImport
+}
+
+func (f fakeGPU) RetainDMABuf(uint32, uint32, uint32, uint64, []DMABufPlane) (int, error) {
+	return 0, errFakeImport
+}
+
+func (f fakeGPU) ReleaseDMABuf(int) {}
+
+func (f fakeGPU) CanGPUComposite() bool { return f.gpu }
+
+var errFakeImport = errString("fake import")
+
+type errString string
+
+func (e errString) Error() string { return string(e) }
+
 func TestInstallDmaPlaceholder(t *testing.T) {
 	c := &Client{objs: map[uint32]*object{}}
 	c.installDmaPlaceholder(42, 8, 4, drmFormatARGB8888)
