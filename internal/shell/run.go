@@ -107,6 +107,9 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				fmt.Fprintf(stdout, "nested compositor: clients appear inside this window. Keep this WAYLAND_DISPLAY=%s for the host; use WAYLAND_DISPLAY=%s for foot/weston-simple-shm.\n",
 					os.Getenv("WAYLAND_DISPLAY"), srv.DisplayName)
 			}
+			if p.wl != nil {
+				wireHostClipboard(p.wl, srv, stdout)
+			}
 			if opt.XWayland {
 				runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
 				xw, err := xwayland.Start(srv.DisplayName, runtimeDir, srv.Dispatch)

@@ -12,6 +12,8 @@ const (
 	ifaceShm        = "wl_shm"
 	ifaceXdg        = "xdg_wm_base"
 	ifaceSeat       = "wl_seat"
+	ifaceDataDev    = "wl_data_device_manager"
+	ifacePrimary    = "zwp_primary_selection_device_manager_v1"
 )
 
 // Max version we implement for each interface we actually bind.
@@ -23,6 +25,8 @@ var bindMaxVersion = map[string]uint32{
 	ifaceShm:        1, // create_pool only (v2 is wl_shm.release)
 	ifaceXdg:        6, // client requests are v1; extra events are ignored
 	ifaceSeat:       5, // get_pointer + get_keyboard + pointer.frame
+	ifaceDataDev:    3, // create_data_source + get_data_device + selection
+	ifacePrimary:    1, // zwp_primary_selection if the host advertises it
 }
 
 type registryGlobal struct {

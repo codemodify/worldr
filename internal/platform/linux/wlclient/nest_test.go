@@ -51,6 +51,12 @@ func TestNestedClientAgainstWorldr(t *testing.T) {
 	if cv > 6 || sv > 1 || xv > 5 {
 		t.Fatalf("bound above advertised compositor=%d shm=%d xdg=%d", cv, sv, xv)
 	}
+	if !win.HostClipBound() {
+		t.Fatal("expected host wl_data_device_manager bind against worldr")
+	}
+	if !win.HostPrimaryBound() {
+		t.Fatal("expected host zwp_primary_selection bind against worldr")
+	}
 
 	cw, ch, stride := win.Size()
 	if cw < 1 || ch < 1 || stride < cw*4 {

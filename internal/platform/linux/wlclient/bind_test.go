@@ -28,6 +28,10 @@ func TestClampBindVersion(t *testing.T) {
 		{ifaceSeat, 8, 5, true},
 		{ifaceSeat, 4, 4, true},
 		{ifaceSeat, 0, 0, false},
+		{ifaceDataDev, 3, 3, true},
+		{ifaceDataDev, 1, 1, true},
+		{ifacePrimary, 1, 1, true},
+		{ifacePrimary, 0, 0, false},
 		// common KWin traps — must never bind (v0 or too-high)
 		{"wl_output", 4, 0, false},
 		{"wp_viewporter", 1, 0, false},

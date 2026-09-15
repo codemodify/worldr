@@ -1,9 +1,9 @@
 package wlsrv
 
 import (
-	"strings"
 	"syscall"
 
+	"github.com/codemodify/worldr/internal/clipbridge"
 	"github.com/codemodify/worldr/internal/wayland"
 )
 
@@ -26,10 +26,11 @@ const (
 )
 
 type dataSource struct {
-	id      uint32
-	client  *Client
-	mimes   []string
-	primary bool
+	id        uint32
+	client    *Client
+	mimes     []string
+	primary   bool
+	hostBytes []byte // nest import: transfer writes these instead of send
 }
 
 type dataOffer struct {
@@ -58,12 +59,7 @@ func (s *dataSource) cancelledOp() uint16 {
 }
 
 func isPlainText(m string) bool {
-	m = strings.ToLower(strings.TrimSpace(m))
-	switch m {
-	case mimeTextPlain, mimeTextUTF8, "text/plain; charset=utf-8", "utf8_string", "text", "string":
-		return true
-	}
-	return strings.HasPrefix(m, "text/plain")
+	return clipbridge.IsPlainText(m)
 }
 
 func matchMime(offered []string, want string) string {
@@ -271,7 +267,7 @@ func (s *Server) setSelection(primary bool, from *Client, src *dataSource) {
 		s.clip = next
 	}
 	s.mu.Unlock()
-	if old != nil && old.source != nil && old.source != src {
+	if old != nil && old.source != nil && old.source != src && old.source.client != nil {
 		_ = old.source.client.send(old.source.id, old.source.cancelledOp(), nil, nil)
 	}
 	s.mu.Lock()
@@ -280,6 +276,60 @@ func (s *Server) setSelection(primary bool, from *Client, src *dataSource) {
 	for _, c := range cl {
 		c.sendSelection(primary)
 	}
+	if s.clipExport != nil && src != nil && len(src.hostBytes) == 0 && clipbridge.PickPlainMime(src.mimes) != "" {
+		s.clipExport(primary, src.mimes)
+	}
+}
+
+// SetClipExport is called when a worldr client set_selection of text (not a host import).
+func (s *Server) SetClipExport(fn func(primary bool, mimes []string)) {
+	if s == nil {
+		return
+	}
+	s.clipExport = fn
+}
+
+// ImportHostText installs a host-backed text selection (nest Plasma → worldr).
+func (s *Server) ImportHostText(primary bool, text []byte) {
+	if s == nil {
+		return
+	}
+	if len(text) == 0 {
+		s.setSelection(primary, nil, nil)
+		return
+	}
+	if len(text) > clipbridge.MaxTextBytes {
+		text = text[:clipbridge.MaxTextBytes]
+	}
+	src := &dataSource{
+		mimes:     clipbridge.TextMimes(),
+		primary:   primary,
+		hostBytes: append([]byte(nil), text...),
+	}
+	s.setSelection(primary, nil, src)
+}
+
+// SendSelectionTo writes the current selection onto fd (host data_source.send).
+func (s *Server) SendSelectionTo(primary bool, mime string, fd int) {
+	if s == nil {
+		if fd > 0 {
+			_ = syscall.Close(fd)
+		}
+		return
+	}
+	s.mu.Lock()
+	sel := s.clip
+	if primary {
+		sel = s.prim
+	}
+	s.mu.Unlock()
+	if sel == nil || sel.source == nil {
+		if fd > 0 {
+			_ = syscall.Close(fd)
+		}
+		return
+	}
+	s.transfer(&dataOffer{source: sel.source, prim: primary}, mime, fd)
 }
 
 func (s *Server) clearIfCurrent(src *dataSource) {
@@ -317,19 +367,30 @@ func (s *Server) dropClientSelection(c *Client) {
 }
 
 func (s *Server) transfer(offer *dataOffer, mime string, fd int) {
-	if fd > 0 {
-		defer func() { _ = syscall.Close(fd) }()
+	if fd <= 0 {
+		return
 	}
-	if s == nil || offer == nil || offer.source == nil || offer.source.client == nil || fd <= 0 {
+	if s == nil || offer == nil || offer.source == nil {
+		_ = syscall.Close(fd)
 		return
 	}
 	src := offer.source
+	if len(src.hostBytes) > 0 {
+		clipbridge.WriteText(fd, src.hostBytes)
+		return
+	}
+	if src.client == nil {
+		_ = syscall.Close(fd)
+		return
+	}
 	use := matchMime(src.mimes, mime)
 	if use == "" {
+		_ = syscall.Close(fd)
 		return
 	}
 	p := wayland.PutString(nil, mime)
 	_ = src.client.send(src.id, src.sendOp(), p, []int{fd})
+	_ = syscall.Close(fd)
 }
 
 func (c *Client) sendCurrentSelections() {
