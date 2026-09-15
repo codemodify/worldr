@@ -25,7 +25,7 @@ not the VT that is already running Plasma/Hyprland/Sway/GNOME.
 | --- | --- |
 | Ctrl+Alt+F1…F7 | Switch virtual terminals. Your existing graphical session stays on its VT. |
 | Ctrl+C | Stop `worldr-shell` if it is in the foreground on that TTY. |
-| Esc or Q | Quit if evdev can open a keyboard (`input` group). In overview, Esc leaves the grid first. |
+| Ctrl+Q | Quit the compositor (explicit chord). Bare **Q** never quits — type in foot freely. |
 | F12 | Toggle expose/overview (nested window must be focused). Super+Tab if the host does not steal Super. Also the panel **grid** button. |
 | F1 | Open the in-shell launcher (Super+Space if the host does not steal Super). Also the panel **apps** button. |
 | Ctrl+Alt+←/→ | Switch virtual desktop (pager dots if the host steals this combo). |
@@ -72,8 +72,8 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 ```sh
 git clone https://github.com/codemodify/worldr.git
 cd worldr
-# this branch (stacked on 0.9.1 changelog):
-git checkout fix/launcher-sticky
+# this branch (stacked on sticky launcher):
+git checkout fix/quit-chord
 
 export CGO_ENABLED=1
 make build
@@ -137,8 +137,8 @@ With **two or more** clients on the **active desktop**, focus the
 `worldr-shell (nested compositor)` window and press **F12**. Actors on that
 desktop animate into a grid (other workspaces stay hidden). Click a tile
 (or ←/→ / Tab, then Enter) to focus and leave.
-**Esc** leaves overview without quitting. **Esc** or **Q** outside overview
-still quits.
+**Esc** leaves overview without quitting. **Ctrl+Q** quits the compositor.
+Bare **Q** / **Esc** never quit while a client is on the desktop.
 
 | Key | Action |
 | --- | --- |
@@ -146,8 +146,8 @@ still quits.
 | Super+Tab | Same toggle if KWin does not steal Super |
 | ← → Tab | Move selection in overview |
 | Enter | Focus selection and exit |
-| Esc | Exit overview; if already on the desktop, quit |
-| Q | Quit (desktop only) |
+| Esc | Exit overview (does not quit). On an empty desktop, still quits. |
+| Ctrl+Q | Quit the compositor |
 
 Smoke without pressing keys (video-less):
 

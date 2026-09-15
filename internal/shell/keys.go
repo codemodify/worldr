@@ -1,5 +1,7 @@
 package shell
 
+import "github.com/codemodify/worldr/internal/input"
+
 // Linux evdev codes. Nested Wayland seats usually send evdev+8 (XKB).
 const (
 	keyEsc       uint32 = 1
@@ -44,6 +46,34 @@ func isOverviewToggle(code uint32, metaHeld bool) bool {
 	return metaHeld && isEvdev(code, keyTab)
 }
 
-func isQuit(code uint32) bool {
-	return isEvdev(code, keyEsc) || isEvdev(code, keyQ)
+// isQuitChord is Ctrl+Q (evdev or evdev+8). Bare Q never quits.
+func isQuitChord(code uint32, ctrlHeld bool) bool {
+	return ctrlHeld && isEvdev(code, keyQ)
+}
+
+// handleQuitKeys: Ctrl+Q always quits. Bare Esc quits only on an empty
+// desktop (launcher/overview closed, no mapped client). Bare Q never quits
+// so typing in foot cannot kill the compositor.
+func handleQuitKeys(ptr *input.Pointer, ctrlHeld, overlayOpen, desktopHasClient bool) (quit bool, consumed map[uint32]bool) {
+	consumed = map[uint32]bool{}
+	if ptr == nil {
+		return false, consumed
+	}
+	ptr.Quit = false
+	for _, k := range ptr.Keys {
+		if !k.Pressed {
+			continue
+		}
+		if isQuitChord(k.Code, ctrlHeld) {
+			consumed[k.Code] = true
+			ptr.Quit = true
+			return true, consumed
+		}
+		if isEvdev(k.Code, keyEsc) && !overlayOpen && !desktopHasClient {
+			consumed[k.Code] = true
+			ptr.Quit = true
+			return true, consumed
+		}
+	}
+	return false, consumed
 }

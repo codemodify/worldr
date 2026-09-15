@@ -3,7 +3,7 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** 0.9.2-dev on `fix/launcher-sticky` (stacked on 0.9.1 changelog + fractional-scale).
+**Status:** 0.9.3-dev on `fix/quit-chord` (stacked on sticky launcher). Quit is **Ctrl+Q**.
 Nested compositor is the safe demo. Real display: spare TTY via `scripts/try-tty.sh`.
 Human history: [CHANGELOG.md](CHANGELOG.md). Abox notes: [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
@@ -36,6 +36,7 @@ export XDG_RUNTIME_DIR=/run/user/$(id -u)
 export WAYLAND_DISPLAY=wayland-1   # name the shell printed
 foot
 # F12 or panel grid = expose; pager / Ctrl+Alt+←/→ = workspaces
+# quit: Ctrl+Q (bare Q/Esc do not quit while a client is open)
 # optional X11:
 ./bin/worldr-shell --backend=wayland-client --xwayland --duration=60s
 DISPLAY=:N xeyes    # N from the shell's "xwayland: DISPLAY=" line
