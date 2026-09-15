@@ -151,6 +151,7 @@ type Client struct {
 	ptrX     int
 	ptrY     int
 	entered  uint32
+	ptrBtns  pointerButtons
 	kbdSurf  uint32
 	serverID uint32
 }
@@ -582,6 +583,9 @@ func (c *Client) reqSurface(o *object, op uint16, cur *wayland.Cursor) error {
 	}
 	switch op {
 	case 0: // destroy
+		if c.entered == o.id {
+			c.pointerLeaveCurrent()
+		}
 		if s.actor != nil {
 			c.srv.Scene.Remove(s.actor)
 		}
@@ -921,66 +925,3 @@ func (c *Client) focusedSurface() *surface {
 	return nil
 }
 
-func (c *Client) pointerMotion(sx, sy int) {
-	c.ptrX, c.ptrY = sx, sy
-	if c.ptrID == 0 {
-		return
-	}
-	s := c.focusedSurface()
-	if s == nil || s.actor == nil {
-		return
-	}
-	lx := sx - s.actor.X
-	ly := sy - s.actor.Y
-	if c.entered != s.id {
-		if c.entered != 0 {
-			p := wayland.PutU32(nil, c.nextSerial())
-			p = wayland.PutU32(p, c.entered)
-			_ = c.send(c.ptrID, 1, p, nil) // leave
-			c.pointerFrame()
-		}
-		p := wayland.PutU32(nil, c.nextSerial())
-		p = wayland.PutU32(p, s.id)
-		p = wayland.PutI32(p, int32(lx*256)) // wl_fixed
-		p = wayland.PutI32(p, int32(ly*256))
-		_ = c.send(c.ptrID, 0, p, nil) // enter
-		if c.kbdSurf != s.id {
-			if c.kbdSurf != 0 {
-				c.keyboardLeave(c.kbdSurf)
-			}
-			c.keyboardEnter(s)
-			c.kbdSurf = s.id
-		}
-		c.entered = s.id
-		c.pointerFrame()
-	}
-	p := wayland.PutU32(nil, uint32(time.Now().UnixMilli()))
-	p = wayland.PutI32(p, int32(lx*256))
-	p = wayland.PutI32(p, int32(ly*256))
-	_ = c.send(c.ptrID, 2, p, nil) // motion
-	c.pointerFrame()
-}
-
-func (c *Client) pointerFrame() {
-	if c.ptrID == 0 {
-		return
-	}
-	_ = c.send(c.ptrID, 5, nil, nil) // wl_pointer.frame (v5+)
-}
-
-func (c *Client) pointerButton(sx, sy int, pressed bool) {
-	c.pointerMotion(sx, sy)
-	if c.ptrID == 0 {
-		return
-	}
-	state := uint32(0)
-	if pressed {
-		state = 1
-	}
-	p := wayland.PutU32(nil, c.nextSerial())
-	p = wayland.PutU32(p, uint32(time.Now().UnixMilli()))
-	p = wayland.PutU32(p, 0x110) // BTN_LEFT
-	p = wayland.PutU32(p, state)
-	_ = c.send(c.ptrID, 3, p, nil)
-	c.pointerFrame()
-}

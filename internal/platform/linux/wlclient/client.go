@@ -43,6 +43,7 @@ type Window struct {
 	ptrSerial                            uint32
 	hostX, hostY                         int
 	hostClick, hostRelease               bool
+	hostBtnDown                          bool
 	hostKeys                             []HostKey
 	hostInside                           bool
 
