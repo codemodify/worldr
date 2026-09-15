@@ -27,11 +27,12 @@ type Theater struct {
 // and software cursor into a BGRA framebuffer. This is the present path
 // used by vk-display, drm, headless (when compositing), and nested
 // wayland-client.
-func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engine.Actor, ssd bool, cursor CursorBlit, fx Theater, ov OverviewDraw) {
+func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engine.Actor, ssd bool, cursor CursorBlit, fx Theater, ov OverviewDraw, ch ChromeDraw) {
 	engine.FillBGRA(dst, stride, w, h, clear)
+	deskH := usableHeight(h, ch.PanelH)
 	if ov.T > 0 {
-		engine.FillRectAlpha(dst, stride, w, h, 0, 0, w, h, 0xff000000, 0.38*ov.T)
-		cells := engine.LayoutGrid(len(actors), w, h)
+		engine.FillRectAlpha(dst, stride, w, h, 0, 0, w, deskH, 0xff000000, 0.38*ov.T)
+		cells := engine.LayoutGrid(len(actors), w, deskH)
 		for i, a := range actors {
 			if a == nil || i >= len(cells) {
 				continue
@@ -46,6 +47,12 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 		for _, a := range actors {
 			drawActor(dst, stride, w, h, a, ssd, fx)
 		}
+	}
+	if ch.Launcher != nil {
+		drawLauncher(dst, stride, w, h, ch.PanelH, *ch.Launcher)
+	}
+	if ch.PanelH > 0 {
+		drawPanel(dst, stride, w, h, ch)
 	}
 	if cursor.Visible {
 		decorations.OverlayCursor(dst, stride, w, h, cursor.X, cursor.Y, cursor.HX, cursor.HY,

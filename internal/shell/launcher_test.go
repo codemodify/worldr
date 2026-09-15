@@ -1,0 +1,115 @@
+package shell
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/codemodify/worldr/internal/engine"
+	"github.com/codemodify/worldr/internal/input"
+)
+
+func TestCatalogXwayland(t *testing.T) {
+	c := Catalog(false)
+	if len(c) != 2 || c[0].Bin != "foot" || c[1].X11 {
+		t.Fatalf("%+v", c)
+	}
+	c = Catalog(true)
+	if len(c) < 3 || c[2].Bin != "xeyes" || !c[2].X11 {
+		t.Fatalf("x11 %+v", c)
+	}
+}
+
+func TestHandleLauncherKeysF1AndEsc(t *testing.T) {
+	ln := Launcher{Items: Catalog(false)}
+	meta := false
+	now := time.Unix(1, 0)
+	ptr := &input.Pointer{Keys: []input.Key{{Code: keyF1, Pressed: true}}}
+	handleLauncherKeys(&ln, ptr, now, &meta)
+	if !ln.Open {
+		t.Fatal("F1 should open")
+	}
+	ptr = &input.Pointer{Quit: true, Keys: []input.Key{{Code: keyEsc, Pressed: true}}}
+	handleLauncherKeys(&ln, ptr, now.Add(time.Second), &meta)
+	if ln.Open {
+		t.Fatal("Esc should close")
+	}
+	if ptr.Quit {
+		t.Fatal("Esc must not quit")
+	}
+}
+
+func TestHandleLauncherKeysSuperSpaceAndEnter(t *testing.T) {
+	ln := Launcher{Items: Catalog(false)}
+	meta := true
+	now := time.Unix(1, 0)
+	ptr := &input.Pointer{Keys: []input.Key{{Code: keySpace, Pressed: true}}}
+	_, spawn := handleLauncherKeys(&ln, ptr, now, &meta)
+	if !ln.Open || spawn != nil {
+		t.Fatal("Super+Space should open")
+	}
+	meta = false
+	ptr = &input.Pointer{Keys: []input.Key{{Code: keyDown, Pressed: true}}}
+	handleLauncherKeys(&ln, ptr, now, &meta)
+	if ln.Select != 1 {
+		t.Fatal(ln.Select)
+	}
+	ptr = &input.Pointer{Keys: []input.Key{{Code: keyEnter, Pressed: true}}}
+	_, spawn = handleLauncherKeys(&ln, ptr, now, &meta)
+	if spawn == nil || spawn.Bin != "weston-simple-shm" {
+		t.Fatalf("spawn %+v", spawn)
+	}
+	if ln.Open {
+		t.Fatal("enter closes")
+	}
+}
+
+func TestHandleLauncherKeysF1WaylandOffset(t *testing.T) {
+	ln := Launcher{Items: Catalog(false)}
+	meta := false
+	ptr := &input.Pointer{Keys: []input.Key{{Code: keyF1 + 8, Pressed: true}}}
+	handleLauncherKeys(&ln, ptr, time.Unix(1, 0), &meta)
+	if !ln.Open {
+		t.Fatal("nested evdev+8 F1")
+	}
+}
+
+func TestClientEnvironWaylandStripsHost(t *testing.T) {
+	base := []string{"HOME=/tmp", "WAYLAND_DISPLAY=wayland-0", "DISPLAY=:0", "WAYLAND_SOCKET=4", "PATH=/bin"}
+	env := ClientEnviron(base, "wayland-1", ":1", false)
+	joined := strings.Join(env, "\n")
+	if strings.Contains(joined, "WAYLAND_DISPLAY=wayland-0") || strings.Contains(joined, "WAYLAND_SOCKET=") {
+		t.Fatal(joined)
+	}
+	if !strings.Contains(joined, "WAYLAND_DISPLAY=wayland-1") {
+		t.Fatal(joined)
+	}
+	if !strings.Contains(joined, "DISPLAY=:1") {
+		t.Fatal("keep worldr X11 display for Wayland clients")
+	}
+}
+
+func TestClientEnvironX11Only(t *testing.T) {
+	base := []string{"WAYLAND_DISPLAY=wayland-1", "DISPLAY=:0", "HOME=/tmp"}
+	env := ClientEnviron(base, "wayland-1", ":2", true)
+	joined := strings.Join(env, "\n")
+	if strings.Contains(joined, "WAYLAND_DISPLAY=") {
+		t.Fatal("xeyes must not inherit WAYLAND_DISPLAY")
+	}
+	if !strings.Contains(joined, "DISPLAY=:2") {
+		t.Fatal(joined)
+	}
+}
+
+func TestOverviewKeysStealNavLeavesEsc(t *testing.T) {
+	// When the launcher is open, Esc must not close overview (launcher owns Esc).
+	scene := engine.NewScene()
+	var ov Overview
+	ov.Open(time.Unix(1, 0))
+	meta := false
+	ptr := &input.Pointer{Quit: true, Keys: []input.Key{{Code: keyEsc, Pressed: true}}}
+	handleOverviewKeys(&ov, ptr, scene, time.Unix(2, 0), 800, 600, &meta, true)
+	if !ov.Want {
+		t.Fatal("stealNav should leave overview open")
+	}
+}

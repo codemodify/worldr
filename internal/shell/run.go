@@ -64,6 +64,8 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	}
 
 	var srv *compositor.Server
+	waylandName := ""
+	x11Display := ""
 	if opt.Compositor {
 		var imp compositor.DMABufImport
 		if p.vk != nil && p.vk.HasDMABuf() {
@@ -72,11 +74,16 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		} else {
 			fmt.Fprintln(stdout, "linux-dmabuf: advertised; LINEAR mmap works, tiled GPU buffers need Vulkan import (unavailable on this device)")
 		}
-		s, err := compositor.Listen(opt.WaylandDisplay, scene, int(w), int(h), imp)
+		deskH := usableHeight(int(h), PanelH)
+		if deskH < 1 {
+			deskH = 1
+		}
+		s, err := compositor.Listen(opt.WaylandDisplay, scene, int(w), deskH, imp)
 		if err != nil {
 			fmt.Fprintf(stderr, "compositor listen failed (continuing as clear-only): %v\n", err)
 		} else {
 			srv = s
+			waylandName = srv.DisplayName
 			defer srv.Close()
 			fmt.Fprintf(stdout, "wayland compositor: WAYLAND_DISPLAY=%s  (example: WAYLAND_DISPLAY=%s foot)\n",
 				srv.DisplayName, srv.DisplayName)
@@ -93,6 +100,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 					fmt.Fprintln(stderr, "xwayland: install xorg-xwayland (Arch) and retry. Wayland clients still work.")
 				} else {
 					defer xw.Close()
+					x11Display = xw.Display
 					fmt.Fprintf(stdout, "xwayland: DISPLAY=%s  (example: DISPLAY=%s xeyes)\n", xw.Display, xw.Display)
 					if xw.WM != nil {
 						fmt.Fprintln(stdout, "xwayland: tiny XWM ready — managed X11 windows map as worldr actors + SSD. Do not use the host DISPLAY.")
@@ -129,10 +137,13 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	}
 
 	var ov Overview
-	fmt.Fprintln(stdout, "overview: F12 toggles expose (Super+Tab if the host does not steal Super). Esc leaves overview; Esc/Q outside it quits.")
+	ln := Launcher{Items: Catalog(x11Display != "")}
+	fmt.Fprintln(stdout, "overview: F12 or panel grid toggles expose (Super+Tab if the host does not steal Super). Esc leaves overview; Esc/Q outside it quits.")
 	if opt.OverviewDemo {
 		fmt.Fprintln(stdout, "overview: --overview-demo will auto-enter after the first window maps")
 	}
+	fmt.Fprintln(stdout, "panel: bottom bar always visible (worldr, apps, focused title, grid, clock).")
+	fmt.Fprintln(stdout, "launcher: F1 or Super+Space (or panel apps). Enter/click spawns with this WAYLAND_DISPLAY. Esc closes the list.")
 
 	fmt.Fprintln(stdout, "running. Exit: Ctrl+C, or --duration, or Esc/Q on an evdev keyboard.")
 	if TakesDisplay(Backend(p.name)) {
@@ -156,8 +167,12 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		}
 		scene.Sweep(time.Now())
 		w, h = p.size()
+		deskH := usableHeight(int(h), PanelH)
+		if deskH < 1 {
+			deskH = 1
+		}
 		if srv != nil {
-			srv.ScreenW, srv.ScreenH = int(w), int(h)
+			srv.ScreenW, srv.ScreenH = int(w), deskH
 		}
 		need := int(w) * int(h) * 4
 		if len(fb) != need {
@@ -187,13 +202,22 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			demoArmed = false
 			fmt.Fprintln(stdout, "overview: demo auto-enter (F12 or Esc to leave)")
 		}
-		consume := handleOverviewKeys(&ov, ptr, scene, now, int(w), int(h), &metaHeld)
-		if ptr.Quit && !ov.Want {
+		lcons, spawn := handleLauncherKeys(&ln, ptr, now, &metaHeld)
+		if spawn != nil {
+			_ = SpawnClient(*spawn, waylandName, x11Display, stdout)
+		}
+		consume := handleOverviewKeys(&ov, ptr, scene, now, int(w), deskH, &metaHeld, ln.Open)
+		for code, ok := range lcons {
+			if ok {
+				consume[code] = true
+			}
+		}
+		if ptr.Quit && !ov.Want && !ln.Open {
 			fmt.Fprintln(stdout, "quit key")
 			return nil
 		}
 		ptr.Quit = false
-		if srv != nil && !ov.Live(now) {
+		if srv != nil && !ov.Live(now) && !ln.Open {
 			for _, k := range ptr.Keys {
 				if consume[k.Code] {
 					continue
@@ -201,8 +225,37 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				srv.KeyboardKey(k.Code, k.Pressed)
 			}
 		}
+		if ln.Open && ptr.Click && ptr.Y < deskH {
+			card, rows := LayoutLauncher(len(ln.Items), int(w), int(h), PanelH)
+			idx, inside := HitLauncher(card, rows, ptr.X, ptr.Y)
+			if idx >= 0 && idx < len(ln.Items) {
+				it := ln.Items[idx]
+				ln.Select = idx
+				ln.Close()
+				_ = SpawnClient(it, waylandName, x11Display, stdout)
+			} else if !inside {
+				ln.Close()
+			}
+			ptr.Click = false
+		}
+		if ptr.Click {
+			switch HitPanel(LayoutPanel(int(w), int(h)), ptr.X, ptr.Y) {
+			case PanelHitLaunch:
+				ln.Toggle()
+				ptr.Click = false
+			case PanelHitOverview:
+				ov.Toggle(now)
+				if ov.Want {
+					ov.Select = focusedIndex(scene.Actors())
+				}
+				ln.Close()
+				ptr.Click = false
+			case PanelHitBar:
+				ptr.Click = false
+			}
+		}
 		if ov.Want && ptr.Click {
-			_ = pickOverview(&ov, scene, ptr.X, ptr.Y, int(w), int(h), now)
+			_ = pickOverview(&ov, scene, ptr.X, ptr.Y, int(w), deskH, now)
 			ptr.Click = false
 		}
 		if ptr.Click {
@@ -218,14 +271,14 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		if ptr.Release {
 			dragging = false
 			drag = nil
-			if srv != nil && !ov.Want {
+			if srv != nil && !ov.Want && !ln.Open {
 				srv.PointerButton(ptr.X, ptr.Y, false)
 			}
 		}
-		if dragging && drag != nil && !ov.Want {
+		if dragging && drag != nil && !ov.Want && !ln.Open {
 			drag.X = ptr.X - dx
 			drag.Y = ptr.Y - dy
-		} else if srv != nil && !ov.Live(now) {
+		} else if srv != nil && !ov.Live(now) && !ln.Open {
 			srv.PointerMotion(ptr.X, ptr.Y)
 		}
 		if srv != nil {
@@ -239,9 +292,23 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				cx, cy, hx, hy, pix, cw, ch, cstride, shape, vis := srv.Cursor()
 				cur = CursorBlit{X: cx, Y: cy, HX: hx, HY: hy, Pix: pix, W: cw, H: ch, Stride: cstride, Shape: shape, Visible: vis}
 			}
-			CompositeDesktop(fb, stride, int(w), int(h), pixel, scene.Actors(), opt.SSD, cur,
+			actors := scene.Actors()
+			var ld *LauncherDraw
+			if ln.Open {
+				ld = &LauncherDraw{Items: ln.labels(), Select: ln.Select}
+			}
+			CompositeDesktop(fb, stride, int(w), int(h), pixel, actors, opt.SSD, cur,
 				Theater{Now: now, Tier: opt.Effects},
-				OverviewDraw{T: ov.Progress(now), Select: ov.Select})
+				OverviewDraw{T: ov.Progress(now), Select: ov.Select},
+				ChromeDraw{
+					PanelH:     PanelH,
+					Clock:      ClockString(now),
+					Brand:      "worldr",
+					Title:      FocusedTitle(actors),
+					LaunchOn:   ln.Open,
+					OverviewOn: ov.Want,
+					Launcher:   ld,
+				})
 			if err := p.upload(fb, uint32(stride)); err != nil {
 				return err
 			}

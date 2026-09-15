@@ -25,3 +25,15 @@ func TestOverviewToggleKeys(t *testing.T) {
 		t.Fatal("Super+Tab")
 	}
 }
+
+func TestLauncherToggleKeys(t *testing.T) {
+	if !isLauncherToggle(59, false) || !isLauncherToggle(67, false) {
+		t.Fatal("F1")
+	}
+	if isLauncherToggle(57, false) {
+		t.Fatal("bare space is not toggle")
+	}
+	if !isLauncherToggle(57, true) || !isLauncherToggle(65, true) {
+		t.Fatal("Super+Space")
+	}
+}

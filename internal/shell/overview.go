@@ -73,7 +73,7 @@ func clamp01f(t float64) float64 {
 	return t
 }
 
-func handleOverviewKeys(ov *Overview, ptr *input.Pointer, scene *engine.Scene, now time.Time, _w, _h int, metaHeld *bool) map[uint32]bool {
+func handleOverviewKeys(ov *Overview, ptr *input.Pointer, scene *engine.Scene, now time.Time, _w, _h int, metaHeld *bool, stealNav bool) map[uint32]bool {
 	consumed := map[uint32]bool{}
 	if ov == nil || ptr == nil {
 		return consumed
@@ -99,6 +99,9 @@ func handleOverviewKeys(ov *Overview, ptr *input.Pointer, scene *engine.Scene, n
 			}
 			consumed[k.Code] = true
 			ptr.Quit = false
+			continue
+		}
+		if stealNav {
 			continue
 		}
 		if ov.Want && isEvdev(k.Code, keyEsc) {
@@ -131,7 +134,7 @@ func handleOverviewKeys(ov *Overview, ptr *input.Pointer, scene *engine.Scene, n
 			consumed[k.Code] = true
 			continue
 		}
-		if !ov.Want && isQuit(k.Code) {
+		if !stealNav && !ov.Want && isQuit(k.Code) {
 			ptr.Quit = true
 		}
 	}
