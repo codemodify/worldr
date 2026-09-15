@@ -40,6 +40,7 @@ type Options struct {
 	XWayland         bool
 	Effects          engine.Tier
 	OverviewDemo     bool
+	Workspaces       int
 }
 
 // ErrTakeOverRequired is returned when a real display backend would steal
@@ -65,6 +66,7 @@ func ParseFlags(args []string) (Options, error) {
 	fs.BoolVar(&o.XWayland, "xwayland", false, "launch rootless Xwayland against the worldr socket (xterm/xeyes)")
 	effects := fs.String("effects", "high", "window theater: high|low|off (scale+fade map/unmap; off disables)")
 	fs.BoolVar(&o.OverviewDemo, "overview-demo", false, "auto-enter expose after the first window maps (smoke)")
+	fs.IntVar(&o.Workspaces, "workspaces", engine.WorkspaceDefault, "virtual desktops (2–4, default 3)")
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}
@@ -85,6 +87,7 @@ func ParseFlags(args []string) (Options, error) {
 		return o, err
 	}
 	o.Effects = tier
+	o.Workspaces = engine.ClampWorkspaces(o.Workspaces)
 	return o, nil
 }
 

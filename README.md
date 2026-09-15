@@ -3,10 +3,9 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** panel + launcher v0 on `feat/panel-launcher-v0` (stacked on overview).
-Safe demo: `--backend=wayland-client`, then **F1** to launch `foot` from the
-in-shell list (no second terminal). Bottom panel stays visible. See
-[docs/RUN-ABOX.md](docs/RUN-ABOX.md).
+**Status:** workspaces v0 on `feat/workspaces-v0` (stacked on panel/launcher).
+Safe demo: `--backend=wayland-client`, **F1** → `foot`, pager dots or
+Ctrl+Alt+←/→ to switch desktops. See [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
 ## Quick links
 
@@ -24,7 +23,8 @@ in-shell list (no second terminal). Bottom panel stays visible. See
 5. Compiz-style theater v0 — map/unmap scale+fade (`--effects`)
 6. Expose/overview v0 — F12 grid (`--overview-demo`)
 7. Panel + launcher v0 — bottom bar, F1 spawns foot
-8. Revisit UI toolkit — deferred
+8. Workspaces v0 — 3 desktops, pager + Ctrl+Alt+←/→
+9. Revisit UI toolkit — deferred
 
 ## Build
 
@@ -47,6 +47,7 @@ export XDG_RUNTIME_DIR=/run/user/$(id -u)
 export WAYLAND_DISPLAY=wayland-1   # use the name the shell printed
 foot
 # F12 or panel grid for expose; second foot from the launcher
+# pager dots or Ctrl+Alt+←/→ for workspaces (new windows land on the active desktop)
 # X11 (optional):
 ./bin/worldr-shell --backend=wayland-client --xwayland --duration=60s
 DISPLAY=:N xeyes    # N from the shell's "xwayland: DISPLAY=" line

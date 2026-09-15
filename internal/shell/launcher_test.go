@@ -108,7 +108,7 @@ func TestOverviewKeysStealNavLeavesEsc(t *testing.T) {
 	ov.Open(time.Unix(1, 0))
 	meta := false
 	ptr := &input.Pointer{Quit: true, Keys: []input.Key{{Code: keyEsc, Pressed: true}}}
-	handleOverviewKeys(&ov, ptr, scene, time.Unix(2, 0), 800, 600, &meta, true)
+	handleOverviewKeys(&ov, ptr, scene, time.Unix(2, 0), 800, 600, &meta, true, nil, nil)
 	if !ov.Want {
 		t.Fatal("stealNav should leave overview open")
 	}

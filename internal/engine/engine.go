@@ -21,17 +21,23 @@ type Actor struct {
 	Born          time.Time // map-in start (zero = already settled)
 	UnmapAt       time.Time // map-out start (zero = mapped)
 	FocusPulse    time.Time // last focus-gain
+	Workspace     int       // virtual desktop (0-based)
 }
 
 // Scene holds window actors. The frame loop must reuse storage.
 type Scene struct {
-	mu     sync.Mutex
-	actors []*Actor
-	tier   Tier
+	mu       sync.Mutex
+	actors   []*Actor
+	tier     Tier
+	wsN      int
+	wsActive int
+	wsFrom   int
+	wsDir    int
+	wsSince  time.Time
 }
 
-// NewScene returns an empty scene.
-func NewScene() *Scene { return &Scene{} }
+// NewScene returns an empty scene with the default pager (3 desktops).
+func NewScene() *Scene { return &Scene{wsN: WorkspaceDefault} }
 
 // SetTheater selects the v0 window theater. Off removes actors immediately.
 func (s *Scene) SetTheater(t Tier) {
@@ -60,8 +66,11 @@ func (s *Scene) Actors() []*Actor {
 func (s *Scene) Add(a *Actor) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.tier != TierOff && a != nil && a.Born.IsZero() {
-		a.Born = time.Now()
+	if a != nil {
+		a.Workspace = s.wsActive
+		if s.tier != TierOff && a.Born.IsZero() {
+			a.Born = time.Now()
+		}
 	}
 	s.actors = append(s.actors, a)
 }
@@ -124,7 +133,7 @@ func (s *Scene) FocusAt(px, py int, titleH, border int) *Actor {
 	}
 	for i := len(s.actors) - 1; i >= 0; i-- {
 		a := s.actors[i]
-		if !a.UnmapAt.IsZero() {
+		if !a.UnmapAt.IsZero() || a.Workspace != s.wsActive {
 			continue
 		}
 		l, t := a.X-border, a.Y-titleH
@@ -164,8 +173,10 @@ func (s *Scene) PlaceNew(a *Actor, screenW, screenH, border, titleH int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n := 0
-	for range s.actors {
-		n++
+	for _, x := range s.actors {
+		if x != nil && x.Workspace == s.wsActive {
+			n++
+		}
 	}
 	a.X = 48 + (n*32)%max(1, screenW/3)
 	a.Y = titleH + 48 + (n*32)%max(1, screenH/3)

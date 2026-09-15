@@ -29,12 +29,14 @@ const (
 	PanelHitNone PanelZone = iota
 	PanelHitLaunch
 	PanelHitOverview
+	PanelHitPager
 	PanelHitBar
 )
 
 // PanelRects are hit/draw boxes in screen space.
 type PanelRects struct {
-	Bar, Brand, Launch, Title, Overview, Clock engine.GridCell
+	Bar, Brand, Launch, Title, Overview, Clock, Pager engine.GridCell
+	Dots                                              []engine.GridCell
 }
 
 // ChromeDraw is the shell DE chrome passed into CompositeDesktop.
@@ -46,6 +48,8 @@ type ChromeDraw struct {
 	LaunchOn   bool
 	OverviewOn bool
 	Launcher   *LauncherDraw
+	WS         engine.WorkspaceDraw
+	Occupied   []bool
 }
 
 // LauncherDraw is the in-shell command overlay.
@@ -56,6 +60,11 @@ type LauncherDraw struct {
 
 // LayoutPanel places brand, apps, title, grid, clock on a bottom bar.
 func LayoutPanel(w, h int) PanelRects {
+	return LayoutPanelWS(w, h, 0)
+}
+
+// LayoutPanelWS is LayoutPanel plus a pager of n dots (n<2 hides the pager).
+func LayoutPanelWS(w, h, workspaces int) PanelRects {
 	if w <= 0 || h <= 0 {
 		return PanelRects{}
 	}
@@ -88,13 +97,36 @@ func LayoutPanel(w, h int) PanelRects {
 	if overview.X < launch.X+launch.W {
 		overview.X = launch.X + launch.W + 4
 	}
+	pagerW := 0
+	n := workspaces
+	if n >= engine.WorkspaceMin {
+		pagerW = n * 16
+	}
+	pager := engine.GridCell{X: overview.X - 8 - pagerW, Y: by, W: pagerW, H: btnH}
+	if pager.X < launch.X+launch.W {
+		pager.X = launch.X + launch.W + 4
+	}
+	dots := make([]engine.GridCell, 0, n)
+	if pagerW > 0 {
+		for i := 0; i < n; i++ {
+			dots = append(dots, engine.GridCell{
+				X: pager.X + i*16 + 3,
+				Y: by + (btnH-10)/2,
+				W: 10, H: 10,
+			})
+		}
+	}
 	titleX := launch.X + launch.W + 12
-	titleW := overview.X - 12 - titleX
+	titleRight := overview.X
+	if pagerW > 0 {
+		titleRight = pager.X
+	}
+	titleW := titleRight - 12 - titleX
 	if titleW < 0 {
 		titleW = 0
 	}
 	title := engine.GridCell{X: titleX, Y: by, W: titleW, H: btnH}
-	return PanelRects{Bar: bar, Brand: brand, Launch: launch, Title: title, Overview: overview, Clock: clock}
+	return PanelRects{Bar: bar, Brand: brand, Launch: launch, Title: title, Overview: overview, Clock: clock, Pager: pager, Dots: dots}
 }
 
 // HitPanel returns the chrome zone under (x,y).
@@ -108,7 +140,20 @@ func HitPanel(r PanelRects, x, y int) PanelZone {
 	if inCell(r.Overview, x, y) {
 		return PanelHitOverview
 	}
+	if HitPager(r, x, y) >= 0 {
+		return PanelHitPager
+	}
 	return PanelHitBar
+}
+
+// HitPager returns the desktop index under (x,y), or -1.
+func HitPager(r PanelRects, x, y int) int {
+	for i, d := range r.Dots {
+		if inCell(d, x, y) {
+			return i
+		}
+	}
+	return -1
 }
 
 func inCell(c engine.GridCell, x, y int) bool {
@@ -137,7 +182,7 @@ func drawPanel(dst []byte, stride, w, h int, ch ChromeDraw) {
 	if ch.PanelH <= 0 || w <= 0 || h <= 0 {
 		return
 	}
-	r := LayoutPanel(w, h)
+	r := LayoutPanelWS(w, h, ch.WS.Count)
 	engine.FillRect(dst, stride, w, h, r.Bar.X, r.Bar.Y, r.Bar.W, r.Bar.H, colPanel)
 	engine.FillRect(dst, stride, w, h, r.Bar.X, r.Bar.Y, r.Bar.W, 2, colPanelLine)
 	brand := ch.Brand
@@ -147,12 +192,30 @@ func drawPanel(dst []byte, stride, w, h int, ch ChromeDraw) {
 	ty := textY(r.Brand, 2)
 	engine.DrawText(dst, stride, w, h, r.Brand.X, ty, brand, colBrand, 2)
 	drawBtn(dst, stride, w, h, r.Launch, "apps", ch.LaunchOn)
+	drawPagerDots(dst, stride, w, h, r, ch.WS.Active, ch.Occupied)
 	drawBtn(dst, stride, w, h, r.Overview, "grid", ch.OverviewOn)
 	if ch.Title != "" && r.Title.W > 8 {
 		engine.DrawText(dst, stride, w, h, r.Title.X, textY(r.Title, 2), truncateTo(ch.Title, r.Title.W, 2), colTextDim, 2)
 	}
 	if ch.Clock != "" {
 		engine.DrawText(dst, stride, w, h, r.Clock.X, textY(r.Clock, 2), ch.Clock, colText, 2)
+	}
+}
+
+func drawPagerDots(dst []byte, stride, w, h int, r PanelRects, active int, occupied []bool) {
+	for i, d := range r.Dots {
+		pix := colTextDim
+		if i < len(occupied) && occupied[i] {
+			pix = colText
+		}
+		if i == active {
+			pix = colBrand
+		}
+		pad := 2
+		if i == active {
+			pad = 0
+		}
+		engine.FillRect(dst, stride, w, h, d.X+pad, d.Y+pad, d.W-2*pad, d.H-2*pad, pix)
 	}
 }
 

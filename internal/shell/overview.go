@@ -73,15 +73,12 @@ func clamp01f(t float64) float64 {
 	return t
 }
 
-func handleOverviewKeys(ov *Overview, ptr *input.Pointer, scene *engine.Scene, now time.Time, _w, _h int, metaHeld *bool, stealNav bool) map[uint32]bool {
+func handleOverviewKeys(ov *Overview, ptr *input.Pointer, scene *engine.Scene, now time.Time, _w, _h int, metaHeld *bool, stealNav bool, ctrlHeld, altHeld *bool) map[uint32]bool {
 	consumed := map[uint32]bool{}
 	if ov == nil || ptr == nil {
 		return consumed
 	}
-	actors := []*engine.Actor(nil)
-	if scene != nil {
-		actors = scene.Actors()
-	}
+	actors := desktopActors(scene)
 	n := len(actors)
 	for _, k := range ptr.Keys {
 		if isMeta(k.Code) {
@@ -102,6 +99,10 @@ func handleOverviewKeys(ov *Overview, ptr *input.Pointer, scene *engine.Scene, n
 			continue
 		}
 		if stealNav {
+			continue
+		}
+		if ctrlHeld != nil && altHeld != nil && *ctrlHeld && *altHeld &&
+			(isEvdev(k.Code, keyLeft) || isEvdev(k.Code, keyRight)) {
 			continue
 		}
 		if ov.Want && isEvdev(k.Code, keyEsc) {
@@ -166,7 +167,7 @@ func pickOverview(ov *Overview, scene *engine.Scene, x, y, w, h int, now time.Ti
 	if ov == nil || scene == nil || !ov.Want {
 		return false
 	}
-	actors := scene.Actors()
+	actors := desktopActors(scene)
 	cells := engine.LayoutGrid(len(actors), w, h)
 	i := engine.HitGrid(cells, x, y)
 	if i < 0 || i >= len(actors) {

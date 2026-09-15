@@ -49,6 +49,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 
 	scene := engine.NewScene()
 	scene.SetTheater(opt.Effects)
+	scene.SetWorkspaces(opt.Workspaces)
 	pixel := PackBGRA(opt.Color)
 
 	p, err := openPresent(stdout, stderr, opt)
@@ -142,8 +143,9 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	if opt.OverviewDemo {
 		fmt.Fprintln(stdout, "overview: --overview-demo will auto-enter after the first window maps")
 	}
-	fmt.Fprintln(stdout, "panel: bottom bar always visible (worldr, apps, focused title, grid, clock).")
+	fmt.Fprintln(stdout, "panel: bottom bar always visible (worldr, apps, focused title, pager, grid, clock).")
 	fmt.Fprintln(stdout, "launcher: F1 or Super+Space (or panel apps). Enter/click spawns with this WAYLAND_DISPLAY. Esc closes the list.")
+	fmt.Fprintf(stdout, "workspaces: %d desktops (Ctrl+Alt+←/→ or pager dots). New windows spawn on the active desktop. Overview is current-desktop only.\n", scene.WorkspaceCount())
 
 	fmt.Fprintln(stdout, "running. Exit: Ctrl+C, or --duration, or Esc/Q on an evdev keyboard.")
 	if TakesDisplay(Backend(p.name)) {
@@ -152,6 +154,8 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 
 	frames := 0
 	metaHeld := false
+	ctrlHeld := false
+	altHeld := false
 	demoArmed := opt.OverviewDemo
 	ticker := time.NewTicker(16 * time.Millisecond)
 	defer ticker.Stop()
@@ -197,7 +201,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		now := time.Now()
 		if demoArmed && scene.HasActors() && frames > 40 {
 			ov.Open(now)
-			actors := scene.Actors()
+			actors := desktopActors(scene)
 			ov.Select = focusedIndex(actors)
 			demoArmed = false
 			fmt.Fprintln(stdout, "overview: demo auto-enter (F12 or Esc to leave)")
@@ -206,7 +210,13 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		if spawn != nil {
 			_ = SpawnClient(*spawn, waylandName, x11Display, stdout)
 		}
-		consume := handleOverviewKeys(&ov, ptr, scene, now, int(w), deskH, &metaHeld, ln.Open)
+		wcons := handleWorkspaceKeys(scene, ptr, now, &ctrlHeld, &altHeld)
+		consume := handleOverviewKeys(&ov, ptr, scene, now, int(w), deskH, &metaHeld, ln.Open, &ctrlHeld, &altHeld)
+		for code, ok := range wcons {
+			if ok {
+				consume[code] = true
+			}
+		}
 		for code, ok := range lcons {
 			if ok {
 				consume[code] = true
@@ -239,16 +249,25 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			ptr.Click = false
 		}
 		if ptr.Click {
-			switch HitPanel(LayoutPanel(int(w), int(h)), ptr.X, ptr.Y) {
+			prects := LayoutPanelWS(int(w), int(h), scene.WorkspaceCount())
+			switch HitPanel(prects, ptr.X, ptr.Y) {
 			case PanelHitLaunch:
 				ln.Toggle()
 				ptr.Click = false
 			case PanelHitOverview:
 				ov.Toggle(now)
 				if ov.Want {
-					ov.Select = focusedIndex(scene.Actors())
+					ov.Select = focusedIndex(desktopActors(scene))
 				}
 				ln.Close()
+				ptr.Click = false
+			case PanelHitPager:
+				if i := HitPager(prects, ptr.X, ptr.Y); i >= 0 {
+					scene.SwitchTo(i, now)
+					if ov.Want {
+						ov.Select = 0
+					}
+				}
 				ptr.Click = false
 			case PanelHitBar:
 				ptr.Click = false
@@ -293,6 +312,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				cur = CursorBlit{X: cx, Y: cy, HX: hx, HY: hy, Pix: pix, W: cw, H: ch, Stride: cstride, Shape: shape, Visible: vis}
 			}
 			actors := scene.Actors()
+			desk := desktopActors(scene)
 			var ld *LauncherDraw
 			if ln.Open {
 				ld = &LauncherDraw{Items: ln.labels(), Select: ln.Select}
@@ -304,10 +324,12 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 					PanelH:     PanelH,
 					Clock:      ClockString(now),
 					Brand:      "worldr",
-					Title:      FocusedTitle(actors),
+					Title:      FocusedTitle(desk),
 					LaunchOn:   ln.Open,
 					OverviewOn: ov.Want,
 					Launcher:   ld,
+					WS:         scene.WorkspacePose(now),
+					Occupied:   scene.Occupied(),
 				})
 			if err := p.upload(fb, uint32(stride)); err != nil {
 				return err

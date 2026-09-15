@@ -31,6 +31,9 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 	engine.FillBGRA(dst, stride, w, h, clear)
 	deskH := usableHeight(h, ch.PanelH)
 	if ov.T > 0 {
+		if ch.WS.Count > 1 {
+			actors = filterWorkspace(actors, ch.WS.Active)
+		}
 		engine.FillRectAlpha(dst, stride, w, h, 0, 0, w, deskH, 0xff000000, 0.38*ov.T)
 		cells := engine.LayoutGrid(len(actors), w, deskH)
 		for i, a := range actors {
@@ -45,7 +48,11 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 		}
 	} else {
 		for _, a := range actors {
-			drawActor(dst, stride, w, h, a, ssd, fx)
+			ox, show := ch.WS.OffsetFor(a.Workspace, w)
+			if !show {
+				continue
+			}
+			drawActor(dst, stride, w, h, a, ssd, fx, ox)
 		}
 	}
 	if ch.Launcher != nil {
@@ -60,9 +67,24 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 	}
 }
 
-func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theater) {
+func filterWorkspace(actors []*engine.Actor, ws int) []*engine.Actor {
+	out := make([]*engine.Actor, 0, len(actors))
+	for _, a := range actors {
+		if a != nil && a.Workspace == ws {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theater, ox int) {
 	if a == nil {
 		return
+	}
+	if ox != 0 {
+		old := a.X
+		a.X += ox
+		defer func() { a.X = old }()
 	}
 	v := a.VisualAt(fx.Now, fx.Tier)
 	if v.Gone {

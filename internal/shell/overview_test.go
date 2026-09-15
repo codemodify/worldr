@@ -43,12 +43,12 @@ func TestHandleOverviewKeysF12AndEsc(t *testing.T) {
 	meta := false
 	ptr := &input.Pointer{Keys: []input.Key{{Code: keyF12, Pressed: true}}}
 	now := time.Unix(1, 0)
-	handleOverviewKeys(&ov, ptr, scene, now, 800, 600, &meta, false)
+	handleOverviewKeys(&ov, ptr, scene, now, 800, 600, &meta, false, nil, nil)
 	if !ov.Want {
 		t.Fatal("F12 should open")
 	}
 	ptr = &input.Pointer{Quit: true, Keys: []input.Key{{Code: keyEsc, Pressed: true}}}
-	handleOverviewKeys(&ov, ptr, scene, now.Add(time.Second), 800, 600, &meta, false)
+	handleOverviewKeys(&ov, ptr, scene, now.Add(time.Second), 800, 600, &meta, false, nil, nil)
 	if ov.Want {
 		t.Fatal("Esc should close overview")
 	}
@@ -84,7 +84,7 @@ func TestHandleOverviewKeysSuperTabAndEnter(t *testing.T) {
 	meta := true
 	now := time.Unix(1, 0)
 	ptr := &input.Pointer{Keys: []input.Key{{Code: keyTab, Pressed: true}}}
-	handleOverviewKeys(&ov, ptr, scene, now, 800, 600, &meta, false)
+	handleOverviewKeys(&ov, ptr, scene, now, 800, 600, &meta, false, nil, nil)
 	if !ov.Want {
 		t.Fatal("Super+Tab should open")
 	}
@@ -93,12 +93,12 @@ func TestHandleOverviewKeysSuperTabAndEnter(t *testing.T) {
 	}
 	meta = false
 	ptr = &input.Pointer{Keys: []input.Key{{Code: keyRight, Pressed: true}}}
-	handleOverviewKeys(&ov, ptr, scene, now.Add(time.Millisecond), 800, 600, &meta, false)
+	handleOverviewKeys(&ov, ptr, scene, now.Add(time.Millisecond), 800, 600, &meta, false, nil, nil)
 	if ov.Select != 1 || !b.Focused || a.Focused {
 		t.Fatalf("arrow should move focus select=%d a=%v b=%v", ov.Select, a.Focused, b.Focused)
 	}
 	ptr = &input.Pointer{Keys: []input.Key{{Code: keyEnter, Pressed: true}}}
-	handleOverviewKeys(&ov, ptr, scene, now.Add(2*time.Millisecond), 800, 600, &meta, false)
+	handleOverviewKeys(&ov, ptr, scene, now.Add(2*time.Millisecond), 800, 600, &meta, false, nil, nil)
 	if ov.Want {
 		t.Fatal("Enter should exit")
 	}
@@ -113,7 +113,7 @@ func TestHandleOverviewKeysF12WaylandOffset(t *testing.T) {
 	var ov Overview
 	meta := false
 	ptr := &input.Pointer{Keys: []input.Key{{Code: keyF12 + 8, Pressed: true}}}
-	handleOverviewKeys(&ov, ptr, scene, time.Unix(1, 0), 800, 600, &meta, false)
+	handleOverviewKeys(&ov, ptr, scene, time.Unix(1, 0), 800, 600, &meta, false, nil, nil)
 	if !ov.Want {
 		t.Fatal("nested evdev+8 F12 should toggle")
 	}

@@ -107,3 +107,22 @@ func TestCompositeDesktopOverviewMovesActor(t *testing.T) {
 		t.Fatal("expected actor pixels somewhere in the grid")
 	}
 }
+
+func TestCompositeDesktopHidesOtherWorkspace(t *testing.T) {
+	const w, h, stride = 64, 48, 256
+	clear := PackBGRA([4]float32{0, 0, 0, 1})
+	pix := []byte{0x10, 0x20, 0x30, 0xff}
+	a := &engine.Actor{X: 8, Y: 8, Width: 1, Height: 1, Stride: 4, Pixels: pix, Workspace: 0}
+	b := &engine.Actor{X: 20, Y: 8, Width: 1, Height: 1, Stride: 4, Pixels: pix, Workspace: 1}
+	dst := make([]byte, stride*h)
+	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{a, b}, false, CursorBlit{},
+		Theater{}, OverviewDraw{}, ChromeDraw{WS: engine.WorkspaceDraw{Count: 3, Active: 1, From: 1, To: 1, T: 1}})
+	homeA := 8*stride + 8*4
+	if dst[homeA] == 0x10 {
+		t.Fatal("desktop 0 actor should be hidden")
+	}
+	homeB := 8*stride + 20*4
+	if dst[homeB] != 0x10 {
+		t.Fatal("desktop 1 actor should be visible")
+	}
+}
