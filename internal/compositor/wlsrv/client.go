@@ -770,7 +770,7 @@ func (c *Client) mapSurface(s *surface) {
 			break
 		}
 		return
-	case o.dma != nil && (len(o.dma.pixels) > 0 || o.dma.gpuSlot > 0):
+	case o.dma != nil && (len(o.dma.pixels) > 0 || o.dma.gpuSlot > 0 || dmaHasScan(o.dma)):
 		d := o.dma
 		pix = d.pixels
 		w, h, stride = d.w, d.h, d.stride
@@ -818,8 +818,14 @@ func (c *Client) mapSurface(s *surface) {
 	s.actor.Pixels = pix
 	s.actor.NoChrome = noChrome
 	s.actor.GPUSlot = 0
+	s.actor.ScanFD = 0
+	s.actor.ScanFourcc = 0
+	s.actor.ScanMod = 0
+	s.actor.ScanOff = 0
+	s.actor.ScanStride = 0
 	if o.dma != nil {
 		s.actor.GPUSlot = o.dma.gpuSlot
+		applyDmaScan(s.actor, o.dma)
 	}
 	if s.xdg != nil && s.xdg.top != nil {
 		s.actor.Title = s.xdg.top.title

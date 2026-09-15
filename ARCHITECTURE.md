@@ -145,7 +145,10 @@ LINEAR buffers mmap on the compositor. Tiled Intel modifiers
 On `vk-display`, ARGB/XRGB imports are retained as `VkImage` and blitted
 onto the swapchain after the CPU desktop upload (implicit dma-buf sync).
 Readback / mmap remain for nested, drm, ABGR, and theater. shm is the
-fallback. KMS scanout bypass and `linux-drm-syncobj` are later.
+fallback. Fullscreen ARGB/XRGB on `--backend=drm` can skip the blit via
+KMS primary-plane scanout (`internal/scanout` eligibility + atomic/`SetCrtc`).
+`vk-display` evaluates the same helpers then falls back (Vulkan holds DRM
+master). Overlay planes and `linux-drm-syncobj` are later.
 
 ## Present / compositor loop
 

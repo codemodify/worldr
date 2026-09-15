@@ -19,10 +19,15 @@ type Actor struct {
 	Title         string
 	AppID         string
 	Focused       bool
-	NoChrome      bool      // popup / subsurface — no SSD title or frame
-	Owner         *Actor    // parent toplevel for transients
-	X11Win        uint32    // X11 window id when this actor is rootless Xwayland
-	GPUSlot       int       // 1-based retained dmabuf; 0 = CPU pixels only
+	NoChrome      bool   // popup / subsurface — no SSD title or frame
+	Owner         *Actor // parent toplevel for transients
+	X11Win        uint32 // X11 window id when this actor is rootless Xwayland
+	GPUSlot       int    // 1-based retained dmabuf; 0 = CPU pixels only
+	ScanFD        int    // borrowed dmabuf fd for KMS scanout; 0 = none
+	ScanFourcc    uint32
+	ScanMod       uint64
+	ScanOff       uint32
+	ScanStride    uint32
 	Born          time.Time // map-in start (zero = already settled)
 	UnmapAt       time.Time // map-out start (zero = mapped)
 	FocusPulse    time.Time // last focus-gain

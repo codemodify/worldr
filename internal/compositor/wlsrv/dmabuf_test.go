@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/codemodify/worldr/internal/engine"
 	"golang.org/x/sys/unix"
 )
 
@@ -35,6 +36,20 @@ func TestResolveDmaRefuseNoImportTiled(t *testing.T) {
 	}
 }
 
+func TestResolveDmaScanoutOnlyKeepsFD(t *testing.T) {
+	c := &Client{srv: &Server{log: log.New(io.Discard, "", 0)}}
+	d := &dmaBuf{w: 8, h: 8, fourcc: drmFormatXRGB8888, modifier: 0x0100000000000009, planes: []dmaPlane{{fd: 5, stride: 32}}}
+	if err := c.resolveDma(d); err != nil {
+		t.Fatal(err)
+	}
+	if !d.resolved || d.gpuSlot != 0 || len(d.pixels) != 0 {
+		t.Fatalf("scanout-only: %+v", d)
+	}
+	if !dmaHasScan(d) {
+		t.Fatal("fd kept for KMS")
+	}
+}
+
 func TestResolveDmaRefuseBadFourcc(t *testing.T) {
 	c := &Client{srv: &Server{}}
 	d := &dmaBuf{w: 8, h: 8, fourcc: 0x11111111, planes: []dmaPlane{{fd: 3, stride: 32}}}
@@ -43,6 +58,20 @@ func TestResolveDmaRefuseBadFourcc(t *testing.T) {
 	}
 	if err := c.resolveDma(d); err == nil {
 		t.Fatal("resolve must refuse")
+	}
+}
+
+func TestApplyDmaScan(t *testing.T) {
+	d := &dmaBuf{fourcc: drmFormatARGB8888, modifier: 9, planes: []dmaPlane{{fd: 6, offset: 16, stride: 64}}}
+	a := &engine.Actor{}
+	applyDmaScan(a, d)
+	if a.ScanFD != 6 || a.ScanFourcc != drmFormatARGB8888 || a.ScanOff != 16 || a.ScanStride != 64 {
+		t.Fatalf("%+v", a)
+	}
+	b := &engine.Actor{ScanFD: 3}
+	applyDmaScan(b, &dmaBuf{fourcc: drmFormatABGR8888, planes: []dmaPlane{{fd: 6}}})
+	if b.ScanFD != 3 {
+		t.Fatal("ABGR is not a scan fourcc; apply is a no-op")
 	}
 }
 

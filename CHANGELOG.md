@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.17-dev — KMS dmabuf scanout bypass
+
+- When a single visible client is fullscreen opaque ARGB/XRGB (buffer == CRTC, not scaled) and the backend is `drm` or `vk-display`, worldr tries **primary-plane scanout** (`drmPrimeFDToHandle` + `AddFB2` + atomic commit, `SetCrtc` fallback) instead of the CPU desktop upload.
+- Ineligible (windowed, popup, shm, overview, launcher, workspace slide, theater, nested/headless) stays on the existing blit/composite path.
+- Intel Arrow Lake is first. NVIDIA/AMD use the same helpers; `AddFB2` may fail and we blit. `vk-display` typically cannot steal DRM master from `VK_KHR_display` — eligibility still runs, then GPU blit.
+- shm and nested present are unchanged. No IME. No multi-plane overlay assignment.
+
 ## 0.9.16-dev — nest host scale
 
 - Nested `--backend=wayland-client` binds host `wl_output` (v≤2) and `wp_fractional_scale_manager_v1` when advertised.

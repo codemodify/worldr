@@ -9,6 +9,9 @@
 #include <unistd.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <drm.h>
+#include <drm_fourcc.h>
+#include <drm_mode.h>
 
 struct worldr_drm {
 	int fd;
@@ -22,6 +25,9 @@ struct worldr_drm {
 	uint32_t size;
 	void *map;
 	drmModeCrtc *saved;
+	uint32_t scan_fb_id;
+	uint32_t scan_handle;
+	int scan_active;
 };
 
 static void seterr(char *err, int errlen, const char *fmt, int e)
@@ -263,6 +269,15 @@ void worldr_drm_destroy(worldr_drm *d)
 	if (d->map && d->size) {
 		munmap(d->map, d->size);
 	}
+	if (d->scan_fb_id && d->fd >= 0) {
+		drmModeRmFB(d->fd, d->scan_fb_id);
+		d->scan_fb_id = 0;
+	}
+	if (d->scan_handle && d->fd >= 0) {
+		struct drm_gem_close cl = {.handle = d->scan_handle};
+		drmIoctl(d->fd, DRM_IOCTL_GEM_CLOSE, &cl);
+		d->scan_handle = 0;
+	}
 	if (d->fb_id) {
 		drmModeRmFB(d->fd, d->fb_id);
 	}
@@ -304,6 +319,11 @@ int worldr_drm_present_bgra(worldr_drm *d, const uint8_t *bgra, uint32_t stride,
 		seterr(err, errlen, "drm present: missing buffer", 0);
 		return -1;
 	}
+	if (d->scan_active) {
+		if (worldr_drm_scanout_restore(d, err, errlen) != 0) {
+			return -1;
+		}
+	}
 	uint32_t h = d->mode.vdisplay;
 	uint32_t w = d->mode.hdisplay;
 	uint8_t *dst = (uint8_t *)d->map;
@@ -320,4 +340,224 @@ int worldr_drm_present_bgra(worldr_drm *d, const uint8_t *bgra, uint32_t stride,
 		memcpy(dst + dst_off, bgra + src_off, n);
 	}
 	return 0;
+}
+
+static uint32_t prop_id(int fd, uint32_t obj, uint32_t type, const char *name)
+{
+	drmModeObjectProperties *props = drmModeObjectGetProperties(fd, obj, type);
+	if (!props) {
+		return 0;
+	}
+	uint32_t found = 0;
+	for (uint32_t i = 0; i < props->count_props; i++) {
+		drmModePropertyRes *p = drmModeGetProperty(fd, props->props[i]);
+		if (!p) {
+			continue;
+		}
+		if (strcmp(p->name, name) == 0) {
+			found = p->prop_id;
+		}
+		drmModeFreeProperty(p);
+		if (found) {
+			break;
+		}
+	}
+	drmModeFreeObjectProperties(props);
+	return found;
+}
+
+static int atomic_set_primary(worldr_drm *d, uint32_t fb_id)
+{
+	if (drmSetClientCap(d->fd, DRM_CLIENT_CAP_ATOMIC, 1) != 0) {
+		return -1;
+	}
+	if (drmSetClientCap(d->fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) != 0) {
+		return -1;
+	}
+	drmModePlaneRes *pres = drmModeGetPlaneResources(d->fd);
+	if (!pres) {
+		return -1;
+	}
+	uint32_t plane_id = 0;
+	for (uint32_t i = 0; i < pres->count_planes; i++) {
+		drmModePlane *pl = drmModeGetPlane(d->fd, pres->planes[i]);
+		if (!pl) {
+			continue;
+		}
+		int on_crtc = (int)(pl->possible_crtcs & (1u << 0));
+		/* Match the CRTC index in resources when we can; otherwise first possible. */
+		if (pl->crtc_id == d->crtc_id || (on_crtc && !plane_id)) {
+			uint32_t type = prop_id(d->fd, pl->plane_id, DRM_MODE_OBJECT_PLANE, "type");
+			drmModeObjectProperties *op = drmModeObjectGetProperties(d->fd, pl->plane_id, DRM_MODE_OBJECT_PLANE);
+			int is_primary = 0;
+			if (op && type) {
+				for (uint32_t k = 0; k < op->count_props; k++) {
+					if (op->props[k] == type && op->prop_values[k] == DRM_PLANE_TYPE_PRIMARY) {
+						is_primary = 1;
+					}
+				}
+			}
+			if (op) {
+				drmModeFreeObjectProperties(op);
+			}
+			if (is_primary || pl->crtc_id == d->crtc_id) {
+				plane_id = pl->plane_id;
+				drmModeFreePlane(pl);
+				if (is_primary) {
+					break;
+				}
+			} else {
+				drmModeFreePlane(pl);
+			}
+		} else {
+			drmModeFreePlane(pl);
+		}
+	}
+	drmModeFreePlaneResources(pres);
+	if (!plane_id) {
+		return -1;
+	}
+
+	uint32_t p_fb = prop_id(d->fd, plane_id, DRM_MODE_OBJECT_PLANE, "FB_ID");
+	uint32_t p_crtc = prop_id(d->fd, plane_id, DRM_MODE_OBJECT_PLANE, "CRTC_ID");
+	uint32_t p_sx = prop_id(d->fd, plane_id, DRM_MODE_OBJECT_PLANE, "SRC_X");
+	uint32_t p_sy = prop_id(d->fd, plane_id, DRM_MODE_OBJECT_PLANE, "SRC_Y");
+	uint32_t p_sw = prop_id(d->fd, plane_id, DRM_MODE_OBJECT_PLANE, "SRC_W");
+	uint32_t p_sh = prop_id(d->fd, plane_id, DRM_MODE_OBJECT_PLANE, "SRC_H");
+	uint32_t p_cx = prop_id(d->fd, plane_id, DRM_MODE_OBJECT_PLANE, "CRTC_X");
+	uint32_t p_cy = prop_id(d->fd, plane_id, DRM_MODE_OBJECT_PLANE, "CRTC_Y");
+	uint32_t p_cw = prop_id(d->fd, plane_id, DRM_MODE_OBJECT_PLANE, "CRTC_W");
+	uint32_t p_ch = prop_id(d->fd, plane_id, DRM_MODE_OBJECT_PLANE, "CRTC_H");
+	if (!p_fb || !p_crtc || !p_sw || !p_sh || !p_cw || !p_ch) {
+		return -1;
+	}
+
+	uint32_t w = d->mode.hdisplay;
+	uint32_t h = d->mode.vdisplay;
+	drmModeAtomicReq *req = drmModeAtomicAlloc();
+	if (!req) {
+		return -1;
+	}
+	drmModeAtomicAddProperty(req, plane_id, p_fb, fb_id);
+	drmModeAtomicAddProperty(req, plane_id, p_crtc, d->crtc_id);
+	if (p_sx) {
+		drmModeAtomicAddProperty(req, plane_id, p_sx, 0);
+	}
+	if (p_sy) {
+		drmModeAtomicAddProperty(req, plane_id, p_sy, 0);
+	}
+	drmModeAtomicAddProperty(req, plane_id, p_sw, (uint64_t)w << 16);
+	drmModeAtomicAddProperty(req, plane_id, p_sh, (uint64_t)h << 16);
+	if (p_cx) {
+		drmModeAtomicAddProperty(req, plane_id, p_cx, 0);
+	}
+	if (p_cy) {
+		drmModeAtomicAddProperty(req, plane_id, p_cy, 0);
+	}
+	drmModeAtomicAddProperty(req, plane_id, p_cw, w);
+	drmModeAtomicAddProperty(req, plane_id, p_ch, h);
+	int r = drmModeAtomicCommit(d->fd, req, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+	drmModeAtomicFree(req);
+	return r;
+}
+
+static void drop_scan_fb(worldr_drm *d)
+{
+	if (!d || d->fd < 0) {
+		return;
+	}
+	if (d->scan_fb_id) {
+		drmModeRmFB(d->fd, d->scan_fb_id);
+		d->scan_fb_id = 0;
+	}
+	if (d->scan_handle) {
+		struct drm_gem_close cl = {.handle = d->scan_handle};
+		drmIoctl(d->fd, DRM_IOCTL_GEM_CLOSE, &cl);
+		d->scan_handle = 0;
+	}
+}
+
+int worldr_drm_scanout_dmabuf(worldr_drm *d, int dmabuf_fd, uint32_t width, uint32_t height,
+			      uint32_t fourcc, uint64_t modifier, uint32_t offset, uint32_t pitch,
+			      char *err, int errlen)
+{
+	if (!d || d->fd < 0 || dmabuf_fd < 0) {
+		seterr(err, errlen, "drm scanout: missing session or dmabuf fd", 0);
+		return -1;
+	}
+	if (width != d->mode.hdisplay || height != d->mode.vdisplay) {
+		seterr(err, errlen, "drm scanout: buffer size != CRTC mode", 0);
+		return -1;
+	}
+	if (pitch == 0) {
+		pitch = width * 4;
+	}
+	uint32_t handle = 0;
+	if (drmPrimeFDToHandle(d->fd, dmabuf_fd, &handle) != 0) {
+		seterr(err, errlen, "drmPrimeFDToHandle", errno);
+		return -1;
+	}
+	uint32_t handles[4] = {handle, 0, 0, 0};
+	uint32_t pitches[4] = {pitch, 0, 0, 0};
+	uint32_t offsets[4] = {offset, 0, 0, 0};
+	uint64_t mods[4] = {modifier, 0, 0, 0};
+	uint32_t fb_id = 0;
+	int added = -1;
+	int use_mod = modifier != 0 && modifier != DRM_FORMAT_MOD_LINEAR && modifier != DRM_FORMAT_MOD_INVALID;
+	if (use_mod) {
+		added = drmModeAddFB2WithModifiers(d->fd, width, height, fourcc, handles, pitches, offsets, mods, &fb_id,
+						   DRM_MODE_FB_MODIFIERS);
+	}
+	if (added != 0) {
+		added = drmModeAddFB2(d->fd, width, height, fourcc, handles, pitches, offsets, &fb_id, 0);
+	}
+	if (added != 0) {
+		struct drm_gem_close cl = {.handle = handle};
+		drmIoctl(d->fd, DRM_IOCTL_GEM_CLOSE, &cl);
+		seterr(err, errlen, "drmModeAddFB2", errno);
+		return -1;
+	}
+	int committed = atomic_set_primary(d, fb_id);
+	if (committed != 0) {
+		committed = drmModeSetCrtc(d->fd, d->crtc_id, fb_id, 0, 0, &d->connector_id, 1, &d->mode);
+	}
+	if (committed != 0) {
+		drmModeRmFB(d->fd, fb_id);
+		struct drm_gem_close cl = {.handle = handle};
+		drmIoctl(d->fd, DRM_IOCTL_GEM_CLOSE, &cl);
+		seterr(err, errlen, "KMS primary commit (atomic/SetCrtc)", errno);
+		return -1;
+	}
+	drop_scan_fb(d);
+	d->scan_fb_id = fb_id;
+	d->scan_handle = handle;
+	d->scan_active = 1;
+	return 0;
+}
+
+int worldr_drm_scanout_restore(worldr_drm *d, char *err, int errlen)
+{
+	if (!d || d->fd < 0) {
+		seterr(err, errlen, "drm scanout restore: missing session", 0);
+		return -1;
+	}
+	if (!d->scan_active) {
+		return 0;
+	}
+	int r = atomic_set_primary(d, d->fb_id);
+	if (r != 0) {
+		r = drmModeSetCrtc(d->fd, d->crtc_id, d->fb_id, 0, 0, &d->connector_id, 1, &d->mode);
+	}
+	drop_scan_fb(d);
+	d->scan_active = 0;
+	if (r != 0) {
+		seterr(err, errlen, "restore dumb FB", errno);
+		return -1;
+	}
+	return 0;
+}
+
+int worldr_drm_scanout_active(const worldr_drm *d)
+{
+	return d && d->scan_active ? 1 : 0;
 }

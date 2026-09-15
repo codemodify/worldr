@@ -63,3 +63,8 @@ func (d *DRM) Size() (uint32, uint32, uint32) {
 	return 0, 0, 0
 }
 func (d *DRM) PresentBGRA(bgra []byte, stride uint32) error { return ErrUnavailable }
+func (d *DRM) ScanoutDMABuf(fd int, width, height, fourcc uint32, modifier uint64, offset, pitch uint32) error {
+	return ErrUnavailable
+}
+func (d *DRM) RestoreScanout() error { return ErrUnavailable }
+func (d *DRM) ScanoutActive() bool   { return false }

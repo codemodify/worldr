@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/codemodify/worldr/internal/engine"
 	"github.com/codemodify/worldr/internal/wayland"
 	"golang.org/x/sys/unix"
 )
@@ -73,6 +74,22 @@ func SupportedDMABufFourcc(fourcc uint32) bool {
 // GPUSampleFourcc is true when the compositor can blit the import onto a BGRA swapchain.
 func GPUSampleFourcc(fourcc uint32) bool {
 	return fourcc == drmFormatARGB8888 || fourcc == drmFormatXRGB8888
+}
+
+func dmaHasScan(d *dmaBuf) bool {
+	return d != nil && len(d.planes) >= 1 && d.planes[0].fd > 0 && GPUSampleFourcc(d.fourcc)
+}
+
+func applyDmaScan(a *engine.Actor, d *dmaBuf) {
+	if a == nil || !dmaHasScan(d) {
+		return
+	}
+	p := d.planes[0]
+	a.ScanFD = p.fd
+	a.ScanFourcc = d.fourcc
+	a.ScanMod = d.modifier
+	a.ScanOff = p.offset
+	a.ScanStride = p.stride
 }
 
 func (d *dmaBuf) closeFDs() {
@@ -350,6 +367,12 @@ func (c *Client) resolveDma(d *dmaBuf) error {
 			return err
 		}
 		d.pixels, d.stride = pix, stride
+		d.resolved = true
+		return nil
+	}
+	// No CPU pixels / GPU slot: keep the fd so DRM primary scanout can
+	// AddFB2 a fullscreen tiled buffer (Intel first; NVIDIA/AMD try).
+	if GPUSampleFourcc(d.fourcc) && len(d.planes) >= 1 && d.planes[0].fd > 0 {
 		d.resolved = true
 		return nil
 	}

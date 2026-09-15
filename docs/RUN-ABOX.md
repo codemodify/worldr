@@ -189,6 +189,14 @@ output. A 150% Plasma panel → `preferred_scale` 180, `wl_output.scale` 2.
 `--scale=1.5` (or `1.25` / `2`) still overrides. vk-display/drm stay **1.0**
 unless `--scale` is set.
 
+**KMS scanout (0.9.17):** on a spare TTY, `--backend=drm`, start `kitty` (or
+another GL client) and fullscreen it. One opaque ARGB/XRGB buffer that covers
+the output should print `kms scanout: primary dmabuf`. Windowed, popups,
+overview, launcher, or shm (`foot`) stay on the blit path. `--backend=vk-display`
+prints `kms scanout fallback` (Vulkan holds DRM master) and keeps the GPU blit.
+NVIDIA/AMD: same try; expect fallback if `AddFB2` rejects the modifier.
+Nested is unchanged.
+
 **Icons (0.9.13):** `xdg_toplevel_icon_manager_v1` is advertised. A client that
 sets a shm icon shows it on the SSD title bar and next to the panel title.
 Unset windows get a default glyph. Foot does not set this protocol yet.
@@ -432,12 +440,12 @@ disconnected cleanly** against the compositor.
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
 | `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.15): Ctrl+Shift+C / Ctrl+Shift+V between worldr clients and, when nested, Plasma ↔ foot (`text/plain`). Mouse-select + middle-click uses primary (bridged if the host advertises it). Cursors, activation, **fractional-scale** (0.9.16: nest follows Plasma HiDPI; `--scale` overrides). **Icons** (0.9.13): `xdg_toplevel_icon_manager_v1` — clients that set an icon show it on the SSD title bar and panel; others get a default glyph. **Workspaces** (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. Still expected: text-input/IME. |
-| `kitty` | linux-dmabuf (GL) | **Try** | On **vk-display** (0.9.10): Vulkan import + GPU blit into the compositor pass (ARGB/XRGB). Nested/drm still readback or LINEAR mmap. Log: `linux-dmabuf: Vulkan import + GPU sample`. |
+| `kitty` | linux-dmabuf (GL) | **Try** | On **vk-display** (0.9.10+): Vulkan import + GPU blit. **0.9.17**: fullscreen ARGB/XRGB may KMS-scanout on `--backend=drm` (`kms scanout: primary dmabuf`). vk-display logs `kms scanout fallback` (Vulkan holds DRM master) then blits. Nested still CPU. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
 | X11 apps | XWayland | **Try (`--xwayland`)** | Rootless `Xwayland` + EWMH-ish XWM. `DISPLAY=:N xeyes` / `xterm` map as SSD actors with real titles. `xcalc` (or xterm’s Ctrl+right-click menu) should be chrome-less. Click-to-focus raises + `SetInputFocus`. |
 
-GPU-accelerated path (vk-display, 0.9.10): client dmabuf → Vulkan import → **sample/blit in the compositor pass**. Nested/drm: import → linear readback or mmap → CPU composite. shm remains the fallback.
+GPU-accelerated path (vk-display, 0.9.10): client dmabuf → Vulkan import → **sample/blit in the compositor pass**. **0.9.17 KMS scanout:** one fullscreen opaque ARGB/XRGB dmabuf on `--backend=drm` → `drmPrimeFDToHandle` + `AddFB2` + atomic/`SetCrtc` (Intel first; NVIDIA/AMD best-effort). Ineligible or `vk-display` (no second DRM master) → existing blit. Nested/shm unchanged.
 
 Start `kitty` only after the shell prints `linux-dmabuf: Vulkan import + readback enabled`.
 
@@ -471,7 +479,7 @@ Workaround — real display on **tty3**:
 - XWayland (0.9.11): `--xwayland` rootless + tiny XWM + `xwayland_shell_v1`. EWMH basics (`_NET_SUPPORTED`, active window, titles/class, delete/take-focus). Not a full ICCCM WM (no reparenting/pager). Overlay menus skip SSD.
 - `xdg_popup` + `wl_subsurface` stacking (0.9.8): menus/tooltips/dropdowns. Positioner uses size + anchor + offset (no constraint/flip). Foot right-click menu is the abox check.
 - Clipboard (0.9.15): `text/plain` between worldr clients and, when nested, Plasma ↔ worldr via host `wl_data_device`. Primary bridged if advertised. No image MIME. vk-display/drm have no host to bind.
-- dmabuf (0.9.10): GPU sample on vk-display only. No KMS scanout bypass, no explicit `linux-drm-syncobj` (Intel implicit sync via image layout). Nested host still CPU-composites.
+- dmabuf (0.9.17): GPU sample on vk-display; **KMS primary scanout** for one fullscreen ARGB/XRGB on `--backend=drm` (atomic + SetCrtc fallback). vk-display tries eligibility then blits (`VK_KHR_display` holds master). No overlay planes, no `linux-drm-syncobj` (Intel implicit sync). Nested host still CPU-composites. Soak: spare TTY, `scripts/try-tty.sh`, `kitty` fullscreen — look for `kms scanout: primary dmabuf` (`--backend=drm`) or `kms scanout fallback` then GPU blit (`vk-display`).
 - SSD is thicker accent + title gradient + focused glow (still not a toolkit)
 - Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)
 - Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY. Unmatched host `wl_pointer.button` releases are dropped (foot stray-release warning should be gone).
