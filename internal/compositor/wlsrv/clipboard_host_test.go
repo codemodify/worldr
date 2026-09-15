@@ -14,6 +14,7 @@ func TestImportHostTextOffersToClient(t *testing.T) {
 	_, _, _, dst, dstRD, dstConn := newClipboardPair(t)
 	dst.dataDev = 31
 	dst.objs[31] = &object{id: 31, kind: kindDataDevice}
+	grantClipFocus(dst)
 
 	exported := 0
 	dst.srv.SetClipExport(func(primary bool, mimes []string) {
@@ -104,6 +105,7 @@ func TestImportHostPNGOffersToClient(t *testing.T) {
 	_, _, _, dst, dstRD, dstConn := newClipboardPair(t)
 	dst.dataDev = 31
 	dst.objs[31] = &object{id: 31, kind: kindDataDevice}
+	grantClipFocus(dst)
 	png := []byte{0x89, 'P', 'N', 'G', 9, 8, 7}
 	dst.srv.ImportHostPayload(false, "image/png", png)
 	got := drainDataDev(t, dstConn, dstRD, 31)
@@ -132,6 +134,7 @@ func TestImportHostJPEGOffersToClient(t *testing.T) {
 	_, _, _, dst, dstRD, dstConn := newClipboardPair(t)
 	dst.dataDev = 31
 	dst.objs[31] = &object{id: 31, kind: kindDataDevice}
+	grantClipFocus(dst)
 	jpg := []byte{0xff, 0xd8, 0xff, 1, 2, 3}
 	dst.srv.ImportHostPayload(false, "image/jpeg", jpg)
 	got := drainDataDev(t, dstConn, dstRD, 31)

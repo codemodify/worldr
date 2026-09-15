@@ -34,6 +34,7 @@ func TestClipboardOfferSetSelectionReceive(t *testing.T) {
 	src.objs[21] = &object{id: 21, kind: kindDataDevice}
 	dst.dataDev = 31
 	dst.objs[31] = &object{id: 31, kind: kindDataDevice}
+	grantClipFocus(dst)
 
 	_ = src.reqDataSource(src.objs[20], 0, wayland.NewCursor(wayland.PutString(nil, mimeTextPlain), nil))
 	_ = src.reqDataSource(src.objs[20], 0, wayland.NewCursor(wayland.PutString(nil, mimeTextUTF8), nil))
@@ -91,6 +92,7 @@ func TestClipboardOfferReceivePNG(t *testing.T) {
 	src.objs[21] = &object{id: 21, kind: kindDataDevice}
 	dst.dataDev = 31
 	dst.objs[31] = &object{id: 31, kind: kindDataDevice}
+	grantClipFocus(dst)
 
 	_ = src.reqDataSource(src.objs[20], 0, wayland.NewCursor(wayland.PutString(nil, "image/png"), nil))
 	p := wayland.PutU32(nil, 20)
@@ -147,6 +149,94 @@ func TestClipboardReplaceCancelsOldSource(t *testing.T) {
 	_ = src.reqDataDevice(src.objs[21], 1, wayland.NewCursor(p, nil))
 	if !drainSourceCancelled(t, srcConn, srcRD, 20) {
 		t.Fatal("expected cancelled on replaced source")
+	}
+}
+
+func grantClipFocus(c *Client) {
+	if c.kbdID == 0 {
+		c.kbdID = 99
+	}
+	if c.kbdSurf == 0 {
+		c.kbdSurf = 1
+	}
+}
+
+// TestGetDataDeviceSilentUntilKeyboardFocus is the ark/Brave Qt6 crash:
+// selection(nil) on get_data_device during the init roundtrip makes
+// QWaylandDataDevice call platformIntegration()->clipboard() before
+// createPlatformIntegration has published the integration (SIGSEGV).
+func TestGetDataDeviceSilentUntilKeyboardFocus(t *testing.T) {
+	c, rd, conn, _, _, _ := newClipboardPair(t)
+	p := wayland.PutU32(nil, 21)
+	p = wayland.PutU32(p, 4)
+	if err := c.reqDataDevMgr(&object{}, 1, wayland.NewCursor(p, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if c.dataDev != 21 {
+		t.Fatalf("dataDev %d", c.dataDev)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(40 * time.Millisecond))
+	if msg, err := rd.Next(); err == nil {
+		t.Fatalf("get_data_device must not emit events (got obj=%d op=%d) — Qt6 SEGVs on selection during init", msg.Object, msg.Opcode)
+	}
+
+	c.kbdID = 17
+	surf := &surface{id: 40}
+	c.keyboardEnter(surf)
+	c.kbdSurf = 40
+
+	_ = conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+	sawNull := false
+	for {
+		msg, err := rd.Next()
+		if err != nil {
+			break
+		}
+		if msg.Object != 21 || msg.Opcode != wlDataDevSelection {
+			continue
+		}
+		cur := wayland.NewCursor(msg.Payload, nil)
+		id, err := cur.U32()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if id != 0 {
+			t.Fatalf("empty clipboard must marshal selection(null), got id=%d", id)
+		}
+		if cur.Remaining() != 0 {
+			t.Fatalf("selection payload extra %d bytes", cur.Remaining())
+		}
+		sawNull = true
+	}
+	if !sawNull {
+		t.Fatal("keyboard.enter must send data_device.selection (null when empty)")
+	}
+}
+
+func TestGetDataDeviceWhileFocusedSendsCurrent(t *testing.T) {
+	src, _, _, dst, dstRD, dstConn := newClipboardPair(t)
+	src.objs[20] = &object{id: 20, kind: kindDataSource, src: &dataSource{id: 20, client: src}}
+	src.dataDev = 21
+	src.objs[21] = &object{id: 21, kind: kindDataDevice}
+	_ = src.reqDataSource(src.objs[20], 0, wayland.NewCursor(wayland.PutString(nil, mimeTextPlain), nil))
+	p := wayland.PutU32(nil, 20)
+	p = wayland.PutU32(p, 1)
+	if err := src.reqDataDevice(src.objs[21], 1, wayland.NewCursor(p, nil)); err != nil {
+		t.Fatal(err)
+	}
+
+	grantClipFocus(dst)
+	p = wayland.PutU32(nil, 31)
+	p = wayland.PutU32(p, 4)
+	if err := dst.reqDataDevMgr(&object{}, 1, wayland.NewCursor(p, nil)); err != nil {
+		t.Fatal(err)
+	}
+	got := drainDataDev(t, dstConn, dstRD, 31)
+	if got.offerID == 0 || got.selection != got.offerID {
+		t.Fatalf("focused get_data_device must receive current selection: %+v", got)
+	}
+	if !got.mimes[mimeTextPlain] {
+		t.Fatalf("mimes %v", got.mimes)
 	}
 }
 
