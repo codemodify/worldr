@@ -10,6 +10,18 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+func TestInstallDmaPlaceholder(t *testing.T) {
+	c := &Client{objs: map[uint32]*object{}}
+	c.installDmaPlaceholder(42, 8, 4, drmFormatARGB8888)
+	o := c.objs[42]
+	if o == nil || o.dma == nil || !o.dma.resolved {
+		t.Fatal("placeholder object")
+	}
+	if o.dma.w != 8 || o.dma.h != 4 || o.dma.stride != 32 || len(o.dma.pixels) != 8*4*4 {
+		t.Fatalf("placeholder size %+v len=%d", o.dma, len(o.dma.pixels))
+	}
+}
+
 func TestValidateDMABuf(t *testing.T) {
 	if err := ValidateDMABuf(0, 10, drmFormatXRGB8888, 1); err == nil {
 		t.Fatal("empty size")

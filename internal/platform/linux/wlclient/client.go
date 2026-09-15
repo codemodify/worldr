@@ -45,8 +45,12 @@ type Window struct {
 	compVer, shmVer, xdgVer, seatVer     uint32
 	ddmgrVer, primVer                    uint32
 	output, fracMgr, fracID              uint32
+	cursorMgr, cursorDev                 uint32
+	cursorSurf, cursorBuf, cursorPool    uint32
+	cursorMem                            []byte
 	hostOutScale                         int32
 	hostFrac120                          uint32
+	hostCursorHidden                     bool
 	onHostScale                          func(float64)
 	ptrSerial                            uint32
 	hostX, hostY                         int
@@ -166,6 +170,9 @@ func (w *Window) setup(title string, fullscreen bool) error {
 		return err
 	}
 	if err := w.setupSeat(); err != nil {
+		return err
+	}
+	if err := w.setupHostCursor(); err != nil {
 		return err
 	}
 	if err := w.setupClip(); err != nil {
@@ -352,6 +359,8 @@ func (w *Window) bindOne(g registryGlobal, requested uint32) error {
 		w.output = id
 	case ifaceFracScale:
 		w.fracMgr = id
+	case ifaceCursorShape:
+		w.cursorMgr = id
 	}
 	return nil
 }

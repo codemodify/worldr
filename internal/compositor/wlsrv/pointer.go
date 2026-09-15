@@ -164,6 +164,13 @@ func (c *Client) surfaceAt(sx, sy int) *surface {
 	return best
 }
 
+func (s *surface) inputOffset() (x, y int) {
+	if s == nil || !s.cropped || s.xdg == nil || !s.xdg.hasGeo {
+		return 0, 0
+	}
+	return int(s.xdg.geoX), int(s.xdg.geoY)
+}
+
 func (c *Client) pointerMotion(sx, sy int) {
 	c.ptrX, c.ptrY = sx, sy
 	if c.ptrID == 0 {
@@ -181,6 +188,10 @@ func (c *Client) pointerMotion(sx, sy int) {
 	}
 	lx := sx - s.actor.X
 	ly := sy - s.actor.Y
+	if ox, oy := s.inputOffset(); ox != 0 || oy != 0 {
+		lx += ox
+		ly += oy
+	}
 	if c.entered != s.id {
 		if c.entered != 0 {
 			c.pointerLeaveCurrent()

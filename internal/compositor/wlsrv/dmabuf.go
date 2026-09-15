@@ -294,12 +294,30 @@ func (c *Client) reqDmaParams(o *object, op uint16, cur *wayland.Cursor) error {
 		_, _ = cur.U32()
 		d.w, d.h, d.fourcc = int(w), int(h), fourcc
 		if err := c.finishDmaBuffer(id, d); err != nil {
-			c.srv.log.Printf("dmabuf create_immed failed: %v", err)
-			// protocol: raise error on params
-			return fmt.Errorf("dmabuf: %w", err)
+			// Spec wants a fatal error; Chromium/Brave treat that as a
+			// GPU-process crash. Keep the connection with a black placeholder
+			// so the browser can finish bring-up (shm/SwiftShader path).
+			c.srv.log.Printf("dmabuf create_immed failed (placeholder): %v", err)
+			c.installDmaPlaceholder(id, int(w), int(h), fourcc)
+			return nil
 		}
 	}
 	return nil
+}
+
+func (c *Client) installDmaPlaceholder(id uint32, w, h int, fourcc uint32) {
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	c.objs[id] = &object{id: id, kind: kindBuffer, dma: &dmaBuf{
+		w: w, h: h, fourcc: fourcc,
+		pixels:   make([]byte, w*h*4),
+		stride:   w * 4,
+		resolved: true,
+	}}
 }
 
 func (c *Client) allocServerID() uint32 {

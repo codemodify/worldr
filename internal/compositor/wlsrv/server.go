@@ -200,14 +200,21 @@ func (s *Server) setCursorFromSurface(c *Client, sid uint32, hx, hy int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if sid == 0 {
-		s.cursorVisible = false
+		// Null surface means "default cursor", not hide — nest already
+		// suppressed the host pointer, so hiding here made the arrow vanish.
+		s.cursorVisible = true
 		s.cursorPix = nil
+		s.cursorShape = cursorShapeDefault
+		s.cursorHX, s.cursorHY = 0, 0
 		return
 	}
 	s.cursorVisible = true
 	s.cursorHX, s.cursorHY = hx, hy
 	so := c.objs[sid]
 	if so == nil || so.surf == nil || so.surf.attached == nil {
+		// Role assigned before the first attach — keep the default arrow.
+		s.cursorPix = nil
+		s.cursorShape = cursorShapeDefault
 		return
 	}
 	att := so.surf.attached
@@ -231,9 +238,29 @@ func (s *Server) setCursorShape(shape uint32) {
 	s.mu.Lock()
 	s.cursorVisible = true
 	s.cursorPix = nil
+	if shape == 0 {
+		shape = cursorShapeDefault
+	}
 	s.cursorShape = shape
 	s.cursorHX, s.cursorHY = 0, 0
 	s.mu.Unlock()
+}
+
+// CursorCustom is true when a client attached a cursor buffer or a
+// non-arrow wp_cursor_shape (text, wait, …).
+func (s *Server) CursorCustom() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.cursorVisible {
+		return false
+	}
+	if len(s.cursorPix) > 0 && s.cursorW > 0 && s.cursorH > 0 {
+		return true
+	}
+	return s.cursorShape != 0 && s.cursorShape != cursorShapeDefault && s.cursorShape != cursorShapePointer
 }
 
 // SetOutputScale sets the single-output scale (1, 1.25, 1.5, 2, …).

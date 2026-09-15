@@ -363,6 +363,18 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			if srv != nil {
 				cx, cy, hx, hy, pix, cw, ch, cstride, shape, vis := srv.Cursor()
 				cur = CursorBlit{X: cx, Y: cy, HX: hx, HY: hy, Pix: pix, W: cw, H: ch, Stride: cstride, Shape: shape, Visible: vis}
+				if p.wl != nil {
+					// Nest: Plasma needs a host cursor on our surface. Draw
+					// the software overlay only when a client set a custom
+					// image/shape so we do not show two arrows.
+					if srv.CursorCustom() && vis {
+						p.wl.HideHostCursor()
+						cur.Visible = true
+					} else {
+						p.wl.EnsureHostCursor()
+						cur.Visible = false
+					}
+				}
 			}
 			actors := scene.Actors()
 			desk := desktopActors(scene)
