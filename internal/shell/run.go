@@ -191,7 +191,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	case engine.TierLow:
 		fmt.Fprintln(stdout, "theater: effects=low (fade-only map/unmap)")
 	default:
-		fmt.Fprintf(stdout, "theater: effects=high (scale+fade+rise map %s / minimize-to-panel unmap %s, focus glow)\n",
+		fmt.Fprintf(stdout, "theater: effects=high (wobbly move, cube workspace, expose polish; map %s / minimize-to-panel %s)\n",
 			engine.MapInDuration, engine.MapOutDuration)
 	}
 
@@ -394,6 +394,9 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			}
 			actors := scene.ActorsInto(p.actors)
 			p.actors = actors
+			for _, a := range actors {
+				a.TickWobble(now, opt.Effects)
+			}
 			desk := p.desk[:0]
 			active := scene.ActiveWorkspace()
 			for _, a := range actors {
@@ -511,7 +514,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			p.occupied = ch.Occupied
 			p.waitActorsSync(actors)
 			CompositeDesktop(fb, stride, int(w), int(h), pixel, actors, opt.SSD, cur,
-				Theater{Now: now, Tier: opt.Effects, PanelH: PanelH},
+				Theater{Now: now, Tier: opt.Effects, PanelH: PanelH, Grid: &p.cellsBuf},
 				OverviewDraw{T: ov.Progress(now), Select: ov.Select},
 				ch, gpuOverlay)
 			layers := gpuLayersInto(p.layersBuf, actors, ch, int(w), gpuOverlay)
@@ -551,6 +554,7 @@ type presenter struct {
 	desk        []*engine.Actor
 	occupied    []bool
 	layersBuf   []native.GPULayer
+	cellsBuf    []engine.GridCell
 	consume     map[uint32]bool
 }
 

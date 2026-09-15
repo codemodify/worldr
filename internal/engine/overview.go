@@ -10,16 +10,32 @@ type GridCell struct {
 	X, Y, W, H int
 }
 
-// LayoutGrid tiles n slots into the screen. Empty n → nil.
-// cols = ceil(sqrt(n)); leftover cells stay unused.
-func LayoutGrid(n, screenW, screenH int) []GridCell {
-	if n <= 0 || screenW <= 0 || screenH <= 0 {
-		return nil
+// GridCols is the expose column count (ceil(sqrt(n))).
+func GridCols(n int) int {
+	if n <= 1 {
+		return 1
 	}
 	cols := int(math.Ceil(math.Sqrt(float64(n))))
 	if cols < 1 {
-		cols = 1
+		return 1
 	}
+	return cols
+}
+
+// LayoutGrid tiles n slots into the screen. Empty n → nil.
+func LayoutGrid(n, screenW, screenH int) []GridCell {
+	return LayoutGridInto(nil, n, screenW, screenH)
+}
+
+// LayoutGridInto writes n cells into dst (reuses cap). Empty n → nil when dst is nil.
+func LayoutGridInto(dst []GridCell, n, screenW, screenH int) []GridCell {
+	if n <= 0 || screenW <= 0 || screenH <= 0 {
+		if dst == nil {
+			return nil
+		}
+		return dst[:0]
+	}
+	cols := GridCols(n)
 	rows := (n + cols - 1) / cols
 	margin := overviewMargin(screenW, screenH, cols, rows)
 	gap := margin
@@ -33,22 +49,47 @@ func LayoutGrid(n, screenW, screenH int) []GridCell {
 	}
 	cw := innerW / cols
 	ch := innerH / rows
-	out := make([]GridCell, n)
+	if cap(dst) < n {
+		dst = make([]GridCell, n)
+	} else {
+		dst = dst[:n]
+	}
 	for i := 0; i < n; i++ {
 		c := i % cols
 		r := i / cols
-		out[i] = GridCell{
+		dst[i] = GridCell{
 			X: margin + c*(cw+gap),
 			Y: margin + r*(ch+gap),
 			W: cw,
 			H: ch,
 		}
 	}
-	return out
+	return dst
+}
+
+// ScaleCell grows or shrinks a cell about its center. s==1 is identity.
+func ScaleCell(c GridCell, s float64) GridCell {
+	if s == 1 || c.W < 1 || c.H < 1 {
+		return c
+	}
+	nw := int(float64(c.W)*s + 0.5)
+	nh := int(float64(c.H)*s + 0.5)
+	if nw < 1 {
+		nw = 1
+	}
+	if nh < 1 {
+		nh = 1
+	}
+	return GridCell{
+		X: c.X + (c.W-nw)/2,
+		Y: c.Y + (c.H-nh)/2,
+		W: nw,
+		H: nh,
+	}
 }
 
 func overviewMargin(screenW, screenH, cols, rows int) int {
-	m := 48
+	m := 56
 	if screenW < 640 || screenH < 400 {
 		m = 24
 	}

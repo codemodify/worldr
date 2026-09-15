@@ -2,20 +2,26 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
 
 // Theater v1 — Compiz-style open/close/focus/workspace. Not a plugin graph.
 const (
-	MapInDuration  = 280 * time.Millisecond
-	MapOutDuration = 240 * time.Millisecond
-	FocusDuration  = 220 * time.Millisecond
-	MapFromScale   = 0.86
-	MapRise        = 14 // px rise on map-in (high)
-	FocusLiftPx    = 6
-	FocusShadow    = 0.55
-	FocusGlow      = 0.70
+	MapInDuration   = 280 * time.Millisecond
+	MapOutDuration  = 240 * time.Millisecond
+	FocusDuration   = 220 * time.Millisecond
+	MapFromScale    = 0.86
+	MapRise         = 14 // px rise on map-in (high)
+	FocusLiftPx     = 6
+	FocusShadow     = 0.55
+	FocusGlow       = 0.70
+	WobbleMax       = 22.0
+	WobbleDecay     = 0.86
+	WobbleHz        = 15.0
+	CubeForeshorten = 0.28
+	CubePull        = 0.18
 )
 
 // Phase is the theater state machine for one actor.
@@ -47,7 +53,7 @@ type Tier int
 const (
 	TierOff  Tier = iota // instant map/unmap, no pulse
 	TierLow              // fade only
-	TierHigh             // scale + fade + rise + focus glow + minimize-to-panel
+	TierHigh             // scale+fade+rise+glow+minimize + wobbly + cube
 )
 
 // ParseTier reads --effects=off|low|high|auto.
@@ -133,11 +139,87 @@ func (a *Actor) VisualAt(now time.Time, tier Tier) Visual {
 				v.Lift = int(float64(FocusLiftPx)*p + 0.5)
 				v.Shadow = FocusShadow * p
 				v.Glow = FocusGlow * p
+				wx, wy, sc := a.wobblePose(now)
+				v.SlideX, v.SlideY, v.Scale = wx, wy, sc
 			}
 			return v
 		}
 	}
-	return Visual{Scale: 1, Alpha: 1, Phase: PhaseIdle}
+	v := Visual{Scale: 1, Alpha: 1, Phase: PhaseIdle}
+	if tier == TierHigh {
+		wx, wy, sc := a.wobblePose(now)
+		v.SlideX, v.SlideY, v.Scale = wx, wy, sc
+	}
+	return v
+}
+
+// TickWobble samples a move impulse and decays the spring. No alloc.
+func (a *Actor) TickWobble(now time.Time, tier Tier) {
+	if a == nil {
+		return
+	}
+	if tier != TierHigh {
+		a.WobbleX, a.WobbleY = 0, 0
+		a.wobblePX, a.wobblePY = a.X, a.Y
+		a.wobbleOn = true
+		return
+	}
+	if !a.wobbleOn {
+		a.wobblePX, a.wobblePY = a.X, a.Y
+		a.wobbleOn = true
+		a.WobbleAt = now
+		return
+	}
+	dx, dy := a.X-a.wobblePX, a.Y-a.wobblePY
+	a.wobblePX, a.wobblePY = a.X, a.Y
+	if dx != 0 || dy != 0 {
+		a.WobbleX += float64(dx) * 0.38
+		a.WobbleY += float64(dy) * 0.38
+		a.WobbleAt = now
+	}
+	a.WobbleX = clampWobble(a.WobbleX * WobbleDecay)
+	a.WobbleY = clampWobble(a.WobbleY * WobbleDecay)
+}
+
+func (a *Actor) wobblePose(now time.Time) (sx, sy int, scale float64) {
+	scale = 1
+	if a == nil || (a.WobbleX == 0 && a.WobbleY == 0) {
+		return 0, 0, 1
+	}
+	s := math.Sin(now.Sub(a.WobbleAt).Seconds() * WobbleHz * 2 * math.Pi)
+	sx = int(a.WobbleX*s + 0.5)
+	sy = int(a.WobbleY*s*0.7 + 0.5)
+	scale = 1 + 0.025*s*(math.Abs(a.WobbleX)+math.Abs(a.WobbleY))/WobbleMax
+	return sx, sy, scale
+}
+
+func clampWobble(v float64) float64 {
+	if v > WobbleMax {
+		return WobbleMax
+	}
+	if v < -WobbleMax {
+		return -WobbleMax
+	}
+	if v > -0.12 && v < 0.12 {
+		return 0
+	}
+	return v
+}
+
+// CubeFace is the cheap Compiz cube pose for a sliding workspace.
+// ox is OffsetFor; scale foreshortens, extraX pulls toward the hinge.
+func CubeFace(ox, screenW int) (scale, fade float64, extraX int) {
+	if ox == 0 || screenW <= 0 {
+		return 1, 1, 0
+	}
+	u := float64(absInt(ox)) / float64(screenW)
+	if u > 1 {
+		u = 1
+	}
+	scale = 1 - CubeForeshorten*u
+	fade = SlideFade(ox, screenW)
+	extraX = int(-float64(ox)*CubePull + 0.5)
+	return
 }
 
 // MinimizeDelta is the extra translation on map-out toward the panel

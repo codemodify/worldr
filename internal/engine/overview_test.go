@@ -130,6 +130,41 @@ func TestLayoutGridNineNoOverlap(t *testing.T) {
 	}
 }
 
+func TestLayoutGridIntoReuses(t *testing.T) {
+	buf := make([]GridCell, 0, 8)
+	got := LayoutGridInto(buf, 4, 800, 600)
+	if cap(got) != 8 || len(got) != 4 {
+		t.Fatalf("len=%d cap=%d", len(got), cap(got))
+	}
+	got2 := LayoutGridInto(got, 2, 800, 600)
+	if cap(got2) != 8 || len(got2) != 2 {
+		t.Fatalf("reuse len=%d cap=%d", len(got2), cap(got2))
+	}
+	if LayoutGridInto(got2, 0, 800, 600) == nil {
+		t.Fatal("empty into non-nil is [:0]")
+	}
+}
+
+func TestScaleCell(t *testing.T) {
+	c := GridCell{X: 10, Y: 20, W: 100, H: 50}
+	if ScaleCell(c, 1) != c {
+		t.Fatal("identity")
+	}
+	g := ScaleCell(c, 1.1)
+	if g.W <= 100 || g.H <= 50 {
+		t.Fatalf("grow %+v", g)
+	}
+	if g.X >= c.X || g.Y >= c.Y {
+		t.Fatalf("should grow about center %+v", g)
+	}
+}
+
+func TestGridCols(t *testing.T) {
+	if GridCols(1) != 1 || GridCols(4) != 2 || GridCols(9) != 3 {
+		t.Fatal("cols")
+	}
+}
+
 func TestHomeFrameSSD(t *testing.T) {
 	a := &Actor{X: 20, Y: 30, Width: 100, Height: 50}
 	f := HomeFrame(a, true, 6, 28)

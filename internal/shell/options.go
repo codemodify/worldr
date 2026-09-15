@@ -65,7 +65,7 @@ func ParseFlags(args []string) (Options, error) {
 	fs.IntVar(&o.ClientWidth, "width", 1280, "wayland-client window width")
 	fs.IntVar(&o.ClientHeight, "height", 720, "wayland-client window height")
 	fs.BoolVar(&o.XWayland, "xwayland", false, "launch rootless Xwayland against the worldr socket (xterm/xeyes)")
-	effects := fs.String("effects", "high", "window theater: high|low|off (scale+fade map/unmap; off disables)")
+	effects := fs.String("effects", "high", "window theater: high|low|off (high: wobbly+cube+expose; low: fade; off: instant)")
 	fs.BoolVar(&o.OverviewDemo, "overview-demo", false, "auto-enter expose after the first window maps (smoke)")
 	fs.IntVar(&o.Workspaces, "workspaces", engine.WorkspaceDefault, "virtual desktops (2–4, default 3)")
 	fs.Float64Var(&o.Scale, "scale", 0, "output scale 1 / 1.25 / 1.5 / 2 (0 = auto: nest follows host; else 1.0)")

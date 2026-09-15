@@ -22,6 +22,7 @@ type Theater struct {
 	Now    time.Time
 	Tier   engine.Tier
 	PanelH int // minimize-to-panel target
+	Grid   *[]engine.GridCell
 }
 
 // CompositeDesktop draws the cinematic clear, window actors, optional SSD,
@@ -36,12 +37,18 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 			actors = compactWorkspace(actors, ch.WS.Active)
 		}
 		actors = compactChrome(actors)
-		engine.FillRectAlpha(dst, stride, w, h, 0, 0, w, deskH, 0xff000000, 0.38*ov.T)
+		engine.FillRectAlpha(dst, stride, w, h, 0, 0, w, deskH, 0xff000000, 0.46*ov.T)
 		if ch.WS.Count > 1 {
 			lbl := "desk " + engine.WorkspaceLabel(ch.WS.Active, ch.WS.Count)
 			engine.DrawText(dst, stride, w, h, 12, 10, lbl, colBrand, 2)
 		}
-		cells := engine.LayoutGrid(len(actors), w, deskH)
+		var cells []engine.GridCell
+		if fx.Grid != nil {
+			cells = engine.LayoutGridInto(*fx.Grid, len(actors), w, deskH)
+			*fx.Grid = cells
+		} else {
+			cells = engine.LayoutGrid(len(actors), w, deskH)
+		}
 		for i, a := range actors {
 			if a == nil || i >= len(cells) {
 				continue
@@ -50,7 +57,13 @@ func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engi
 			fit := engine.FitInCell(home.W, home.H, cells[i])
 			dest := engine.LerpCell(home, fit, ov.T)
 			sel := i == ov.Select
+			if sel && ov.T > 0.45 {
+				dest = engine.ScaleCell(dest, 1.08)
+			}
 			drawActorIn(dst, stride, w, h, a, dest, ssd, sel, 1)
+			if ov.T > 0.7 && a.Title != "" && dest.Y+dest.H+10 < deskH {
+				engine.DrawText(dst, stride, w, h, dest.X, dest.Y+dest.H+2, a.Title, colBrand, 1)
+			}
 		}
 	} else {
 		for _, a := range actors {
@@ -115,8 +128,12 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 		mx, my = engine.MinimizeDelta(a, v, w, h, fx.PanelH)
 	}
 	slideA := engine.SlideFade(ox, w)
+	cubeS, cubeA, cubeX := 1.0, slideA, 0
+	if fx.Tier == engine.TierHigh && ox != 0 {
+		cubeS, cubeA, cubeX = engine.CubeFace(ox, w)
+	}
 	ssd = ssd && !a.NoChrome
-	if v.Identity() && slideA >= 0.999 && mx == 0 && my == 0 {
+	if v.Identity() && slideA >= 0.999 && mx == 0 && my == 0 && ox == 0 {
 		if ssd {
 			decorations.Draw(dst, stride, w, h, a)
 		}
@@ -136,17 +153,18 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 	if !ssd {
 		fw, fh = a.Width, a.Height
 	}
-	cx := a.X + a.Width/2 + v.SlideX + mx
+	cx := a.X + a.Width/2 + v.SlideX + mx + cubeX
 	cy := a.Y + a.Height/2 + v.SlideY + my
 	if ssd {
-		cx = a.X - decorations.Border + fw/2 + v.SlideX + mx
+		cx = a.X - decorations.Border + fw/2 + v.SlideX + mx + cubeX
 		cy = a.Y - decorations.TitleH + fh/2 + v.SlideY + my
 	}
-	sw := scaleI(fw, v.Scale)
-	sh := scaleI(fh, v.Scale)
+	pose := v.Scale * cubeS
+	sw := scaleI(fw, pose)
+	sh := scaleI(fh, pose)
 	sx := cx - sw/2
 	sy := cy - sh/2 - v.Lift
-	alpha := v.Alpha * slideA
+	alpha := v.Alpha * cubeA
 	if v.Shadow > 0 {
 		pad := 10
 		engine.FillRectAlpha(dst, stride, w, h, sx-pad, sy-pad+6, sw+2*pad, sh+2*pad, 0xff000010, v.Shadow)

@@ -168,6 +168,59 @@ func TestMinimizeDeltaTowardPanel(t *testing.T) {
 	}
 }
 
+func TestTickWobbleImpulseAndDecay(t *testing.T) {
+	now := time.Unix(7000, 0)
+	a := &Actor{X: 10, Y: 20}
+	a.TickWobble(now, TierHigh)
+	if a.WobbleX != 0 || a.WobbleY != 0 {
+		t.Fatal("first sample is rest")
+	}
+	a.X, a.Y = 40, 20
+	a.TickWobble(now.Add(time.Millisecond), TierHigh)
+	if a.WobbleX == 0 {
+		t.Fatal("move must impulse")
+	}
+	amp := a.WobbleX
+	a.TickWobble(now.Add(2*time.Millisecond), TierHigh)
+	if a.WobbleX >= amp {
+		t.Fatal("must decay")
+	}
+	a.TickWobble(now, TierOff)
+	if a.WobbleX != 0 {
+		t.Fatal("off clears")
+	}
+}
+
+func TestWobbleBreaksIdentity(t *testing.T) {
+	now := time.Unix(7100, 0)
+	a := &Actor{X: 0, Y: 0, Width: 20, Height: 10}
+	a.TickWobble(now, TierHigh)
+	a.X = 30
+	a.TickWobble(now.Add(time.Millisecond), TierHigh)
+	v := a.VisualAt(now.Add(20*time.Millisecond), TierHigh)
+	if v.Identity() {
+		t.Fatalf("wobble should pose: %+v", v)
+	}
+}
+
+func TestCubeFace(t *testing.T) {
+	s, f, x := CubeFace(0, 800)
+	if s != 1 || f != 1 || x != 0 {
+		t.Fatalf("rest %v %v %d", s, f, x)
+	}
+	s, f, x = CubeFace(400, 800)
+	if s >= 1 || f >= 1 || x >= 0 {
+		t.Fatalf("half turn %+v %v %d", s, f, x)
+	}
+	s2, _, _ := CubeFace(800, 800)
+	if s2 >= s {
+		t.Fatal("farther is smaller")
+	}
+	if _, _, x := CubeFace(-400, 800); x <= 0 {
+		t.Fatal("left slide pulls right")
+	}
+}
+
 func TestSlideFade(t *testing.T) {
 	if SlideFade(0, 800) != 1 {
 		t.Fatal("settled")
