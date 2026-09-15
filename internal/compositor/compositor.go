@@ -21,3 +21,8 @@ type DMABufPlane = wlsrv.DMABufPlane
 func Listen(displayName string, scene *engine.Scene, screenW, screenH int, imp wlsrv.DMABufImport) (*Server, error) {
 	return wlsrv.Listen(displayName, scene, screenW, screenH, imp)
 }
+
+// ToXKBKeycode maps evdev → XKB (evdev+8). alreadyXKB is true for nested host keys.
+func ToXKBKeycode(code uint32, alreadyXKB bool) uint32 {
+	return wlsrv.ToXKBKeycode(code, alreadyXKB)
+}

@@ -223,7 +223,7 @@ func (s *Server) setCursorShape(shape uint32) {
 	s.mu.Unlock()
 }
 
-// KeyboardKey delivers an evdev key to every client (focused surface filters inside).
+// KeyboardKey delivers a Wayland/XKB keycode (evdev+8) to every client.
 func (s *Server) KeyboardKey(code uint32, pressed bool) {
 	s.mu.Lock()
 	cl := append([]*Client(nil), s.clients...)

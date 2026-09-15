@@ -238,7 +238,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				if consume[k.Code] {
 					continue
 				}
-				srv.KeyboardKey(k.Code, k.Pressed)
+				srv.KeyboardKey(compositor.ToXKBKeycode(k.Code, p.wl != nil), k.Pressed)
 			}
 		}
 		if ln.Open && ptr.Click {
