@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.35-dev — nest clipboard / scale edges
+
+- Host `wl_data_device.selection(null)` now clears the nest clipboard (and primary). Worldr `set_selection(null)` clears the Plasma offer. Host-originated clear does not echo back.
+- Host `set_selection` waits for a seat serial (pointer/keyboard enter or button). KWin rejects serial 0; the offer is retried on the next serial.
+- Bind every host `wl_output`. Nest `wl_surface.enter` picks that output’s integer scale when `preferred_scale` is absent (frac still wins). `OnHostScale` emits the already-known scale so a late listener is not stuck at 1.0.
+- Extra text aliases (`STRING`, `text/plain;charset=utf8`). No IME. No greetd/PAM.
+
 ## 0.9.34-dev — session / login wrapper
 
 - `worldr-session` starts a Wayland session around `worldr-shell`: `XDG_RUNTIME_DIR`, `XDG_SESSION_TYPE=wayland`, `XDG_CURRENT_DESKTOP` / `XDG_SESSION_DESKTOP` / `DESKTOP_SESSION` (default `worldr`). Forwards SIGINT/SIGTERM. Remaining args go to the shell.

@@ -33,7 +33,8 @@ func ImageMimes() []string {
 func IsPlainText(m string) bool {
 	m = strings.ToLower(strings.TrimSpace(m))
 	switch m {
-	case MimeTextPlain, MimeTextUTF8, "text/plain; charset=utf-8", "utf8_string", "text", "string":
+	case MimeTextPlain, MimeTextUTF8, "text/plain; charset=utf-8", "text/plain;charset=utf8",
+		"utf8_string", "text", "string", "text/plain;charset=iso-8859-1":
 		return true
 	}
 	return strings.HasPrefix(m, "text/plain")

@@ -50,6 +50,10 @@ type Window struct {
 	cursorMem                            []byte
 	hostOutScale                         int32
 	hostFrac120                          uint32
+	hostOutIDs                           []uint32
+	outScale                             map[uint32]int32
+	surfOut                              uint32
+	pendingClip, pendingPrim             []string
 	hostCursorHidden                     bool
 	hostCursorSet                        bool
 	onHostScale                          func(float64)
@@ -315,7 +319,7 @@ func (w *Window) bindNeeded(globals []registryGlobal) error {
 		if !ok {
 			continue
 		}
-		if seen[g.iface] {
+		if seen[g.iface] && g.iface != ifaceOutput {
 			logClient("skip extra global name=%d iface=%s advertised=%d (already bound)", g.name, g.iface, g.advertised)
 			continue
 		}
@@ -357,7 +361,13 @@ func (w *Window) bindOne(g registryGlobal, requested uint32) error {
 		w.primmgr = id
 		w.primVer = requested
 	case ifaceOutput:
-		w.output = id
+		if w.output == 0 {
+			w.output = id
+		}
+		w.hostOutIDs = append(w.hostOutIDs, id)
+		if w.outScale == nil {
+			w.outScale = map[uint32]int32{}
+		}
 	case ifaceFracScale:
 		w.fracMgr = id
 	case ifaceCursorShape:

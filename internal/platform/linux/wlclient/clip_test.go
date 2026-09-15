@@ -56,14 +56,44 @@ func TestHandleHostSelectionIgnoresOwn(t *testing.T) {
 
 func TestHandleHostSelectionClearsOnZero(t *testing.T) {
 	w := &Window{dataDev: 10, hostOffers: map[uint32]*hostOffer{}}
-	imported := false
-	w.onClipImport = func(primary bool, mime string, data []byte) { imported = true }
+	var gotMime string
+	var gotData []byte
+	called := false
+	w.onClipImport = func(primary bool, mime string, data []byte) {
+		called = true
+		gotMime, gotData = mime, data
+		if primary {
+			t.Fatal("clipboard")
+		}
+	}
 	p := wayland.PutU32(nil, 0)
 	if err := w.handleClip(wayland.Message{Object: 10, Opcode: wlDataDevSelection, Payload: p}); err != nil {
 		t.Fatal(err)
 	}
-	if imported {
-		t.Fatal("null selection")
+	if !called || gotMime != "text/plain" || len(gotData) != 0 {
+		t.Fatalf("host clear mime=%q data=%q called=%v", gotMime, gotData, called)
+	}
+}
+
+func TestHandleHostSelectionNullIgnoresOwn(t *testing.T) {
+	w := &Window{dataDev: 10}
+	w.ownHost.Set(false, true)
+	called := false
+	w.onClipImport = func(primary bool, mime string, data []byte) { called = true }
+	p := wayland.PutU32(nil, 0)
+	if err := w.handleClip(wayland.Message{Object: 10, Opcode: wlDataDevSelection, Payload: p}); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("own clear echo")
+	}
+}
+
+func TestOfferHostTextDefersWithoutSerial(t *testing.T) {
+	w := &Window{ddmgr: 3, dataDev: 10}
+	w.OfferHostText(false, []string{"text/plain"})
+	if w.hostSrc != 0 || len(w.pendingClip) != 2 {
+		t.Fatalf("src=%d pending=%v", w.hostSrc, w.pendingClip)
 	}
 }
 
