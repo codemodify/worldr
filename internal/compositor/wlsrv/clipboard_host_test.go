@@ -193,6 +193,48 @@ func TestImportHostTextThenPNGMerges(t *testing.T) {
 	}
 }
 
+func TestWorldrClearSelectionExportsNil(t *testing.T) {
+	src, _, _, _, _, _ := newClipboardPair(t)
+	src.objs[20] = &object{id: 20, kind: kindDataSource, src: &dataSource{id: 20, client: src}}
+	src.dataDev = 21
+	src.objs[21] = &object{id: 21, kind: kindDataDevice}
+	_ = src.reqDataSource(src.objs[20], 0, wayland.NewCursor(wayland.PutString(nil, mimeTextPlain), nil))
+	var last []string
+	n := 0
+	src.srv.SetClipExport(func(primary bool, mimes []string) {
+		n++
+		last = append([]string(nil), mimes...)
+	})
+	p := wayland.PutU32(nil, 20)
+	p = wayland.PutU32(p, 1)
+	if err := src.reqDataDevice(src.objs[21], 1, wayland.NewCursor(p, nil)); err != nil {
+		t.Fatal(err)
+	}
+	p = wayland.PutU32(nil, 0)
+	p = wayland.PutU32(p, 2)
+	if err := src.reqDataDevice(src.objs[21], 1, wayland.NewCursor(p, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 || len(last) != 0 {
+		t.Fatalf("clear export n=%d last=%v", n, last)
+	}
+}
+
+func TestHostImportClearDoesNotExport(t *testing.T) {
+	scene := engine.NewScene()
+	srv := &Server{Scene: scene, ScreenW: 800, ScreenH: 600}
+	exported := 0
+	srv.SetClipExport(func(primary bool, mimes []string) { exported++ })
+	srv.ImportHostText(false, []byte("from-plasma"))
+	srv.ImportHostText(false, nil)
+	if exported != 0 {
+		t.Fatal("host clear must not echo")
+	}
+	if srv.clip != nil {
+		t.Fatal("cleared")
+	}
+}
+
 func TestImportHostTextPrimary(t *testing.T) {
 	_, _, _, dst, _, _ := newClipboardPair(t)
 	dst.primDev = 41

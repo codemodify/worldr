@@ -10,6 +10,14 @@ import (
 
 func fixedToInt(v int32) int { return int(v) / 256 }
 
+func (w *Window) noteSerial(ser uint32) {
+	if w == nil || ser == 0 {
+		return
+	}
+	w.ptrSerial = ser
+	w.flushPendingHostOffer()
+}
+
 func (w *Window) handleSeat(msg wayland.Message) error {
 	if w.ptrID != 0 && msg.Object == w.ptrID {
 		return w.handlePointer(msg)
@@ -28,7 +36,7 @@ func (w *Window) handlePointer(msg wayland.Message) error {
 		_, _ = cur.U32() // surface
 		x, _ := cur.I32()
 		y, _ := cur.I32()
-		w.ptrSerial = ser
+		w.noteSerial(ser)
 		w.hostX, w.hostY = fixedToInt(x), fixedToInt(y)
 		w.hostInside = true
 		// readLoop already holds w.mu — do not call EnsureHostCursor
@@ -54,7 +62,8 @@ func (w *Window) handlePointer(msg wayland.Message) error {
 		y, _ := cur.I32()
 		w.hostX, w.hostY = fixedToInt(x), fixedToInt(y)
 	case 3: // button
-		_, _ = cur.U32()
+		ser, _ := cur.U32()
+		w.noteSerial(ser)
 		_, _ = cur.U32()
 		btn, _ := cur.U32()
 		state, _ := cur.U32()
@@ -81,8 +90,12 @@ func (w *Window) handleKeyboard(msg wayland.Message) error {
 		if fd, err := w.rd.TakeFD(); err == nil && fd >= 0 {
 			_ = syscall.Close(fd)
 		}
+	case 1: // enter
+		ser, _ := cur.U32()
+		w.noteSerial(ser)
 	case 3: // key
-		_, _ = cur.U32()
+		ser, _ := cur.U32()
+		w.noteSerial(ser)
 		_, _ = cur.U32()
 		code, _ := cur.U32()
 		state, _ := cur.U32()

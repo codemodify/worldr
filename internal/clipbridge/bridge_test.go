@@ -10,7 +10,7 @@ func TestIsPlainText(t *testing.T) {
 	if !IsPlainText("text/plain") || !IsPlainText("text/plain;charset=utf-8") {
 		t.Fatal("core")
 	}
-	if !IsPlainText("TEXT/PLAIN") || !IsPlainText("UTF8_STRING") {
+	if !IsPlainText("TEXT/PLAIN") || !IsPlainText("UTF8_STRING") || !IsPlainText("STRING") {
 		t.Fatal("alias")
 	}
 	if IsPlainText("image/png") || IsPlainText("") {

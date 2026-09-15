@@ -341,8 +341,16 @@ func (s *Server) setSelection(primary bool, from *Client, src *dataSource) {
 	for _, c := range cl {
 		c.sendSelectionIfFocused(primary)
 	}
-	if s.clipExport != nil && src != nil && !src.isHost() && clipbridge.Bridgeable(src.mimes) {
+	if s.clipExport == nil {
+		return
+	}
+	if src != nil && !src.isHost() && clipbridge.Bridgeable(src.mimes) {
 		s.clipExport(primary, src.mimes)
+		return
+	}
+	// Worldr client cleared the selection — drop it on the nest host too.
+	if src == nil && old != nil && old.source != nil && !old.source.isHost() {
+		s.clipExport(primary, nil)
 	}
 }
 

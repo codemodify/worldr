@@ -115,13 +115,68 @@ func (w *Window) OfferHostText(primary bool, mimes []string) {
 	defer w.mu.Unlock()
 	offer := clipbridge.HostOfferMimes(mimes)
 	if len(offer) == 0 {
+		w.clearHostLocked(primary)
+		return
+	}
+	if w.ptrSerial == 0 {
+		// KWin rejects set_selection(serial=0). Retry on the next seat serial.
+		if primary {
+			w.pendingPrim = append([]string(nil), offer...)
+		} else {
+			w.pendingClip = append([]string(nil), offer...)
+		}
+		logClient("clipboard: defer host offer primary=%v (no seat serial)", primary)
 		return
 	}
 	if primary {
+		w.pendingPrim = nil
 		w.offerHostLocked(true, w.primmgr, w.primDev, primMgrCreateSrc, primSrcOffer, primSrcDestroy, primDevSetSel, &w.hostPrimSrc, offer)
 		return
 	}
+	w.pendingClip = nil
 	w.offerHostLocked(false, w.ddmgr, w.dataDev, wlDataMgrCreateSrc, wlDataSrcOffer, wlDataSrcDestroy, wlDataDevSetSel, &w.hostSrc, offer)
+}
+
+func (w *Window) clearHostLocked(primary bool) {
+	if primary {
+		w.pendingPrim = nil
+	} else {
+		w.pendingClip = nil
+	}
+	mgr, dev, destroyOp, setOp := w.ddmgr, w.dataDev, wlDataSrcDestroy, wlDataDevSetSel
+	srcID := &w.hostSrc
+	if primary {
+		mgr, dev, destroyOp, setOp = w.primmgr, w.primDev, primSrcDestroy, primDevSetSel
+		srcID = &w.hostPrimSrc
+	}
+	if mgr == 0 || dev == 0 {
+		return
+	}
+	if *srcID != 0 {
+		_ = w.send(*srcID, destroyOp, nil, nil)
+		*srcID = 0
+	}
+	w.ownHost.Set(primary, false)
+	p := wayland.PutU32(nil, 0)
+	p = wayland.PutU32(p, w.ptrSerial)
+	_ = w.send(dev, setOp, p, nil)
+	logClient("cleared host clipboard primary=%v", primary)
+}
+
+func (w *Window) flushPendingHostOffer() {
+	if w.ptrSerial == 0 {
+		return
+	}
+	if len(w.pendingClip) > 0 {
+		m := w.pendingClip
+		w.pendingClip = nil
+		w.offerHostLocked(false, w.ddmgr, w.dataDev, wlDataMgrCreateSrc, wlDataSrcOffer, wlDataSrcDestroy, wlDataDevSetSel, &w.hostSrc, m)
+	}
+	if len(w.pendingPrim) > 0 {
+		m := w.pendingPrim
+		w.pendingPrim = nil
+		w.offerHostLocked(true, w.primmgr, w.primDev, primMgrCreateSrc, primSrcOffer, primSrcDestroy, primDevSetSel, &w.hostPrimSrc, m)
+	}
 }
 
 func (w *Window) offerHostLocked(primary bool, mgr, dev uint32, createOp, offerOp, destroyOp, setOp uint16, srcID *uint32, mimes []string) {
@@ -229,6 +284,12 @@ func (w *Window) handleHostSource(msg wayland.Message, primary bool) error {
 
 func (w *Window) importHostSelection(primary bool, offerID uint32) {
 	if offerID == 0 {
+		if w.ownHost.Owns(primary) {
+			return
+		}
+		if fn := w.onClipImport; fn != nil {
+			fn(primary, clipbridge.MimeTextPlain, nil)
+		}
 		return
 	}
 	if w.ownHost.Owns(primary) {

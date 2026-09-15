@@ -57,3 +57,36 @@ func TestHostScaleDefault(t *testing.T) {
 		t.Fatal("empty")
 	}
 }
+
+func TestHostScaleFollowsSurfaceEnter(t *testing.T) {
+	w := &Window{
+		output: 5, surf: 8,
+		hostOutIDs:   []uint32{5, 6},
+		outScale:     map[uint32]int32{5: 1, 6: 2},
+		hostOutScale: 1,
+	}
+	if w.HostScale() != 1 {
+		t.Fatalf("start %v", w.HostScale())
+	}
+	p := wayland.PutU32(nil, 6)
+	if err := w.handleScale(wayland.Message{Object: 8, Opcode: 0, Payload: p}); err != nil {
+		t.Fatal(err)
+	}
+	if w.surfOut != 6 || w.HostScale() != 2 {
+		t.Fatalf("enter out=%d scale=%v", w.surfOut, w.HostScale())
+	}
+}
+
+func TestOnHostScaleEmitsKnown(t *testing.T) {
+	w := &Window{output: 5, hostOutScale: 2}
+	got := make(chan float64, 1)
+	w.OnHostScale(func(sc float64) { got <- sc })
+	select {
+	case sc := <-got:
+		if sc != 2 {
+			t.Fatal(sc)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("immediate")
+	}
+}
