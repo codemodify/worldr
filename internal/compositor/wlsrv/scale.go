@@ -29,6 +29,18 @@ func ScaleFrom120ths(n uint32) float64 {
 	return float64(n) / 120
 }
 
+// CombineHostScale prefers a wp_fractional_scale preferred_scale (120ths)
+// over a wl_output.scale integer. Either 0 falls through; both 0 → 1.0.
+func CombineHostScale(frac120 uint32, outputScale int32) float64 {
+	if frac120 > 0 {
+		return ScaleFrom120ths(frac120)
+	}
+	if outputScale > 0 {
+		return float64(outputScale)
+	}
+	return 1
+}
+
 // IntegerScaleFrom120ths is the coherent wl_output.scale (nearest integer, min 1).
 // 1.0 → 1, 1.25 → 1, 1.5 → 2, 2.0 → 2.
 func IntegerScaleFrom120ths(n uint32) int32 {

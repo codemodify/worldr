@@ -59,6 +59,21 @@ func TestLogicalSize(t *testing.T) {
 	}
 }
 
+func TestCombineHostScale(t *testing.T) {
+	if CombineHostScale(0, 0) != 1 {
+		t.Fatal("default")
+	}
+	if CombineHostScale(0, 2) != 2 {
+		t.Fatal("integer output")
+	}
+	if CombineHostScale(180, 1) != 1.5 {
+		t.Fatal("frac wins over integer")
+	}
+	if CombineHostScale(150, 0) != 1.25 {
+		t.Fatal("1.25")
+	}
+}
+
 func TestServerDefaultScaleIsOne(t *testing.T) {
 	s := &Server{}
 	if s.PreferredScale120ths() != 120 || s.IntegerOutputScale() != 1 {
@@ -67,5 +82,9 @@ func TestServerDefaultScaleIsOne(t *testing.T) {
 	s.SetOutputScale(1.5)
 	if s.PreferredScale120ths() != 180 || s.IntegerOutputScale() != 2 {
 		t.Fatalf("1.5 %d %d", s.PreferredScale120ths(), s.IntegerOutputScale())
+	}
+	s.SetOutputScale(1.25)
+	if s.PreferredScale120ths() != 150 || s.IntegerOutputScale() != 1 {
+		t.Fatalf("1.25 %d %d", s.PreferredScale120ths(), s.IntegerOutputScale())
 	}
 }

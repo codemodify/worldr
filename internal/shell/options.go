@@ -68,7 +68,7 @@ func ParseFlags(args []string) (Options, error) {
 	effects := fs.String("effects", "high", "window theater: high|low|off (scale+fade map/unmap; off disables)")
 	fs.BoolVar(&o.OverviewDemo, "overview-demo", false, "auto-enter expose after the first window maps (smoke)")
 	fs.IntVar(&o.Workspaces, "workspaces", engine.WorkspaceDefault, "virtual desktops (2–4, default 3)")
-	fs.Float64Var(&o.Scale, "scale", 0, "output scale 1 / 1.25 / 1.5 / 2 (0 = auto: 1.0 nested and vk-display; host nest scale unknown)")
+	fs.Float64Var(&o.Scale, "scale", 0, "output scale 1 / 1.25 / 1.5 / 2 (0 = auto: nest follows host; else 1.0)")
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}
@@ -91,16 +91,19 @@ func ParseFlags(args []string) (Options, error) {
 	o.Effects = tier
 	o.Workspaces = engine.ClampWorkspaces(o.Workspaces)
 	if o.Scale < 0 {
-		return o, fmt.Errorf("--scale must be ≥ 0 (0 = auto 1.0)")
+		return o, fmt.Errorf("--scale must be ≥ 0 (0 = auto: nest host or 1.0)")
 	}
 	return o, nil
 }
 
-// ResolveOutputScale returns the compositor scale. 0 / auto is 1.0
-// (nested host does not bind wl_output, so Plasma scale is unknown).
-func ResolveOutputScale(explicit float64) float64 {
+// ResolveOutputScale returns the compositor scale.
+// explicit > 0 wins (--scale). Otherwise host > 0 (nest Plasma). Else 1.0.
+func ResolveOutputScale(explicit, host float64) float64 {
 	if explicit > 0 {
 		return explicit
+	}
+	if host > 0 {
+		return host
 	}
 	return 1
 }

@@ -544,6 +544,26 @@ func (c *Client) sendOutput(id uint32) error {
 	return c.send(id, 2, nil, nil) // done
 }
 
+func (c *Client) sendScaleUpdate() {
+	if c == nil {
+		return
+	}
+	scale := c.srv.IntegerOutputScale()
+	pref := c.srv.PreferredScale120ths()
+	for _, o := range c.objs {
+		if o == nil {
+			continue
+		}
+		switch o.kind {
+		case kindOutput:
+			_ = c.send(o.id, 3, wayland.PutI32(nil, scale), nil)
+			_ = c.send(o.id, 2, nil, nil)
+		case kindFracScale:
+			_ = c.send(o.id, 0, wayland.PutU32(nil, pref), nil)
+		}
+	}
+}
+
 func (c *Client) reqCompositor(_ *object, op uint16, cur *wayland.Cursor) error {
 	id, err := cur.U32()
 	if err != nil {

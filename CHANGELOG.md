@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.16-dev — nest host scale
+
+- Nested `--backend=wayland-client` binds host `wl_output` (v≤2) and `wp_fractional_scale_manager_v1` when advertised.
+- `preferred_scale` / `wl_output.scale` follow the host (fractional 120ths preferred). Updates on host scale change.
+- `--scale` still overrides. vk-display/drm stay 1.0 unless `--scale`.
+- No IME.
+
 ## 0.9.15-dev — nest host clipboard bridge
 
 - Nested `--backend=wayland-client` binds host `wl_data_device_manager` (and `zwp_primary_selection` when advertised).

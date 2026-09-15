@@ -44,6 +44,10 @@ type Window struct {
 	hostSrc, hostPrimSrc                 uint32
 	compVer, shmVer, xdgVer, seatVer     uint32
 	ddmgrVer, primVer                    uint32
+	output, fracMgr, fracID              uint32
+	hostOutScale                         int32
+	hostFrac120                          uint32
+	onHostScale                          func(float64)
 	ptrSerial                            uint32
 	hostX, hostY                         int
 	hostClick, hostRelease               bool
@@ -178,6 +182,9 @@ func (w *Window) setup(title string, fullscreen bool) error {
 
 	w.surf = w.alloc()
 	if err := w.send(w.comp, 0, wayland.PutU32(nil, w.surf), nil); err != nil {
+		return err
+	}
+	if err := w.setupFracScale(); err != nil {
 		return err
 	}
 	w.xdgS = w.alloc()
@@ -341,6 +348,10 @@ func (w *Window) bindOne(g registryGlobal, requested uint32) error {
 	case ifacePrimary:
 		w.primmgr = id
 		w.primVer = requested
+	case ifaceOutput:
+		w.output = id
+	case ifaceFracScale:
+		w.fracMgr = id
 	}
 	return nil
 }
@@ -480,6 +491,9 @@ func (w *Window) handle(msg wayland.Message) error {
 		return err
 	}
 	if err := w.handleClip(msg); err != nil {
+		return err
+	}
+	if err := w.handleScale(msg); err != nil {
 		return err
 	}
 	for i := range w.slots {
@@ -652,5 +666,5 @@ func wrapHostClose(err error) error {
 	if !isBrokenPipe(err) && !errors.Is(err, io.EOF) && !strings.Contains(err.Error(), "wl_display.error") {
 		return err
 	}
-	return fmt.Errorf("%w\n\nKWin/Plasma nested-window note: the host compositor closed the socket. abox saw `invalid arguments for wl_registry#2.bind` — that is a bad bind (version 0, version above advertised, or interface/name mismatch), not a random I/O flake. worldr now collects globals, binds only compositor/shm/xdg_wm_base/seat plus wl_data_device_manager (and zwp_primary_selection if advertised) at min(our_max, advertised), and logs each advertise/bind on stderr. Also waits for xdg_surface.configure and double-buffers shm. If this still happens, paste the wayland-client: global/bind lines and use a spare TTY: --backend=vk-display --duration=15s.", err)
+	return fmt.Errorf("%w\n\nKWin/Plasma nested-window note: the host compositor closed the socket. abox saw `invalid arguments for wl_registry#2.bind` — that is a bad bind (version 0, version above advertised, or interface/name mismatch), not a random I/O flake. worldr now collects globals and binds compositor/shm/xdg/seat/data_device plus wl_output (v≤2) and wp_fractional_scale_manager_v1 when advertised, at min(our_max, advertised). Logs each advertise/bind on stderr. Also waits for xdg_surface.configure and double-buffers shm. If this still happens, paste the wayland-client: global/bind lines and use a spare TTY: --backend=vk-display --duration=15s.", err)
 }

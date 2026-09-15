@@ -96,12 +96,27 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			srv = s
 			waylandName = srv.DisplayName
 			defer srv.Close()
-			outScale := ResolveOutputScale(opt.Scale)
+			hostScale := 0.0
+			if p.wl != nil {
+				hostScale = p.wl.HostScale()
+			}
+			outScale := ResolveOutputScale(opt.Scale, hostScale)
 			srv.SetOutputScale(outScale)
+			if p.wl != nil && opt.Scale <= 0 {
+				p.wl.OnHostScale(func(sc float64) {
+					srv.SetOutputScale(sc)
+				})
+			}
 			fmt.Fprintf(stdout, "wayland compositor: WAYLAND_DISPLAY=%s  (example: WAYLAND_DISPLAY=%s foot)\n",
 				srv.DisplayName, srv.DisplayName)
-			fmt.Fprintf(stdout, "output scale: %.2f (preferred_scale=%d/120, wl_output.scale=%d). Nested/vk-display default 1.0; nest does not read host wl_output — pass --scale=1.5 on HiDPI.\n",
-				outScale, srv.PreferredScale120ths(), srv.IntegerOutputScale())
+			src := "auto 1.0"
+			if opt.Scale > 0 {
+				src = "--scale override"
+			} else if p.wl != nil && hostScale > 0 {
+				src = "nest host"
+			}
+			fmt.Fprintf(stdout, "output scale: %.2f (%s; preferred_scale=%d/120, wl_output.scale=%d). vk-display/drm stay 1.0 unless --scale.\n",
+				outScale, src, srv.PreferredScale120ths(), srv.IntegerOutputScale())
 			fmt.Fprintf(stdout, "socket: %s\n", srv.SocketPath)
 			if nestedPresent(p.name) {
 				fmt.Fprintf(stdout, "nested compositor: clients appear inside this window. Keep this WAYLAND_DISPLAY=%s for the host; use WAYLAND_DISPLAY=%s for foot/weston-simple-shm.\n",

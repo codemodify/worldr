@@ -24,3 +24,5 @@ func (w *Window) HostPrimaryBound() bool                 { return false }
 func (w *Window) SetClipImport(func(bool, []byte))       {}
 func (w *Window) SetClipFulfill(func(bool, string, int)) {}
 func (w *Window) OfferHostText(bool, []string)           {}
+func (w *Window) HostScale() float64                     { return 1 }
+func (w *Window) OnHostScale(func(float64))              {}
