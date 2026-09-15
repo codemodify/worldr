@@ -32,8 +32,9 @@ tryable `worldr-shell`.
 3. SSD borders + input/focus — done (simple chrome)
 4. XWayland — done (`--xwayland`, tiny XWM + `xwayland_shell_v1`)
 5. Compiz-style theater v0 — done (hardcoded map/unmap scale+fade)
-6. Expose/overview v0 — **this branch** (F12 grid)
-7. Revisit UI toolkit
+6. Expose/overview v0 — done (F12 grid)
+7. Panel + launcher v0 — **this branch** (bottom bar, F1 spawn)
+8. Revisit UI toolkit
 
 ## Layers
 
@@ -112,7 +113,7 @@ and explicit sync, not by opening the DRM device themselves.
 | `internal/decorations` | SSD: thicker accent bar, title gradient, focused glow + title hit region. |
 | `internal/platform/linux/native` | **cgo ABI**: `libvulkan` + `libdrm` (owned C session, not a second compositor). |
 | `internal/platform/linux/wlclient` | Debug nested Wayland *client* (wl_shm). Not the primary path. |
-| `internal/shell` | `worldr-shell` flags, safety, present loop. |
+| `internal/shell` | `worldr-shell` flags, safety, present loop, panel, launcher. |
 | `internal/input` | Best-effort evdev pointer + Esc/Q. |
 | `internal/wayland` | Wire protocol encode/decode. |
 | `internal/version` | Version / phase string. |
