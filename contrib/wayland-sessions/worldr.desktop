@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=worldr
+Comment=worldr cinematic desktop
+Exec=worldr-session
+TryExec=worldr-session
+Type=Application
+DesktopNames=worldr

@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.34-dev — session / login wrapper
+
+- `worldr-session` starts a Wayland session around `worldr-shell`: `XDG_RUNTIME_DIR`, `XDG_SESSION_TYPE=wayland`, `XDG_CURRENT_DESKTOP` / `XDG_SESSION_DESKTOP` / `DESKTOP_SESSION` (default `worldr`). Forwards SIGINT/SIGTERM. Remaining args go to the shell.
+- `--login` prompts for a username; `--user NAME` autologin. Both must match the current uid (no PAM / no user switch). `--print-env` / `--dry-run` for checks. `--shell` overrides the sibling/PATH lookup.
+- Display managers: `contrib/wayland-sessions/worldr.desktop` (`Exec=worldr-session`). `scripts/try-tty.sh` now launches via `worldr-session`. Isolation / greetd / PAM still later. No IME.
+
 ## 0.9.33-dev — multi-monitor / per-output scale
 
 - `--outputs=N` (1–4) tiles N logical `wl_output`s left-to-right across the present framebuffer. Each has geometry, `name` (`WL-1`…), `scale`, and `wp_fractional_scale` from that output.
@@ -293,7 +299,8 @@ Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is 
 Nested (safe, current desktop):
 
 ```sh
-./bin/worldr-shell --backend=wayland-client --duration=30s
+./bin/worldr-session -- --backend=wayland-client --duration=30s
+# or: ./bin/worldr-shell --backend=wayland-client --duration=30s
 # F1 → foot; F12 overview; pager or Ctrl+Alt+←/→ workspaces
 ```
 

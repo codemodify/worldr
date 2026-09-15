@@ -1,17 +1,34 @@
-// Command worldr-session is the future session manager.
+// Command worldr-session starts a worldr Wayland session around worldr-shell.
 //
-// Phase 0: placeholder only. Process isolation (experiences/apps vs the
-// shell compositor) is a later-phase concern.
+// It sets XDG session environment, optionally gates on the current username
+// (--login / --user; no PAM), then runs worldr-shell. Display managers should
+// install contrib/wayland-sessions/worldr.desktop.
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
-	"github.com/codemodify/worldr/internal/version"
+	"github.com/codemodify/worldr/internal/session"
 )
 
 func main() {
-	fmt.Fprintf(os.Stdout, "worldr-session %s\n", version.String())
-	fmt.Fprintln(os.Stdout, "Phase 0 scaffold: session manager not implemented.")
+	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
+		session.Usage(os.Stdout)
+		os.Exit(0)
+	}
+	opt, err := session.ParseFlags(os.Args[1:])
+	if err != nil {
+		if err == flag.ErrHelp {
+			session.Usage(os.Stdout)
+			os.Exit(0)
+		}
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if err := session.Run(os.Stdout, os.Stderr, os.Stdin, os.Args[0], opt); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }

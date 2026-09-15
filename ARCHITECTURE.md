@@ -96,7 +96,8 @@ X11 / XWayland ───┘         │
                             ▼
                      GPU device + present
 
-worldr-session (later): session / isolation around the shell
+worldr-session: XDG session env + optional current-uid login gate; then worldr-shell.
+Isolation / PAM / greetd still later.
 ```
 
 The shell compositor process owns the GPU device and the present path. Isolated
@@ -108,7 +109,8 @@ and explicit sync, not by opening the DRM device themselves.
 | Package | Role |
 | --- | --- |
 | `cmd/worldr-shell` | Compositor binary. Will own device + present + Wayland server + frame loop. |
-| `cmd/worldr-session` | Session manager placeholder. Isolation and session lifecycle come later. |
+| `cmd/worldr-session` | Session manager: XDG env, optional current-uid `--login`, exec `worldr-shell`. Isolation / PAM later. |
+| `internal/session` | Flags, env overlay, username gate, shell lookup + wait. |
 | `internal/rhi` | Owned RHI interfaces (`Device`, `Queue`, `Texture`, `SharedImage`, `Sync`, `Present`). |
 | `internal/compositor` / `wlsrv` | Pure-Go Wayland server: xdg_shell, seat/keyboard, linux-dmabuf, SSD decoration, viewporter stub. shm + dmabuf → actors. |
 | `internal/engine` | Scene, window actors, workspaces, CPU BGRA composite. |
