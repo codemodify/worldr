@@ -141,6 +141,7 @@ type surface struct {
 	xwayland bool
 	cropped  bool // actor is the window-geometry box (CSD inset)
 	sync     *syncSurface
+	outEnter bool // wl_surface.enter already sent
 }
 
 type xdgSurface struct {
@@ -165,6 +166,7 @@ type xdgToplevel struct {
 	app      string
 	icon     *iconSnap
 	iconName string
+	inactive bool // last configure omitted activated
 }
 
 // Client is one Wayland connection.
@@ -185,6 +187,7 @@ type Client struct {
 	dataDev  uint32
 	primDev  uint32
 	serverID uint32
+	compVer  uint32 // bound wl_compositor version (preferred_buffer_scale since 6)
 	// pendingIcon holds set_icon(snap|null) that arrived before get_toplevel.
 	pendingIcon map[uint32]iconPending
 }
@@ -462,7 +465,7 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 	if err != nil {
 		return err
 	}
-	_, err = cur.U32() // version
+	ver, err := cur.U32()
 	if err != nil {
 		return err
 	}
@@ -474,6 +477,7 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 	switch name {
 	case globalCompositor:
 		o.kind = kindCompositor
+		c.compVer = ver
 	case globalShm:
 		o.kind = kindShm
 		c.objs[id] = o
@@ -595,6 +599,10 @@ func (c *Client) sendScaleUpdate() {
 			_ = c.send(o.id, 2, nil, nil)
 		case kindFracScale:
 			_ = c.send(o.id, 0, wayland.PutU32(nil, pref), nil)
+		case kindSurface:
+			if o.surf != nil && o.surf.outEnter {
+				c.sendPreferredBufferScale(o.surf)
+			}
 		}
 	}
 }
@@ -845,6 +853,7 @@ func (c *Client) mapSurface(s *surface) {
 		x11, x11ok = c.srv.X11OnMap(w, h)
 	}
 	noChrome := child || (x11ok && x11.NoChrome)
+	firstMap := s.actor == nil
 	if s.actor == nil {
 		s.actor = &engine.Actor{NoChrome: noChrome}
 		if noChrome && !child && x11ok {
@@ -905,6 +914,10 @@ func (c *Client) mapSurface(s *surface) {
 			s.actor.IconName = s.actor.AppID
 		}
 		c.srv.log.Printf("mapped X11 actor %dx%d title=%q class=%q chrome=%v", w, h, s.actor.Title, s.actor.AppID, !s.actor.NoChrome)
+	}
+	c.notifySurfaceOutput(s)
+	if firstMap && !child && !noChrome {
+		c.focusMappedToplevel(s)
 	}
 	_ = c.send(o.id, 0, nil, nil) // wl_buffer.release
 }
@@ -1019,12 +1032,79 @@ func (c *Client) configure(xs *xdgSurface) error {
 	}
 	p = wayland.PutI32(nil, int32(w))
 	p = wayland.PutI32(p, int32(h))
-	p = wayland.PutArray(p, nil)
+	var states []byte
+	if !xs.top.inactive {
+		states = wayland.PutU32(nil, xdgToplevelActivated)
+	}
+	p = wayland.PutArray(p, states)
 	if err := c.send(xs.top.id, 0, p, nil); err != nil {
 		return err
 	}
+	c.sendDecoSSD()
 	xs.serial = c.nextSerial()
 	return c.send(xs.id, 0, wayland.PutU32(nil, xs.serial), nil)
+}
+
+const xdgToplevelActivated uint32 = 4
+
+func (c *Client) sendDecoSSD() {
+	if c == nil {
+		return
+	}
+	for _, o := range c.objs {
+		if o != nil && o.kind == kindDeco {
+			_ = c.send(o.id, 0, wayland.PutU32(nil, 2), nil)
+		}
+	}
+}
+
+func (c *Client) outputID() uint32 {
+	for _, o := range c.objs {
+		if o != nil && o.kind == kindOutput {
+			return o.id
+		}
+	}
+	return 0
+}
+
+func (c *Client) sendPreferredBufferScale(s *surface) {
+	if c == nil || s == nil || c.compVer < 6 {
+		return
+	}
+	scale := int32(1)
+	if c.srv != nil {
+		scale = c.srv.IntegerOutputScale()
+	}
+	_ = c.send(s.id, 2, wayland.PutI32(nil, scale), nil) // preferred_buffer_scale
+}
+
+func (c *Client) notifySurfaceOutput(s *surface) {
+	if c == nil || s == nil || s.outEnter {
+		return
+	}
+	if oid := c.outputID(); oid != 0 {
+		_ = c.send(s.id, 0, wayland.PutU32(nil, oid), nil) // wl_surface.enter
+		s.outEnter = true
+	}
+	c.sendPreferredBufferScale(s)
+}
+
+func (c *Client) focusMappedToplevel(s *surface) {
+	if c == nil || s == nil || s.xdg == nil || s.xdg.top == nil || s.sub != nil {
+		return
+	}
+	if s.actor != nil && c.srv != nil && c.srv.Scene != nil {
+		c.srv.Scene.FocusActor(s.actor)
+	}
+	s.xdg.top.inactive = false
+	_ = c.configure(s.xdg)
+	if c.kbdID != 0 && c.kbdSurf != s.id {
+		if c.kbdSurf != 0 {
+			c.keyboardLeave(c.kbdSurf)
+		}
+		c.keyboardEnter(s)
+		c.kbdSurf = s.id
+	}
 }
 
 func (c *Client) reqXdgToplevel(o *object, op uint16, cur *wayland.Cursor) error {

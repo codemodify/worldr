@@ -117,6 +117,14 @@ func (c *Client) advertiseLinuxDmabuf(id uint32) error {
 	return nil
 }
 
+func (c *Client) wantTiledDmabuf() bool {
+	if c == nil || c.srv == nil {
+		return false
+	}
+	gpu, ok := c.srv.Import.(DMABufGPU)
+	return ok && gpu.CanGPUComposite()
+}
+
 func drmDeviceID() ([]byte, bool) {
 	matches, _ := filepath.Glob("/dev/dri/card*")
 	if len(matches) == 0 {
@@ -138,15 +146,14 @@ func drmDeviceID() ([]byte, bool) {
 	return nil, false
 }
 
-func (c *Client) sendDmabufFeedback(id uint32) error {
-	// Intel Arrow Lake / Mesa often uses 4-tiled; advertise common modifiers
-	// so GPU clients will create importable buffers (import still goes through Vulkan).
-	intelMods := []uint64{
-		0x0100000000000001, // I915_FORMAT_MOD_X_TILED
-		0x0100000000000002, // I915_FORMAT_MOD_Y_TILED
-		0x0100000000000004, // I915_FORMAT_MOD_Yf_TILED
-		0x0100000000000009, // I915_FORMAT_MOD_4_TILED
-	}
+var intelDmabufMods = []uint64{
+	0x0100000000000001, // I915_FORMAT_MOD_X_TILED
+	0x0100000000000002, // I915_FORMAT_MOD_Y_TILED
+	0x0100000000000004, // I915_FORMAT_MOD_Yf_TILED
+	0x0100000000000009, // I915_FORMAT_MOD_4_TILED
+}
+
+func dmabufFormatTable(tiled bool) []byte {
 	table := make([]byte, 0, 16*16)
 	add := func(format uint32, mod uint64) {
 		var e [16]byte
@@ -158,10 +165,29 @@ func (c *Client) sendDmabufFeedback(id uint32) error {
 	add(drmFormatXRGB8888, drmModLinear)
 	add(drmFormatABGR8888, drmModLinear)
 	add(drmFormatXBGR8888, drmModLinear)
-	for _, m := range intelMods {
-		add(drmFormatARGB8888, m)
-		add(drmFormatXRGB8888, m)
+	if tiled {
+		for _, m := range intelDmabufMods {
+			add(drmFormatARGB8888, m)
+			add(drmFormatXRGB8888, m)
+		}
 	}
+	return table
+}
+
+func dmabufTableHasTiled(table []byte) bool {
+	for i := 0; i+16 <= len(table); i += 16 {
+		mod := binary.LittleEndian.Uint64(table[i+8 : i+16])
+		if mod != drmModLinear && mod != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Client) sendDmabufFeedback(id uint32) error {
+	// Intel Arrow Lake / Mesa often uses 4-tiled; advertise those only when
+	// the compositor can GPU-sample (vk-display). Nest stays LINEAR-only.
+	table := dmabufFormatTable(c.wantTiledDmabuf())
 	fd, err := unix.MemfdCreate("worldr-dmabuf-formats", 0)
 	if err != nil {
 		return err
@@ -294,15 +320,48 @@ func (c *Client) reqDmaParams(o *object, op uint16, cur *wayland.Cursor) error {
 		_, _ = cur.U32()
 		d.w, d.h, d.fourcc = int(w), int(h), fourcc
 		if err := c.finishDmaBuffer(id, d); err != nil {
-			// Spec wants a fatal error; Chromium/Brave treat that as a
-			// GPU-process crash. Keep the connection with a black placeholder
-			// so the browser can finish bring-up (shm/SwiftShader path).
-			c.srv.log.Printf("dmabuf create_immed failed (placeholder): %v", err)
+			// Spec wants a fatal protocol error; Chromium/Brave treat that
+			// as a GPU-process crash. Keep a real buffer object: prefer the
+			// client fd (scanout / later mmap) over a black rectangle.
+			c.srv.log.Printf("dmabuf create_immed failed (keep): %v", err)
+			if dmaHasUsableFD(d) {
+				c.installDmaKeepFD(id, d)
+				return nil
+			}
 			c.installDmaPlaceholder(id, int(w), int(h), fourcc)
 			return nil
 		}
 	}
 	return nil
+}
+
+func dmaHasUsableFD(d *dmaBuf) bool {
+	if d == nil {
+		return false
+	}
+	for _, p := range d.planes {
+		if p.fd > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Client) installDmaKeepFD(id uint32, d *dmaBuf) {
+	cp := *d
+	cp.planes = append([]dmaPlane(nil), d.planes...)
+	d.planes = nil
+	if cp.w < 1 {
+		cp.w = 1
+	}
+	if cp.h < 1 {
+		cp.h = 1
+	}
+	if cp.stride <= 0 {
+		cp.stride = cp.w * 4
+	}
+	cp.resolved = true
+	c.objs[id] = &object{id: id, kind: kindBuffer, dma: &cp}
 }
 
 func (c *Client) installDmaPlaceholder(id uint32, w, h int, fourcc uint32) {
@@ -334,7 +393,7 @@ func (c *Client) finishDmaBuffer(id uint32, d *dmaBuf) error {
 	// do not close fds on the original until copied; finish owns them
 	d.planes = nil
 	if err := c.resolveDma(&cp); err != nil {
-		cp.closeFDs()
+		d.planes = cp.planes // caller may keep fds (create_immed)
 		return err
 	}
 	c.objs[id] = &object{id: id, kind: kindBuffer, dma: &cp}

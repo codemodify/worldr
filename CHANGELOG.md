@@ -3,6 +3,14 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.27-dev — Chromium/Qt protocol surface
+
+- `zwp_linux_dmabuf_v1` feedback is LINEAR-only on nest/headless (`CanGPUComposite` false) so Chromium/Brave allocate mmap-able buffers instead of Intel-tiled ones that became a black `create_immed` placeholder. vk-display still advertises tiled modifiers.
+- `create_immed` import failure keeps the client fd when present (scanout / later mmap) instead of always painting black. Placeholder remains the last resort (no fd) so the GPU process is not disconnected.
+- `wl_compositor` v6: `wl_surface.enter(output)` on first map and `preferred_buffer_scale` (and on scale change). `xdg_toplevel.configure` includes `activated`. `xdg_activation.activate` focuses, re-configures, and sends `wl_keyboard.enter`. First toplevel map does the same.
+- `zxdg_decoration` still forces SSD (`set_mode` / `unset_mode`) and re-sends `configure` with each toplevel configure.
+- Remaining GPU flag if ozone still dies after this: `brave --ozone-platform=wayland --disable-gpu`. No IME. Disks still deferred.
+
 ## 0.9.26-dev — Qt Wayland init SEGV (ark / Brave)
 
 - Root cause: `wl_data_device.selection(null)` (and primary `selection(null)`) was sent immediately on `get_data_device` during the client's first `wl_display_roundtrip`. Qt6 `QWaylandDataDevice` then calls `platformIntegration()->clipboard()` before `createPlatformIntegration` has published the integration → SIGSEGV in `libQt6WaylandClient`.
