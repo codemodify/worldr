@@ -128,6 +128,8 @@ type surface struct {
 	sx, sy   int32
 	destW    int
 	destH    int
+	bufScale int
+	fracID   uint32
 	xwayland bool
 }
 
@@ -516,7 +518,7 @@ func (c *Client) sendOutput(id uint32) error {
 	if err := c.send(id, 1, p, nil); err != nil {
 		return err
 	}
-	p = wayland.PutI32(nil, 1)
+	p = wayland.PutI32(nil, c.srv.IntegerOutputScale())
 	if err := c.send(id, 3, p, nil); err != nil { // scale
 		return err
 	}
@@ -636,6 +638,15 @@ func (c *Client) reqSurface(o *object, op uint16, cur *wayland.Cursor) error {
 		if b := c.objs[bufID]; b != nil {
 			s.pending = b
 		}
+	case 8: // set_buffer_scale
+		sc, err := cur.I32()
+		if err != nil {
+			return err
+		}
+		if sc < 1 {
+			sc = 1
+		}
+		s.bufScale = int(sc)
 	case 3: // frame
 		id, err := cur.U32()
 		if err != nil {
@@ -730,9 +741,8 @@ func (c *Client) mapSurface(s *surface) {
 	default:
 		return
 	}
-	if s.destW > 0 && s.destH > 0 {
-		w, h = s.destW, s.destH
-	}
+	bufW, bufH := w, h
+	w, h = LogicalSize(bufW, bufH, s.destW, s.destH, s.bufScale)
 	child := c.isChildSurface(s)
 	var x11 X11MapHints
 	var x11ok bool
@@ -763,6 +773,8 @@ func (c *Client) mapSurface(s *surface) {
 	}
 	s.actor.Width = w
 	s.actor.Height = h
+	s.actor.BufW = bufW
+	s.actor.BufH = bufH
 	s.actor.Stride = stride
 	s.actor.Pixels = pix
 	s.actor.NoChrome = noChrome
@@ -996,10 +1008,14 @@ func (c *Client) reqViewport(o *object, op uint16, cur *wayland.Cursor) error {
 	case 0:
 		delete(c.objs, o.id)
 	case 2: // set_destination
-		w, _ := cur.I32()
-		h, _ := cur.I32()
+		dw, _ := cur.I32()
+		dh, _ := cur.I32()
 		if s != nil {
-			s.destW, s.destH = int(w), int(h)
+			if dw < 0 || dh < 0 {
+				s.destW, s.destH = 0, 0
+			} else {
+				s.destW, s.destH = int(dw), int(dh)
+			}
 		}
 	}
 	return nil

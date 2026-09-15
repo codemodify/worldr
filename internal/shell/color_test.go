@@ -77,6 +77,20 @@ func TestParseOverviewDemoFlag(t *testing.T) {
 	}
 }
 
+func TestParseScaleFlag(t *testing.T) {
+	o, err := ParseFlags([]string{})
+	if err != nil || o.Scale != 0 || ResolveOutputScale(o.Scale) != 1 {
+		t.Fatalf("default %+v %v", o, err)
+	}
+	o, err = ParseFlags([]string{"-scale=1.5"})
+	if err != nil || o.Scale != 1.5 || ResolveOutputScale(o.Scale) != 1.5 {
+		t.Fatalf("1.5 %+v %v", o, err)
+	}
+	if _, err := ParseFlags([]string{"-scale=-1"}); err == nil {
+		t.Fatal("negative scale")
+	}
+}
+
 func TestParseXWaylandFlag(t *testing.T) {
 	o, err := ParseFlags([]string{"-xwayland", "-backend=nested"})
 	if err != nil {

@@ -3,6 +3,14 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.12-dev — wp_fractional_scale preferred scale
+
+- `wp_fractional_scale_manager_v1` still advertised. `preferred_scale` is now driven by the output scale in 120ths (1.0 → 120, 1.25 → 150, 1.5 → 180, 2.0 → 240).
+- `wl_output.scale` is the nearest integer (1.25 → 1, 1.5 → 2). Single output only.
+- Default **1.0** on nested and vk-display (nest does not bind host `wl_output`, so Plasma scale is unknown). `--scale=1.5` for HiDPI soak.
+- `wl_surface.set_buffer_scale` and `wp_viewport.set_destination` set the logical window; a larger buffer is scaled into that rect (shm at scale 1 unchanged). GPU sample skips dest≠buffer (CPU blit).
+- No IME.
+
 ## 0.9.11-dev — XWayland EWMH / focus / stacking
 
 - Tiny XWM now advertises `_NET_SUPPORTED` / `_NET_SUPPORTING_WM_CHECK` (`worldr`) plus `_NET_ACTIVE_WINDOW`, `_NET_CLIENT_LIST`, `_NET_WM_WINDOW_TYPE`, `_NET_CLOSE_WINDOW`.

@@ -3,7 +3,7 @@
 Linux-first cinematic desktop: owned Vulkan engine + Wayland compositor.
 The UI toolkit is deferred. Foreign Wayland and X11 clients are the first apps.
 
-**Status:** 0.9.11-dev on `cursor/xwayland-ewmh-c92c` (stacked on dmabuf). XWayland EWMH titles/focus/stacking; override-redirect without SSD; **Ctrl+Q** quits.
+**Status:** 0.9.12-dev on `cursor/fractional-scale-c92c` (stacked on EWMH). `wp_fractional_scale` preferred_scale from output scale; **Ctrl+Q** quits.
 Nested compositor is the safe demo. Real display: spare TTY via `scripts/try-tty.sh`.
 Human history: [CHANGELOG.md](CHANGELOG.md). Abox notes: [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
 
@@ -37,6 +37,7 @@ export WAYLAND_DISPLAY=wayland-1   # name the shell printed
 foot
 # F12 or panel grid = expose; pager / Ctrl+Alt+←/→ = workspaces
 # quit: Ctrl+Q (bare Q/Esc do not quit while a client is open)
+# HiDPI soak: --scale=1.5  (default 1.0; nest does not read Plasma’s scale)
 # optional X11:
 ./bin/worldr-shell --backend=wayland-client --xwayland --duration=60s
 DISPLAY=:N xeyes    # N from the shell's "xwayland: DISPLAY=" line

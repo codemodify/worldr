@@ -96,8 +96,12 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			srv = s
 			waylandName = srv.DisplayName
 			defer srv.Close()
+			outScale := ResolveOutputScale(opt.Scale)
+			srv.SetOutputScale(outScale)
 			fmt.Fprintf(stdout, "wayland compositor: WAYLAND_DISPLAY=%s  (example: WAYLAND_DISPLAY=%s foot)\n",
 				srv.DisplayName, srv.DisplayName)
+			fmt.Fprintf(stdout, "output scale: %.2f (preferred_scale=%d/120, wl_output.scale=%d). Nested/vk-display default 1.0; nest does not read host wl_output — pass --scale=1.5 on HiDPI.\n",
+				outScale, srv.PreferredScale120ths(), srv.IntegerOutputScale())
 			fmt.Fprintf(stdout, "socket: %s\n", srv.SocketPath)
 			if nestedPresent(p.name) {
 				fmt.Fprintf(stdout, "nested compositor: clients appear inside this window. Keep this WAYLAND_DISPLAY=%s for the host; use WAYLAND_DISPLAY=%s for foot/weston-simple-shm.\n",
@@ -425,7 +429,7 @@ func gpuLayers(actors []*engine.Actor, ch ChromeDraw, screenW int, on bool) []na
 	}
 	var out []native.GPULayer
 	for _, a := range actors {
-		if a == nil || a.GPUSlot <= 0 {
+		if a == nil || a.GPUSlot <= 0 || a.ScaledBuffer() {
 			continue
 		}
 		ox, show := ch.WS.OffsetFor(a.Workspace, screenW)
