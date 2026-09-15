@@ -14,14 +14,15 @@ func hintVKDisplay(err error) error {
 	var b strings.Builder
 	b.WriteString(msg)
 	b.WriteString("\n\nIntel Mesa (abox) hints for --backend=vk-display:")
-	b.WriteString("\n  • Run on a spare VT as DRM master: Ctrl+Alt+F2, login, unset WAYLAND_DISPLAY/DISPLAY.")
+	b.WriteString("\n  • Spare TTY as DRM master: Ctrl+Alt+F3, login, unset WAYLAND_DISPLAY/DISPLAY, then scripts/try-tty.sh.")
+	b.WriteString("\n  • First run is duration-capped (try-tty.sh uses --duration=15s). Get back to Plasma: Ctrl+Alt+F1 or F2.")
 	b.WriteString("\n  • Packages: vulkan-intel vulkan-icd-loader mesa libdrm (vulkaninfo --summary should show Intel + 1.4).")
 	b.WriteString("\n  • ICD: /usr/share/vulkan/icd.d/intel_icd.x86_64.json  (VK_ICD_FILENAMES if needed).")
 	b.WriteString("\n  • Nodes: /dev/dri/card0 and renderD128; groups video,render; logind uaccess on the active VT.")
-	b.WriteString("\n  • If another compositor owns the GPU: do not pass --take-over-display from the desktop; use tty2.")
+	b.WriteString("\n  • If another compositor owns the GPU: do not pass --take-over-display from the desktop; use tty3.")
 	b.WriteString("\n  • Fallback: --backend=drm (KMS dumb buffer) then --backend=wayland-client (nested, safe).")
-	if _, e := os.Stat("/dev/dri"); e != nil {
-		b.WriteString("\n  • This process sees no /dev/dri — vk-display cannot work here.")
+	if !HasDRM() {
+		b.WriteString("\n  • This process sees no /dev/dri/card* — vk-display cannot work here.")
 	}
 	return fmt.Errorf("%s", b.String())
 }
@@ -42,8 +43,8 @@ func hintWaylandClient(err error) error {
 	b.WriteString("\n  • We bind only compositor/shm/xdg_wm_base at min(our_max, advertised); logs are `wayland-client: bind …`.")
 	b.WriteString("\n  • We wait for a real xdg_surface.configure, double-buffer shm, and pong xdg_wm_base.ping.")
 	b.WriteString("\n  • If KWin/Plasma still closes the socket: usually `invalid arguments for wl_registry.bind` (bad version/name).")
-	b.WriteString("\n    Paste the wayland-client: global/bind lines. Workaround: spare TTY `--backend=vk-display --duration=15s`.")
-	b.WriteString("\n  • For a real display path use a spare TTY: --backend=vk-display --duration=15s")
+	b.WriteString("\n    Paste the wayland-client: global/bind lines. Workaround: spare TTY `scripts/try-tty.sh`.")
+	b.WriteString("\n  • For a real display path use a spare TTY: Ctrl+Alt+F3 then scripts/try-tty.sh")
 	if os.Getenv("WAYLAND_DISPLAY") == "" {
 		b.WriteString("\n  • WAYLAND_DISPLAY is empty in this environment.")
 	}
@@ -57,5 +58,5 @@ func hintDRM(err error) error {
 	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("%w\n\nDRM/KMS hint: need /dev/dri/cardN, drmSetMaster (spare VT), connected connector. Groups: video,render. Fallback: --backend=wayland-client", err)
+	return fmt.Errorf("%w\n\nDRM/KMS hint: need /dev/dri/cardN, drmSetMaster on a spare VT (Ctrl+Alt+F3, scripts/try-tty.sh), connected connector. Groups: video,render. Nested fallback: --backend=wayland-client", err)
 }

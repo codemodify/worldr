@@ -244,7 +244,7 @@ static int create_display_surface(worldr_vk *vk, uint32_t prefer_w, uint32_t pre
 	uint32_t ndisp = 0;
 	VkResult r = vkGetPhysicalDeviceDisplayPropertiesKHR(vk->phys, &ndisp, NULL);
 	if (r != VK_SUCCESS || ndisp == 0) {
-		seterr(err, errlen, "VK_KHR_display: no displays. Run on a spare VT as DRM master (see docs/RUN-ABOX.md)", r);
+		seterr(err, errlen, "VK_KHR_display: no displays. Spare VT as DRM master: Ctrl+Alt+F3 + scripts/try-tty.sh", r);
 		return -1;
 	}
 	VkDisplayPropertiesKHR *disps = (VkDisplayPropertiesKHR *)calloc(ndisp, sizeof(*disps));
@@ -254,16 +254,89 @@ static int create_display_surface(worldr_vk *vk, uint32_t prefer_w, uint32_t pre
 	}
 	vkGetPhysicalDeviceDisplayPropertiesKHR(vk->phys, &ndisp, disps);
 
+	uint32_t nplanes = 0;
+	vkGetPhysicalDeviceDisplayPlanePropertiesKHR(vk->phys, &nplanes, NULL);
+	VkDisplayPlanePropertiesKHR *planes = NULL;
+	if (nplanes) {
+		planes = (VkDisplayPlanePropertiesKHR *)calloc(nplanes, sizeof(*planes));
+		if (planes) {
+			vkGetPhysicalDeviceDisplayPlanePropertiesKHR(vk->phys, &nplanes, planes);
+		}
+	}
+
+	/* Prefer a display that still has a free plane (currentDisplay == NULL).
+	   On a spare VT this is the usual case; on a live Plasma session every
+	   plane is held — we still fall back to display 0 so --take-over-display works. */
 	VkDisplayKHR display = disps[0].display;
+	uint32_t plane = 0;
+	int picked_free = 0;
+	for (uint32_t i = 0; i < nplanes && planes; i++) {
+		if (planes[i].currentDisplay != VK_NULL_HANDLE) {
+			continue;
+		}
+		uint32_t nsup = 0;
+		vkGetDisplayPlaneSupportedDisplaysKHR(vk->phys, i, &nsup, NULL);
+		if (!nsup) {
+			continue;
+		}
+		VkDisplayKHR *sup = (VkDisplayKHR *)calloc(nsup, sizeof(*sup));
+		if (!sup) {
+			continue;
+		}
+		vkGetDisplayPlaneSupportedDisplaysKHR(vk->phys, i, &nsup, sup);
+		for (uint32_t s = 0; s < nsup && !picked_free; s++) {
+			for (uint32_t d = 0; d < ndisp; d++) {
+				if (sup[s] == disps[d].display) {
+					display = disps[d].display;
+					plane = i;
+					picked_free = 1;
+					break;
+				}
+			}
+		}
+		free(sup);
+		if (picked_free) {
+			break;
+		}
+	}
+	if (!picked_free) {
+		for (uint32_t i = 0; i < nplanes && planes; i++) {
+			uint32_t nsup = 0;
+			vkGetDisplayPlaneSupportedDisplaysKHR(vk->phys, i, &nsup, NULL);
+			if (!nsup) {
+				continue;
+			}
+			VkDisplayKHR *sup = (VkDisplayKHR *)calloc(nsup, sizeof(*sup));
+			if (!sup) {
+				continue;
+			}
+			vkGetDisplayPlaneSupportedDisplaysKHR(vk->phys, i, &nsup, sup);
+			int ok = 0;
+			for (uint32_t s = 0; s < nsup; s++) {
+				if (sup[s] == display) {
+					ok = 1;
+					break;
+				}
+			}
+			free(sup);
+			if (ok) {
+				plane = i;
+				break;
+			}
+		}
+	}
+
 	uint32_t nmodes = 0;
 	vkGetDisplayModePropertiesKHR(vk->phys, display, &nmodes, NULL);
 	if (nmodes == 0) {
+		free(planes);
 		free(disps);
 		seterr(err, errlen, "display has no modes", VK_SUCCESS);
 		return -1;
 	}
 	VkDisplayModePropertiesKHR *modes = (VkDisplayModePropertiesKHR *)calloc(nmodes, sizeof(*modes));
 	if (!modes) {
+		free(planes);
 		free(disps);
 		seterr(err, errlen, "oom", VK_SUCCESS);
 		return -1;
@@ -278,41 +351,6 @@ static int create_display_surface(worldr_vk *vk, uint32_t prefer_w, uint32_t pre
 				mode_i = i;
 				break;
 			}
-		}
-	}
-
-	uint32_t nplanes = 0;
-	vkGetPhysicalDeviceDisplayPlanePropertiesKHR(vk->phys, &nplanes, NULL);
-	VkDisplayPlanePropertiesKHR *planes = NULL;
-	if (nplanes) {
-		planes = (VkDisplayPlanePropertiesKHR *)calloc(nplanes, sizeof(*planes));
-		if (planes) {
-			vkGetPhysicalDeviceDisplayPlanePropertiesKHR(vk->phys, &nplanes, planes);
-		}
-	}
-	uint32_t plane = 0;
-	for (uint32_t i = 0; i < nplanes && planes; i++) {
-		uint32_t nsup = 0;
-		vkGetDisplayPlaneSupportedDisplaysKHR(vk->phys, i, &nsup, NULL);
-		if (!nsup) {
-			continue;
-		}
-		VkDisplayKHR *sup = (VkDisplayKHR *)calloc(nsup, sizeof(*sup));
-		if (!sup) {
-			continue;
-		}
-		vkGetDisplayPlaneSupportedDisplaysKHR(vk->phys, i, &nsup, sup);
-		int ok = 0;
-		for (uint32_t s = 0; s < nsup; s++) {
-			if (sup[s] == display) {
-				ok = 1;
-				break;
-			}
-		}
-		free(sup);
-		if (ok) {
-			plane = i;
-			break;
 		}
 	}
 
@@ -333,7 +371,7 @@ static int create_display_surface(worldr_vk *vk, uint32_t prefer_w, uint32_t pre
 	free(modes);
 	free(disps);
 	if (r != VK_SUCCESS) {
-		seterr(err, errlen, "vkCreateDisplayPlaneSurfaceKHR failed", r);
+		seterr(err, errlen, "vkCreateDisplayPlaneSurfaceKHR failed — not DRM master? Spare VT: Ctrl+Alt+F3 + scripts/try-tty.sh", r);
 		return -1;
 	}
 	return 0;
