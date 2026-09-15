@@ -96,52 +96,61 @@ func (w *Window) allocHostCursorSHM() error {
 
 // EnsureHostCursor shows a default arrow on the nest surface (cursor-shape
 // or shm set_cursor). Plasma hides the pointer until the client sets one.
+// Safe from the shell loop (takes mu). Must not be called from handle()
+// while readLoop already holds mu.
 func (w *Window) EnsureHostCursor() {
-	if w == nil || w.ptrID == 0 {
-		return
-	}
-	w.mu.Lock()
-	w.hostCursorHidden = false
-	ser := w.ptrSerial
-	dev := w.cursorDev
-	surf := w.cursorSurf
-	w.mu.Unlock()
-	w.sendHostCursor(ser, dev, surf, false)
+	w.SetHostCursorHidden(false)
 }
 
 // HideHostCursor is wl_pointer.set_cursor with a null surface (software
 // cursor inside the nest framebuffer is showing a client image).
 func (w *Window) HideHostCursor() {
+	w.SetHostCursorHidden(true)
+}
+
+// SetHostCursorHidden toggles the host pointer image. No-ops when the
+// visibility is already applied so the frame loop does not flood set_shape.
+func (w *Window) SetHostCursorHidden(hide bool) {
 	if w == nil || w.ptrID == 0 {
 		return
 	}
 	w.mu.Lock()
-	w.hostCursorHidden = true
-	ser := w.ptrSerial
+	if w.hostCursorSet && w.hostCursorHidden == hide {
+		w.mu.Unlock()
+		return
+	}
+	w.hostCursorHidden = hide
+	w.hostCursorSet = true
+	ser, dev, surf := w.ptrSerial, w.cursorDev, w.cursorSurf
 	w.mu.Unlock()
-	w.sendHostCursor(ser, 0, 0, true)
+	if ser == 0 {
+		return
+	}
+	w.sendHostCursor(ser, dev, surf, hide)
+}
+
+func encodeHostCursorShape(serial, shape uint32) []byte {
+	p := wayland.PutU32(nil, serial)
+	return wayland.PutU32(p, shape)
+}
+
+func encodeHostSetCursor(serial, surface uint32, hx, hy int32) []byte {
+	p := wayland.PutU32(nil, serial)
+	p = wayland.PutU32(p, surface)
+	p = wayland.PutI32(p, hx)
+	return wayland.PutI32(p, hy)
 }
 
 func (w *Window) sendHostCursor(serial, shapeDev, surf uint32, hide bool) {
 	if hide {
-		p := wayland.PutU32(nil, serial)
-		p = wayland.PutU32(p, 0)
-		p = wayland.PutI32(p, 0)
-		p = wayland.PutI32(p, 0)
-		_ = w.send(w.ptrID, 0, p, nil)
+		_ = w.send(w.ptrID, 0, encodeHostSetCursor(serial, 0, 0, 0), nil)
 		return
 	}
 	if shapeDev != 0 {
-		p := wayland.PutU32(nil, serial)
-		p = wayland.PutU32(p, hostCursorShapeDefault)
-		_ = w.send(shapeDev, 1, p, nil) // set_shape
+		_ = w.send(shapeDev, 1, encodeHostCursorShape(serial, hostCursorShapeDefault), nil)
 		return
 	}
 	if surf != 0 {
-		p := wayland.PutU32(nil, serial)
-		p = wayland.PutU32(p, surf)
-		p = wayland.PutI32(p, 1)
-		p = wayland.PutI32(p, 1)
-		_ = w.send(w.ptrID, 0, p, nil)
+		_ = w.send(w.ptrID, 0, encodeHostSetCursor(serial, surf, 1, 1), nil)
 	}
 }

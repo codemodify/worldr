@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.22-dev — nest input deadlock
+
+- P0: 0.9.21 froze the nested Plasma window (visible, ~0% CPU, no click/key). `readLoop` holds `Window.mu` across `handle()`; pointer enter called `EnsureHostCursor` which locked the same mutex. `TakeInput` then waited forever.
+- Enter now `set_shape(default)` / shm `set_cursor` **without** re-locking, using the enter serial. Frame loop only toggles host cursor when a client custom image/shape appears or clears.
+- Host arrow stays visible. Still no IME.
+
 ## 0.9.21-dev — nest cursor, Brave, fractional SSD
 
 - Nested Plasma: bind host `wp_cursor_shape_manager_v1` (v1) and `set_shape(default)` on pointer enter (shm arrow `set_cursor` fallback). Stop sending a null host cursor. Client `set_cursor` / cursor-shape still drive the software overlay; null `set_cursor` keeps the default arrow.
