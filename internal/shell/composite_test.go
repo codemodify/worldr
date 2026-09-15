@@ -242,3 +242,19 @@ func TestCompositeDesktopHidesOtherWorkspace(t *testing.T) {
 		t.Fatal("desktop 1 actor should be visible")
 	}
 }
+
+func TestCompositeDesktopSeams(t *testing.T) {
+	const w, h, stride = 80, 40, 320
+	clear := PackBGRA([4]float32{0, 0, 0, 1})
+	dst := make([]byte, stride*h)
+	CompositeDesktop(dst, stride, w, h, clear, nil, false, CursorBlit{},
+		Theater{Seams: []int{40}}, OverviewDraw{}, ChromeDraw{PanelH: 0}, false)
+	i := 8*stride + 40*4
+	if dst[i] == 0 && dst[i+1] == 0 && dst[i+2] == 0 {
+		t.Fatal("expected seam pixel, found clear")
+	}
+	left := 8*stride + 10*4
+	if dst[left] != 0 || dst[left+1] != 0 || dst[left+2] != 0 {
+		t.Fatal("non-seam should stay clear")
+	}
+}

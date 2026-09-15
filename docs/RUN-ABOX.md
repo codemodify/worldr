@@ -195,8 +195,11 @@ vk-display/drm stay in-compositor only.
 and `wp_fractional_scale` `preferred_scale` (120ths) and drives its own
 output. A 150% Plasma panel → `preferred_scale` 180, `wl_output.scale` 2.
 abox try saw **1.75** (`preferred_scale=210/120`, `wl_output.scale=2`).
-`--scale=1.5` (or `1.25` / `2`) still overrides. vk-display/drm stay **1.0**
-unless `--scale` is set. **0.9.21:** `xdg_surface.set_window_geometry` width/height
+`--scale=1.5` (or `1.25` / `2`) still overrides. **0.9.33:** `--outputs=2`
+tiles two logical `wl_output`s LTR on the same framebuffer; `--output-scales=1,1.5`
+sets per-output scale (and then host `--scale` is not applied). Drag across
+the seam sends `wl_surface.leave`/`enter`. vk-display/drm stay **1.0**
+unless `--scale` / `--output-scales` is set. **0.9.21:** `xdg_surface.set_window_geometry` width/height
 crop the actor so GTK4 CSD shadows are not wrapped in SSD.
 
 **KMS scanout (0.9.17 / 0.9.23 / 0.9.30):** on a spare TTY, `--backend=drm`, start `kitty` (or
@@ -439,7 +442,9 @@ without `/dev/dri`.
 | `--effects` | `high` | Window theater: `high` (wobbly+cube+expose) \| `low` (fade) \| `off` |
 | `--overview-demo` | false | Auto-enter expose after the first window maps |
 | `--workspaces` | `3` | Virtual desktops (clamped 2–4) |
-| `--scale` | `0` (auto) | Output scale `1` / `1.25` / `1.5` / `2`. Auto: nest follows host `wl_output` / `wp_fractional_scale`; vk-display/drm stay 1.0. Explicit `--scale` always wins. |
+| `--scale` | `0` (auto) | Output scale `1` / `1.25` / `1.5` / `2`. Auto: nest follows host `wl_output` / `wp_fractional_scale`; vk-display/drm stay 1.0. Explicit `--scale` always wins (unless `--output-scales`). |
+| `--outputs` | `1` | Logical `wl_output`s tiled left-to-right (1–4) on one framebuffer. |
+| `--output-scales` | empty | Per-output scales, comma list (`1,1.5`). Empty = `--scale` / host on every output. |
 | `--wayland-display` | first free `wayland-N` | Socket name |
 | `--ssd` | true | Server-side decoration chrome |
 | `--card` | first `/dev/dri/cardN` | DRM device |
@@ -512,11 +517,11 @@ Workaround — real display on **tty3**:
 - Brave / ark (**0.9.26** / **0.9.27**): do **not** send `wl_data_device.selection` on `get_data_device` (0.9.26). 0.9.27 nest `zwp_linux_dmabuf` feedback is LINEAR-only so ozone can mmap; `create_immed` keeps the client fd; first map sends `wl_surface.enter` + `preferred_buffer_scale` (compositor v6) and `xdg_toplevel.configure` with `activated`. `xdg_activation.activate` focuses + `wl_keyboard.enter`. `WAYLAND_DEBUG=1`: after `get_keyboard` expect `keymap` + `repeat_info`; after first commit expect `wl_surface.enter`. Remaining flag if GPU still dies: `brave --ozone-platform=wayland --disable-gpu`. GNOME Disks still deferred (GTK). No IME.
 - Fractional SSD (0.9.21): window geometry width/height crop CSD padding at non-integer scales (1.75 nest). Viewport dest + buffer-scale + preferred_scale still size the logical surface.
 - Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
-- Fractional scale (0.9.16 / 0.9.21): nest follows host `preferred_scale` / `wl_output.scale`. `--scale` overrides. vk-display/drm default 1.0. Viewport / `set_buffer_scale` / window geometry size the logical window. Single worldr output.
+- Fractional scale (0.9.16 / 0.9.21 / **0.9.33**): nest follows host `preferred_scale` / `wl_output.scale`. `--scale` overrides all outputs. `--outputs=N` advertises N tiled `wl_output`s; `--output-scales` sets each. Drag across a seam is `leave`/`enter` + new `preferred_scale`. vk-display/drm default 1.0. Viewport / `set_buffer_scale` / window geometry size the logical window. Still one physical FB (no real DRM connectors).
 - Window icons (0.9.18 / **0.9.25** / **0.9.28**): `xdg_toplevel_icon` shm buffers on SSD + panel win when set. Else XDG theme PNG, then SVG (`Icon=` / `AppID` / `set_name`) walking `index.theme` `Inherits=` then hicolor. librsvg when built with `librsvg2-dev` + `make` (`-tags=librsvg`); else the simple raster. No full Directory/Size graph. No IME (`zwp_text_input`).
 - Compiz theater (**0.9.24** / **0.9.32**): hardcoded scale/fade/rise map-in, minimize-to-panel unmap, focus glow, ease-in-out workspace slide. **0.9.32 high:** cheap wobbly on move (spring offset, no mesh), cube-style workspace foreshorten, expose polish (in-out ease, selected scale, title, ↑/↓). `--effects=off|low|high`. Frame loop reuses slices + expose grid (no per-frame actor-list / grid storm). No plugin graph.
 - Launcher reads XDG `.desktop` files and theme PNGs for `Icon=` (0.9.18). `Terminal=true` apps skipped; no ibus/fcitx IME
 - Panel is CPU-composited chrome (not a toolkit)
-- Workspaces (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. No Super+1..N, no drag-to-desktop, no per-output set. Overview is current-desktop only (shows `desk N/M`). Empty desktops stay addressable.
+- Workspaces (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. No Super+1..N, no drag-to-desktop, no per-output workspace set. Overview is current-desktop only (shows `desk N/M`). Empty desktops stay addressable.
 - vk-display/drm need DRM master on a spare VT (scripts/try-tty.sh). CI exercises refuse / no-DRM / render-node `--card` paths only; soak vk-display on abox after merge.
 - UI toolkit still deferred

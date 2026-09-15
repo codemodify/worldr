@@ -94,6 +94,7 @@ type object struct {
 	icon     *toplevelIcon
 	timeline *syncTimeline
 	syncSurf *syncSurface
+	outIndex int
 }
 
 type shmPool struct {
@@ -142,6 +143,8 @@ type surface struct {
 	cropped  bool // actor is the window-geometry box (CSD inset)
 	sync     *syncSurface
 	outEnter bool // wl_surface.enter already sent
+	outIdx   int
+	outObj   uint32
 }
 
 type xdgSurface struct {
@@ -427,7 +430,6 @@ func (c *Client) advertise(reg uint32) error {
 		{globalShm, "wl_shm", 1},
 		{globalXdgWm, "xdg_wm_base", 5},
 		{globalSeat, "wl_seat", 8},
-		{globalOutput, "wl_output", 4},
 		{globalDmabuf, "zwp_linux_dmabuf_v1", linuxDmabufAdvertiseVersion()},
 		{globalDeco, "zxdg_decoration_manager_v1", 1},
 		{globalViewporter, "wp_viewporter", 1},
@@ -439,6 +441,16 @@ func (c *Client) advertise(reg uint32) error {
 		{globalXwayland, "xwayland_shell_v1", 1},
 		{globalFractionalScale, "wp_fractional_scale_manager_v1", 1},
 		{globalToplevelIcon, "xdg_toplevel_icon_manager_v1", 1},
+	}
+	nOut := 1
+	if c.srv != nil {
+		nOut = len(c.srv.OutputList())
+		if nOut < 1 {
+			nOut = 1
+		}
+	}
+	for i := 0; i < nOut; i++ {
+		globals = append(globals, g{outputGlobal(i), "wl_output", 4})
 	}
 	if advertiseSyncobj() {
 		globals = append(globals, g{globalSyncobj, "wp_linux_drm_syncobj_manager_v1", 1})
@@ -475,6 +487,12 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 		return err
 	}
 	o := &object{id: id}
+	if idx, ok := outputIndexFromGlobal(name); ok {
+		o.kind = kindOutput
+		o.outIndex = idx
+		c.objs[id] = o
+		return c.sendOutputAt(id, idx)
+	}
 	switch name {
 	case globalCompositor:
 		o.kind = kindCompositor
@@ -496,10 +514,6 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 		_ = c.send(id, 0, wayland.PutU32(nil, 3), nil) // pointer|keyboard
 		_ = c.send(id, 1, wayland.PutString(nil, "worldr-seat0"), nil)
 		return nil
-	case globalOutput:
-		o.kind = kindOutput
-		c.objs[id] = o
-		return c.sendOutput(id)
 	case globalDmabuf:
 		o.kind = kindLinuxDmabuf
 		c.objs[id] = o
@@ -543,7 +557,26 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 }
 
 func (c *Client) sendOutput(id uint32) error {
-	w, h := c.srv.ScreenW, c.srv.ScreenH
+	return c.sendOutputAt(id, 0)
+}
+
+func (c *Client) outputAt(idx int) Output {
+	outs := []Output(nil)
+	if c.srv != nil {
+		outs = c.srv.OutputList()
+	}
+	if idx >= 0 && idx < len(outs) {
+		return outs[idx]
+	}
+	if len(outs) > 0 {
+		return outs[0]
+	}
+	return Output{Name: "WL-1", Desc: "worldr nested output", W: 1920, H: 1080, Scale120: PreferredScale120ths}
+}
+
+func (c *Client) sendOutputAt(id uint32, idx int) error {
+	o := c.outputAt(idx)
+	w, h := o.W, o.H
 	if w == 0 {
 		w = 1920
 	}
@@ -551,13 +584,17 @@ func (c *Client) sendOutput(id uint32) error {
 		h = 1080
 	}
 	// geometry: x y physical_w physical_h subpixel make model transform
-	p := wayland.PutI32(nil, 0)
-	p = wayland.PutI32(p, 0)
+	p := wayland.PutI32(nil, int32(o.X))
+	p = wayland.PutI32(p, int32(o.Y))
 	p = wayland.PutI32(p, int32(w*38/100)) // fake mm
 	p = wayland.PutI32(p, int32(h*38/100))
 	p = wayland.PutI32(p, 0)
+	model := o.Name
+	if model == "" {
+		model = "output-0"
+	}
 	p = wayland.PutString(p, "worldr")
-	p = wayland.PutString(p, "output-0")
+	p = wayland.PutString(p, model)
 	p = wayland.PutI32(p, 0)
 	if err := c.send(id, 0, p, nil); err != nil {
 		return err
@@ -570,15 +607,22 @@ func (c *Client) sendOutput(id uint32) error {
 	if err := c.send(id, 1, p, nil); err != nil {
 		return err
 	}
-	p = wayland.PutI32(nil, c.srv.IntegerOutputScale())
+	p = wayland.PutI32(nil, o.IntegerScale())
 	if err := c.send(id, 3, p, nil); err != nil { // scale
 		return err
 	}
-	// v4 name + description must arrive before the first done (Chromium).
-	if err := c.send(id, 4, wayland.PutString(nil, "WL-1"), nil); err != nil {
+	name := o.Name
+	if name == "" {
+		name = "WL-1"
+	}
+	desc := o.Desc
+	if desc == "" {
+		desc = "worldr nested output"
+	}
+	if err := c.send(id, 4, wayland.PutString(nil, name), nil); err != nil {
 		return err
 	}
-	if err := c.send(id, 5, wayland.PutString(nil, "worldr nested output"), nil); err != nil {
+	if err := c.send(id, 5, wayland.PutString(nil, desc), nil); err != nil {
 		return err
 	}
 	return c.send(id, 2, nil, nil) // done
@@ -588,24 +632,48 @@ func (c *Client) sendScaleUpdate() {
 	if c == nil {
 		return
 	}
-	scale := c.srv.IntegerOutputScale()
-	pref := c.srv.PreferredScale120ths()
 	for _, o := range c.objs {
 		if o == nil {
 			continue
 		}
 		switch o.kind {
 		case kindOutput:
-			_ = c.send(o.id, 3, wayland.PutI32(nil, scale), nil)
+			out := c.outputAt(o.outIndex)
+			_ = c.send(o.id, 3, wayland.PutI32(nil, out.IntegerScale()), nil)
 			_ = c.send(o.id, 2, nil, nil)
 		case kindFracScale:
-			_ = c.send(o.id, 0, wayland.PutU32(nil, pref), nil)
+			_ = c.send(o.id, 0, wayland.PutU32(nil, c.preferred120ForSurf(o.surf)), nil)
 		case kindSurface:
 			if o.surf != nil && o.surf.outEnter {
 				c.sendPreferredBufferScale(o.surf)
 			}
 		}
 	}
+}
+
+func (c *Client) sendOutputLayout() {
+	if c == nil {
+		return
+	}
+	for _, o := range c.objs {
+		if o != nil && o.kind == kindOutput {
+			_ = c.sendOutputAt(o.id, o.outIndex)
+		}
+	}
+}
+
+func (c *Client) preferred120ForSurf(s *surface) uint32 {
+	if c == nil || c.srv == nil {
+		return PreferredScale120ths
+	}
+	if s != nil && s.actor != nil {
+		outs := c.srv.OutputList()
+		i := HitOutput(outs, s.actor.X+s.actor.Width/2, s.actor.Y+s.actor.Height/2)
+		if i >= 0 && i < len(outs) && outs[i].Scale120 != 0 {
+			return outs[i].Scale120
+		}
+	}
+	return c.srv.PreferredScale120ths()
 }
 
 func (c *Client) reqCompositor(_ *object, op uint16, cur *wayland.Cursor) error {
@@ -832,10 +900,7 @@ func (c *Client) mapSurface(s *surface) {
 	if s.xdg != nil && s.xdg.hasGeo {
 		geo = GeoRect{X: int(s.xdg.geoX), Y: int(s.xdg.geoY), W: int(s.xdg.geoW), H: int(s.xdg.geoH), Set: true}
 	}
-	scale120 := uint32(0)
-	if c.srv != nil {
-		scale120 = c.srv.PreferredScale120ths()
-	}
+	scale120 := c.preferred120ForSurf(s)
 	var srcX, srcY, srcW, srcH int
 	w, h, srcX, srcY, srcW, srcH = ApplyWindowGeometry(bufW, bufH, s.destW, s.destH, s.bufScale, scale120, geo)
 	s.cropped = geo.Set && geo.W > 0 && geo.H > 0
@@ -866,7 +931,7 @@ func (c *Client) mapSurface(s *surface) {
 			c.srv.Scene.Add(s.actor)
 			c.srv.Scene.Raise(s.actor)
 		} else {
-			c.srv.Scene.PlaceNew(s.actor, c.srv.ScreenW, c.srv.ScreenH, decorations.Border, decorations.TitleH)
+			c.placeOnOutput(s.actor)
 			c.srv.Scene.Add(s.actor)
 		}
 	} else if child {
@@ -1060,34 +1125,86 @@ func (c *Client) sendDecoSSD() {
 }
 
 func (c *Client) outputID() uint32 {
+	return c.outputIDAt(0)
+}
+
+func (c *Client) outputIDAt(idx int) uint32 {
+	var fallback uint32
 	for _, o := range c.objs {
-		if o != nil && o.kind == kindOutput {
+		if o == nil || o.kind != kindOutput {
+			continue
+		}
+		if o.outIndex == idx {
 			return o.id
 		}
+		if fallback == 0 {
+			fallback = o.id
+		}
 	}
-	return 0
+	return fallback
 }
 
 func (c *Client) sendPreferredBufferScale(s *surface) {
 	if c == nil || s == nil || c.compVer < 6 {
 		return
 	}
-	scale := int32(1)
-	if c.srv != nil {
-		scale = c.srv.IntegerOutputScale()
-	}
+	scale := IntegerScaleFrom120ths(c.preferred120ForSurf(s))
 	_ = c.send(s.id, 2, wayland.PutI32(nil, scale), nil) // preferred_buffer_scale
 }
 
 func (c *Client) notifySurfaceOutput(s *surface) {
-	if c == nil || s == nil || s.outEnter {
+	c.syncSurfaceOutput(s)
+}
+
+func (c *Client) syncAllSurfaceOutputs() {
+	if c == nil {
 		return
 	}
-	if oid := c.outputID(); oid != 0 {
+	for _, o := range c.objs {
+		if o != nil && o.surf != nil && o.surf.actor != nil {
+			c.syncSurfaceOutput(o.surf)
+		}
+	}
+}
+
+func (c *Client) syncSurfaceOutput(s *surface) {
+	if c == nil || s == nil {
+		return
+	}
+	idx := 0
+	if s.actor != nil && c.srv != nil {
+		idx = HitOutput(c.srv.OutputList(), s.actor.X+s.actor.Width/2, s.actor.Y+s.actor.Height/2)
+	}
+	oid := c.outputIDAt(idx)
+	if s.outEnter && s.outObj == oid && oid != 0 {
+		return
+	}
+	if s.outEnter && s.outObj != 0 && s.outObj != oid {
+		_ = c.send(s.id, 1, wayland.PutU32(nil, s.outObj), nil) // wl_surface.leave
+	}
+	if oid != 0 {
 		_ = c.send(s.id, 0, wayland.PutU32(nil, oid), nil) // wl_surface.enter
 		s.outEnter = true
+		s.outIdx = idx
+		s.outObj = oid
+		if s.fracID != 0 {
+			_ = c.send(s.fracID, 0, wayland.PutU32(nil, c.preferred120ForSurf(s)), nil)
+		}
 	}
 	c.sendPreferredBufferScale(s)
+}
+
+func (c *Client) placeOnOutput(a *engine.Actor) {
+	if c == nil || a == nil || c.srv == nil || c.srv.Scene == nil {
+		return
+	}
+	outs := c.srv.OutputList()
+	i := HitOutput(outs, c.srv.cursorX, c.srv.cursorY)
+	o := Output{W: c.srv.ScreenW, H: c.srv.ScreenH}
+	if i >= 0 && i < len(outs) {
+		o = outs[i]
+	}
+	c.srv.Scene.PlaceNewIn(a, o.X, o.Y, o.W, o.H, decorations.Border, decorations.TitleH)
 }
 
 func (c *Client) focusMappedToplevel(s *surface) {

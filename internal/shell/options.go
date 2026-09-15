@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/codemodify/worldr/internal/compositor"
 	"github.com/codemodify/worldr/internal/engine"
 )
 
@@ -42,6 +43,8 @@ type Options struct {
 	OverviewDemo     bool
 	Workspaces       int
 	Scale            float64 // 0 = auto (1.0)
+	Outputs          int
+	OutputScales     []float64
 }
 
 // ErrTakeOverRequired is returned when a real display backend would steal
@@ -69,6 +72,8 @@ func ParseFlags(args []string) (Options, error) {
 	fs.BoolVar(&o.OverviewDemo, "overview-demo", false, "auto-enter expose after the first window maps (smoke)")
 	fs.IntVar(&o.Workspaces, "workspaces", engine.WorkspaceDefault, "virtual desktops (2–4, default 3)")
 	fs.Float64Var(&o.Scale, "scale", 0, "output scale 1 / 1.25 / 1.5 / 2 (0 = auto: nest follows host; else 1.0)")
+	fs.IntVar(&o.Outputs, "outputs", 1, "logical outputs tiled left-to-right (1–4)")
+	outScales := fs.String("output-scales", "", "per-output scales, comma list (e.g. 1,1.5); empty = --scale / host")
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}
@@ -93,6 +98,17 @@ func ParseFlags(args []string) (Options, error) {
 	if o.Scale < 0 {
 		return o, fmt.Errorf("--scale must be ≥ 0 (0 = auto: nest host or 1.0)")
 	}
+	if o.Outputs < 1 {
+		o.Outputs = 1
+	}
+	if o.Outputs > compositor.MaxOutputs {
+		o.Outputs = compositor.MaxOutputs
+	}
+	scales, err := compositor.ParseOutputScales(*outScales)
+	if err != nil {
+		return o, err
+	}
+	o.OutputScales = scales
 	return o, nil
 }
 

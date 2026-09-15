@@ -123,8 +123,16 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				hostScale = p.wl.HostScale()
 			}
 			outScale := ResolveOutputScale(opt.Scale, hostScale)
-			srv.SetOutputScale(outScale)
-			if p.wl != nil && opt.Scale <= 0 {
+			scales := opt.OutputScales
+			if len(scales) == 0 {
+				scales = []float64{outScale}
+			}
+			outs := compositor.LayoutOutputs(int(w), deskH, opt.Outputs, scales)
+			srv.SetOutputs(outs)
+			if len(opt.OutputScales) == 0 {
+				srv.SetOutputScale(outScale)
+			}
+			if p.wl != nil && opt.Scale <= 0 && len(opt.OutputScales) == 0 {
 				p.wl.OnHostScale(func(sc float64) {
 					srv.SetOutputScale(sc)
 				})
@@ -132,13 +140,23 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			fmt.Fprintf(stdout, "wayland compositor: WAYLAND_DISPLAY=%s  (example: WAYLAND_DISPLAY=%s foot)\n",
 				srv.DisplayName, srv.DisplayName)
 			src := "auto 1.0"
-			if opt.Scale > 0 {
+			if len(opt.OutputScales) > 0 {
+				src = "--output-scales"
+			} else if opt.Scale > 0 {
 				src = "--scale override"
 			} else if p.wl != nil && hostScale > 0 {
 				src = "nest host"
 			}
-			fmt.Fprintf(stdout, "output scale: %.2f (%s; preferred_scale=%d/120, wl_output.scale=%d). vk-display/drm stay 1.0 unless --scale.\n",
+			fmt.Fprintf(stdout, "output scale: %.2f (%s; preferred_scale=%d/120, wl_output.scale=%d). vk-display/drm stay 1.0 unless --scale/--output-scales.\n",
 				outScale, src, srv.PreferredScale120ths(), srv.IntegerOutputScale())
+			if len(outs) > 1 {
+				fmt.Fprintf(stdout, "outputs: %d tiled LTR", len(outs))
+				for _, o := range outs {
+					fmt.Fprintf(stdout, " %s %dx%d@%d,%d scale %.2f",
+						o.Name, o.W, o.H, o.X, o.Y, compositor.ScaleFrom120ths(o.Scale120))
+				}
+				fmt.Fprintln(stdout)
+			}
 			fmt.Fprintf(stdout, "socket: %s\n", srv.SocketPath)
 			if nestedPresent(p.name) {
 				fmt.Fprintf(stdout, "nested compositor: clients appear inside this window. Keep this WAYLAND_DISPLAY=%s for the host; use WAYLAND_DISPLAY=%s for foot/weston-simple-shm.\n",
@@ -237,7 +255,11 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			deskH = 1
 		}
 		if srv != nil {
-			srv.ScreenW, srv.ScreenH = int(w), deskH
+			nw, nh := int(w), deskH
+			if srv.ScreenW != nw || srv.ScreenH != nh {
+				srv.ScreenW, srv.ScreenH = nw, nh
+				srv.RelayoutOutputs()
+			}
 		}
 		need := int(w) * int(h) * 4
 		if len(fb) != need {
@@ -375,6 +397,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		}
 		if srv != nil {
 			srv.SetPointerPos(ptr.X, ptr.Y)
+			srv.SyncSurfaceOutputs()
 		}
 
 		needFB := scene.HasActors() || srv != nil || nestedPresent(p.name) || TakesDisplay(Backend(p.name))
@@ -513,8 +536,13 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			}
 			p.occupied = ch.Occupied
 			p.waitActorsSync(actors)
+			if srv != nil {
+				p.seamsBuf = compositor.OutputSeamsInto(p.seamsBuf, srv.OutputList())
+			} else {
+				p.seamsBuf = p.seamsBuf[:0]
+			}
 			CompositeDesktop(fb, stride, int(w), int(h), pixel, actors, opt.SSD, cur,
-				Theater{Now: now, Tier: opt.Effects, PanelH: PanelH, Grid: &p.cellsBuf},
+				Theater{Now: now, Tier: opt.Effects, PanelH: PanelH, Grid: &p.cellsBuf, Seams: p.seamsBuf},
 				OverviewDraw{T: ov.Progress(now), Select: ov.Select},
 				ch, gpuOverlay)
 			layers := gpuLayersInto(p.layersBuf, actors, ch, int(w), gpuOverlay)
@@ -555,6 +583,7 @@ type presenter struct {
 	occupied    []bool
 	layersBuf   []native.GPULayer
 	cellsBuf    []engine.GridCell
+	seamsBuf    []int
 	consume     map[uint32]bool
 }
 

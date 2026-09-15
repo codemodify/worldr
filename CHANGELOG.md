@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.33-dev — multi-monitor / per-output scale
+
+- `--outputs=N` (1–4) tiles N logical `wl_output`s left-to-right across the present framebuffer. Each has geometry, `name` (`WL-1`…), `scale`, and `wp_fractional_scale` from that output.
+- `--output-scales=1,1.5` sets per-output scale. Empty: `--scale` / nest host applies to every output. Host scale updates all unless `--scale` or `--output-scales` is set.
+- New windows map on the output under the cursor (`PlaceNewIn`). Dragging a window across a seam sends `wl_surface.leave` / `enter` and a new `preferred_scale`.
+- Desktop draws a thin divider on interior seams. One physical FB still (no real DRM connectors). No IME.
+
 ## 0.9.32-dev — richer Compiz theater (wobbly / cube / expose)
 
 - `--effects=high`: moving a window adds a decaying spring offset (cheap wobbly, no mesh). Workspace slide foreshortens like a cube face (scale + hinge pull). `--effects=low` stays fade-only; `off` is instant.

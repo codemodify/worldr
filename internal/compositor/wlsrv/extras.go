@@ -181,7 +181,7 @@ func (c *Client) reqFracScaleMgr(_ *object, op uint16, cur *wayland.Cursor) erro
 		if surf != nil {
 			surf.fracID = id
 		}
-		return c.send(id, 0, wayland.PutU32(nil, c.srv.PreferredScale120ths()), nil)
+		return c.send(id, 0, wayland.PutU32(nil, c.preferred120ForSurf(surf)), nil)
 	}
 	return nil
 }
