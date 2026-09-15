@@ -27,10 +27,25 @@ type Theater struct {
 // and software cursor into a BGRA framebuffer. This is the present path
 // used by vk-display, drm, headless (when compositing), and nested
 // wayland-client.
-func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engine.Actor, ssd bool, cursor CursorBlit, fx Theater) {
+func CompositeDesktop(dst []byte, stride, w, h int, clear uint32, actors []*engine.Actor, ssd bool, cursor CursorBlit, fx Theater, ov OverviewDraw) {
 	engine.FillBGRA(dst, stride, w, h, clear)
-	for _, a := range actors {
-		drawActor(dst, stride, w, h, a, ssd, fx)
+	if ov.T > 0 {
+		engine.FillRectAlpha(dst, stride, w, h, 0, 0, w, h, 0xff000000, 0.38*ov.T)
+		cells := engine.LayoutGrid(len(actors), w, h)
+		for i, a := range actors {
+			if a == nil || i >= len(cells) {
+				continue
+			}
+			home := engine.HomeFrame(a, ssd, decorations.Border, decorations.TitleH)
+			fit := engine.FitInCell(home.W, home.H, cells[i])
+			dest := engine.LerpCell(home, fit, ov.T)
+			sel := i == ov.Select
+			drawActorIn(dst, stride, w, h, a, dest, ssd, sel, 1)
+		}
+	} else {
+		for _, a := range actors {
+			drawActor(dst, stride, w, h, a, ssd, fx)
+		}
 	}
 	if cursor.Visible {
 		decorations.OverlayCursor(dst, stride, w, h, cursor.X, cursor.Y, cursor.HX, cursor.HY,
@@ -83,7 +98,7 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 		}
 		frame, title := decorations.FrameColors(a.Focused)
 		engine.FillRectAlpha(dst, stride, w, h, sx, sy, sw, th, title, v.Alpha)
-		engine.FillRectAlpha(dst, stride, w, h, sx, sy, sw, scaleI(2, v.Scale), decorations.TitleStripe(), v.Alpha)
+		engine.FillRectAlpha(dst, stride, w, h, sx, sy, sw, scaleI(decorations.AccentH, v.Scale), decorations.TitleStripe(), v.Alpha)
 		engine.FillRectAlpha(dst, stride, w, h, sx, sy, bd, sh, frame, v.Alpha)
 		engine.FillRectAlpha(dst, stride, w, h, sx+sw-bd, sy, bd, sh, frame, v.Alpha)
 		engine.FillRectAlpha(dst, stride, w, h, sx, sy+sh-bd, sw, bd, frame, v.Alpha)
@@ -92,6 +107,53 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 		return
 	}
 	engine.BlitBGRAScaledAlpha(dst, stride, w, h, sx, sy, sw, sh, a.Pixels, a.Stride, a.Width, a.Height, v.Alpha)
+}
+
+// OverviewDraw is the expose pose (T=0 is the normal desktop).
+type OverviewDraw struct {
+	T      float64
+	Select int
+}
+
+func drawActorIn(dst []byte, stride, w, h int, a *engine.Actor, dest engine.GridCell, ssd, selected bool, alpha float64) {
+	if a == nil || dest.W <= 0 || dest.H <= 0 {
+		return
+	}
+	if selected {
+		pad := 6
+		engine.FillRectAlpha(dst, stride, w, h, dest.X-pad, dest.Y-pad, dest.W+2*pad, dest.H+2*pad, 0xffff6ad5, 0.22*alpha)
+	}
+	if ssd {
+		th := dest.H * decorations.TitleH / max1(a.Height+decorations.TitleH+decorations.Border)
+		bd := dest.W * decorations.Border / max1(a.Width+2*decorations.Border)
+		if th < 1 {
+			th = 1
+		}
+		if bd < 1 {
+			bd = 1
+		}
+		ah := dest.H * decorations.AccentH / max1(a.Height+decorations.TitleH+decorations.Border)
+		if ah < 2 {
+			ah = 2
+		}
+		frame, title := decorations.FrameColors(selected || a.Focused)
+		engine.FillRectAlpha(dst, stride, w, h, dest.X, dest.Y, dest.W, th, title, alpha)
+		engine.FillRectAlpha(dst, stride, w, h, dest.X, dest.Y, dest.W, ah, decorations.TitleStripe(), alpha)
+		engine.FillRectAlpha(dst, stride, w, h, dest.X, dest.Y, bd, dest.H, frame, alpha)
+		engine.FillRectAlpha(dst, stride, w, h, dest.X+dest.W-bd, dest.Y, bd, dest.H, frame, alpha)
+		engine.FillRectAlpha(dst, stride, w, h, dest.X, dest.Y+dest.H-bd, dest.W, bd, frame, alpha)
+		cw, ch := dest.W-2*bd, dest.H-th-bd
+		engine.BlitBGRAScaledAlpha(dst, stride, w, h, dest.X+bd, dest.Y+th, cw, ch, a.Pixels, a.Stride, a.Width, a.Height, alpha)
+		return
+	}
+	engine.BlitBGRAScaledAlpha(dst, stride, w, h, dest.X, dest.Y, dest.W, dest.H, a.Pixels, a.Stride, a.Width, a.Height, alpha)
+}
+
+func max1(n int) int {
+	if n < 1 {
+		return 1
+	}
+	return n
 }
 
 func scaleI(n int, s float64) int {

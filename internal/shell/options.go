@@ -39,6 +39,7 @@ type Options struct {
 	ClientHeight     int
 	XWayland         bool
 	Effects          engine.Tier
+	OverviewDemo     bool
 }
 
 // ErrTakeOverRequired is returned when a real display backend would steal
@@ -63,6 +64,7 @@ func ParseFlags(args []string) (Options, error) {
 	fs.IntVar(&o.ClientHeight, "height", 720, "wayland-client window height")
 	fs.BoolVar(&o.XWayland, "xwayland", false, "launch rootless Xwayland against the worldr socket (xterm/xeyes)")
 	effects := fs.String("effects", "high", "window theater: high|low|off (scale+fade map/unmap; off disables)")
+	fs.BoolVar(&o.OverviewDemo, "overview-demo", false, "auto-enter expose after the first window maps (smoke)")
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}

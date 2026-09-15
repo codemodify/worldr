@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/codemodify/worldr/internal/decorations"
 	"github.com/codemodify/worldr/internal/engine"
 	"github.com/codemodify/worldr/internal/wayland"
 )
@@ -664,7 +665,7 @@ func (c *Client) mapSurface(s *surface) {
 	}
 	if s.actor == nil {
 		s.actor = &engine.Actor{}
-		c.srv.Scene.PlaceNew(s.actor, c.srv.ScreenW, c.srv.ScreenH, 6, 26)
+		c.srv.Scene.PlaceNew(s.actor, c.srv.ScreenW, c.srv.ScreenH, decorations.Border, decorations.TitleH)
 		c.srv.Scene.Add(s.actor)
 	}
 	s.actor.Width = w

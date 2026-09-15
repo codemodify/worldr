@@ -63,6 +63,13 @@ func TestParseEffectsFlag(t *testing.T) {
 	}
 }
 
+func TestParseOverviewDemoFlag(t *testing.T) {
+	o, err := ParseFlags([]string{"-overview-demo"})
+	if err != nil || !o.OverviewDemo {
+		t.Fatalf("%+v %v", o, err)
+	}
+}
+
 func TestParseXWaylandFlag(t *testing.T) {
 	o, err := ParseFlags([]string{"-xwayland", "-backend=nested"})
 	if err != nil {
