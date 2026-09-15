@@ -22,7 +22,7 @@ func wireHostClipboard(win *wlclient.Window, srv *wlsrv.Server, stdout io.Writer
 		win.OfferHostText(primary, mimes)
 	})
 	if win.HostClipBound() {
-		msg := "clipboard: nest host bridge on (Plasma ↔ worldr text/plain + image/png)"
+		msg := "clipboard: nest host bridge on (Plasma ↔ worldr text/plain + image/png|jpeg|webp|bmp)"
 		if win.HostPrimaryBound() {
 			msg += "; primary too"
 		}

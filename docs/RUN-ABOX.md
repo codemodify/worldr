@@ -177,12 +177,12 @@ is the same bind when KWin does not steal Super.
 `xdg_popup` (no SSD title bar) stacked above the window. Clicks on the menu
 should reach the popup surface.
 
-**Clipboard (0.9.19):** in foot, select text, Ctrl+Shift+C, then Ctrl+Shift+V
+**Clipboard (0.9.19 / 0.9.25):** in foot, select text, Ctrl+Shift+C, then Ctrl+Shift+V
 (or another worldr client). Middle-click pastes the primary selection.
-**Images:** copy a PNG in a worldr client that offers `image/png` (or
-`image/bmp`) and paste in another. Nested under Plasma: `text/plain` still
-works; `image/png` is forwarded both ways when the host advertises it
-(screenshot / Kate image paste). vk-display/drm stay in-compositor only.
+**Images:** copy `image/png`, `image/jpeg`, `image/webp`, or `image/bmp` between
+worldr clients (exact MIME). Nested under Plasma: `text/plain` still works;
+those image types are forwarded both ways when the host advertises them.
+vk-display/drm stay in-compositor only.
 
 **Scale (0.9.16 / 0.9.21):** nested under Plasma, worldr reads host `wl_output.scale`
 and `wp_fractional_scale` `preferred_scale` (120ths) and drives its own
@@ -206,7 +206,8 @@ fallback if `AddFB2` rejects the modifier. Nested is unchanged.
 **Icons (0.9.18):** `xdg_toplevel_icon` buffers still win when the client sets
 one. Otherwise worldr looks up `.desktop` `Icon=` / `AppID` in `$XDG_ICON_THEME`
 then **hicolor** (`…/icons/<theme>/<size>/apps/<name>.png`, then `pixmaps/`).
-Launcher rows show those PNGs. Missing → default glyph. SVG is not drawn.
+Launcher rows show those PNGs, or a rasterized SVG when no PNG exists.
+Missing → default glyph. Complex SVG (filters/text) stays the default glyph.
 `$XDG_ICON_THEME=breeze` (Plasma) or `Adwaita` (GNOME) if unset. Foot often
 has `utilities-terminal` / `foot` in hicolor on Arch.
 
@@ -490,7 +491,7 @@ Workaround — real display on **tty3**:
 
 - XWayland (0.9.11): `--xwayland` rootless + tiny XWM + `xwayland_shell_v1`. EWMH basics (`_NET_SUPPORTED`, active window, titles/class, delete/take-focus). Not a full ICCCM WM (no reparenting/pager). Overlay menus skip SSD.
 - `xdg_popup` + `wl_subsurface` stacking (0.9.8): menus/tooltips/dropdowns. Positioner uses size + anchor + offset (no constraint/flip). Foot right-click menu is the abox check.
-- Clipboard (0.9.19): `text/plain` + `image/png` (`image/bmp` if offered) between worldr clients. Nested: Plasma ↔ worldr for text and png when the host advertises them. Primary bridged if advertised. No JPEG/WebP. vk-display/drm have no host to bind.
+- Clipboard (0.9.19 / **0.9.25**): `text/plain` + `image/png` / `image/jpeg` / `image/webp` / `image/bmp` between worldr clients. Nested: Plasma ↔ worldr for text and those images when the host advertises them. Primary bridged if advertised. vk-display/drm have no host to bind.
 - dmabuf (0.9.17+ / **0.9.23**): GPU sample on vk-display; **KMS primary scanout** for one fullscreen ARGB/XRGB on `--backend=drm`; **overlay** for one windowed dmabuf when the card has an overlay plane; **cursor plane** for a small ARGB cursor. **0.9.20 / 0.9.23:** `wp_linux_drm_syncobj_manager_v1` when `DRM_CAP_SYNCOBJ_TIMELINE` (log `linux-drm-syncobj: … advertised`). Acquire waits on a Vulkan timeline (`vkWaitSemaphores`) before blit/sample/scanout; DRM ioctl is the fallback. Release is signaled after present. Miss → implicit sync. vk-display extra planes are eligible but usually compose (`VK_KHR_display` holds master). Nested host still CPU-composites. Soak: spare TTY, `kitty` — look for the syncobj line plus `kms scanout` / `kms overlay` / blit.
 - SSD is thicker accent + title gradient + focused glow (still not a toolkit)
 - Software cursor (0.9.21 / **0.9.22** / **0.9.23**): nest binds host `wp_cursor_shape_manager_v1` and `set_shape(default)` on enter (shm arrow fallback) using the enter serial, **without taking `Window.mu` again** (0.9.21 deadlocked `TakeInput` vs `readLoop` — frozen nest, no click/key). Client `set_cursor` / cursor-shape still draw the software overlay; null `set_cursor` keeps the default arrow. `--backend=drm` tries a hardware cursor plane when the image is ≤256×256; miss stays software. vk-display / nested stay software (no DRM master for extra planes).
@@ -499,7 +500,7 @@ Workaround — real display on **tty3**:
 - Fractional SSD (0.9.21): window geometry width/height crop CSD padding at non-integer scales (1.75 nest). Viewport dest + buffer-scale + preferred_scale still size the logical surface.
 - Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
 - Fractional scale (0.9.16 / 0.9.21): nest follows host `preferred_scale` / `wl_output.scale`. `--scale` overrides. vk-display/drm default 1.0. Viewport / `set_buffer_scale` / window geometry size the logical window. Single worldr output.
-- Window icons (0.9.18): `xdg_toplevel_icon` shm buffers on SSD + panel win when set. Else XDG theme PNG (`Icon=` / `AppID` / `set_name`) in current theme + hicolor. No SVG raster, no full `index.theme` inheritance. No IME (`zwp_text_input`).
+- Window icons (0.9.18 / **0.9.25**): `xdg_toplevel_icon` shm buffers on SSD + panel win when set. Else XDG theme PNG, then a simple SVG raster (`Icon=` / `AppID` / `set_name`) in current theme + hicolor (`scalable/` included). No full `index.theme` inheritance. No IME (`zwp_text_input`).
 - Compiz theater (**0.9.24**): hardcoded scale/fade/rise map-in, minimize-to-panel unmap, focus glow, ease-in-out workspace slide. No wobbly/cube. `--effects=off|low|high`. Frame loop reuses slices (no per-frame actor-list storm).
 - Launcher reads XDG `.desktop` files and theme PNGs for `Icon=` (0.9.18). `Terminal=true` apps skipped; no ibus/fcitx IME
 - Panel is CPU-composited chrome (not a toolkit)

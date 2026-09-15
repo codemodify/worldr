@@ -43,11 +43,23 @@ func TestPickImageMime(t *testing.T) {
 	if PickImageMime([]string{"image/bmp"}) != MimeBMP {
 		t.Fatal("bmp")
 	}
+	if PickImageMime([]string{"image/jpeg", "image/webp"}) != MimeJPEG {
+		t.Fatal("jpeg before webp")
+	}
+	if PickImageMime([]string{"image/jpg"}) != "image/jpg" {
+		t.Fatal("jpg alias")
+	}
+	if PickImageMime([]string{"image/webp"}) != MimeWebP {
+		t.Fatal("webp")
+	}
 	if PickImageMime([]string{"text/plain"}) != "" {
 		t.Fatal("text only")
 	}
-	if !IsImage("image/png") || !IsImage("image/bmp") || IsImage("text/plain") {
+	if !IsImage("image/png") || !IsImage("image/bmp") || !IsImage("image/jpeg") || !IsImage("image/webp") || IsImage("text/plain") {
 		t.Fatal("IsImage")
+	}
+	if CanonicalImage("image/jpg") != MimeJPEG || CanonicalImage("image/x-bmp") != MimeBMP {
+		t.Fatal("canonical")
 	}
 }
 
@@ -74,6 +86,10 @@ func TestHostOfferMimes(t *testing.T) {
 	got = HostOfferMimes([]string{"image/png"})
 	if len(got) != 1 || got[0] != MimePNG {
 		t.Fatalf("png only %v", got)
+	}
+	got = HostOfferMimes([]string{"image/jpeg", "image/webp"})
+	if len(got) != 2 || got[0] != MimeJPEG || got[1] != MimeWebP {
+		t.Fatalf("jpeg+webp %v", got)
 	}
 	if CapFor(MimePNG) != MaxImageBytes || CapFor(MimeTextPlain) != MaxTextBytes {
 		t.Fatal("caps")

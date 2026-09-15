@@ -1,8 +1,9 @@
-// Package icontheme resolves freedesktop icon names to PNG files.
+// Package icontheme resolves freedesktop icon names to PNG or SVG files.
 //
 // Search is png-first under the current theme and hicolor
-// ($XDG_DATA_HOME / $XDG_DATA_DIRS icons/). SVG is not rasterized
-// (no toolkit). Absolute Icon= paths are used as-is when they exist.
+// ($XDG_DATA_HOME / $XDG_DATA_DIRS icons/). Missing PNG falls back to
+// a simple SVG raster (rect/circle/path). Absolute Icon= paths are used
+// as-is when they exist.
 package icontheme
 
 import (
@@ -93,6 +94,9 @@ func Resolve(name string, s Search) (string, bool) {
 			if p := name + ".png"; fileOK(p) {
 				return p, true
 			}
+			if p := name + ".svg"; fileOK(p) {
+				return p, true
+			}
 		}
 		return "", false
 	}
@@ -138,10 +142,40 @@ func Resolve(name string, s Search) (string, bool) {
 	if best != "" {
 		return best, true
 	}
+	if p, ok := resolveSVG(name, s, themes, contexts); ok {
+		return p, true
+	}
 	for _, dir := range s.Dirs {
 		p := filepath.Join(dir, "pixmaps", name+".png")
 		if fileOK(p) {
 			return p, true
+		}
+		p = filepath.Join(dir, "pixmaps", name+".svg")
+		if fileOK(p) {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+func resolveSVG(name string, s Search, themes, contexts []string) (string, bool) {
+	for _, th := range themes {
+		for _, dir := range s.Dirs {
+			base := filepath.Join(dir, "icons", th)
+			for _, ctx := range contexts {
+				p := filepath.Join(base, "scalable", ctx, name+".svg")
+				if fileOK(p) {
+					return p, true
+				}
+			}
+			for _, sz := range []int{16, 22, 24, 32, 48, 64} {
+				for _, ctx := range contexts {
+					p := filepath.Join(base, strconv.Itoa(sz)+"x"+strconv.Itoa(sz), ctx, name+".svg")
+					if fileOK(p) {
+						return p, true
+					}
+				}
+			}
 		}
 	}
 	return "", false
@@ -160,8 +194,16 @@ func fileOK(p string) bool {
 	return err == nil && !st.IsDir()
 }
 
-// LoadBGRA decodes a PNG into BGRA8.
+// LoadBGRA decodes a PNG (or rasters an SVG) into BGRA8.
 func LoadBGRA(path string) (pix []byte, w, h, stride int, err error) {
+	return LoadBGRASize(path, DefaultWant)
+}
+
+// LoadBGRASize decodes path; SVG is rasterized to want×want.
+func LoadBGRASize(path string, want int) (pix []byte, w, h, stride int, err error) {
+	if strings.EqualFold(filepath.Ext(path), ".svg") {
+		return RasterSVG(path, want)
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, 0, 0, 0, err
@@ -200,7 +242,7 @@ func Lookup(name string, s Search) (pix []byte, w, h, stride int, ok bool) {
 	path, found := Resolve(name, s)
 	var d decoded
 	if found {
-		if pix, w, h, st, err := LoadBGRA(path); err == nil && w > 0 && h > 0 {
+		if pix, w, h, st, err := LoadBGRASize(path, s.Want); err == nil && w > 0 && h > 0 {
 			d = decoded{pix: pix, w: w, h: h, stride: st, ok: true}
 		}
 	}
