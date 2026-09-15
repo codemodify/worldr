@@ -49,7 +49,7 @@ func TestAdvertiseGlobals(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(2 * time.Second)
-	var sawComp, sawXdg, sawSub, sawData, sawDma, sawCursor, sawAct, sawPrim, sawXw, sawFrac, sawDone bool
+	var sawComp, sawXdg, sawSub, sawData, sawDma, sawCursor, sawAct, sawPrim, sawXw, sawFrac, sawIcon, sawDone bool
 	for time.Now().Before(deadline) && !sawDone {
 		_ = c.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		msg, err := rd.Next()
@@ -81,14 +81,16 @@ func TestAdvertiseGlobals(t *testing.T) {
 				sawXw = true
 			case "wp_fractional_scale_manager_v1":
 				sawFrac = true
+			case "xdg_toplevel_icon_manager_v1":
+				sawIcon = true
 			}
 		}
 		if msg.Object == 3 && msg.Opcode == 0 {
 			sawDone = true
 		}
 	}
-	if !sawComp || !sawXdg || !sawSub || !sawData || !sawDma || !sawCursor || !sawAct || !sawPrim || !sawXw || !sawFrac || !sawDone {
-		t.Fatalf("globals compositor=%v xdg=%v subcomp=%v data=%v dmabuf=%v cursor=%v activation=%v primary=%v xwayland=%v fractional=%v done=%v",
-			sawComp, sawXdg, sawSub, sawData, sawDma, sawCursor, sawAct, sawPrim, sawXw, sawFrac, sawDone)
+	if !sawComp || !sawXdg || !sawSub || !sawData || !sawDma || !sawCursor || !sawAct || !sawPrim || !sawXw || !sawFrac || !sawIcon || !sawDone {
+		t.Fatalf("globals compositor=%v xdg=%v subcomp=%v data=%v dmabuf=%v cursor=%v activation=%v primary=%v xwayland=%v fractional=%v icon=%v done=%v",
+			sawComp, sawXdg, sawSub, sawData, sawDma, sawCursor, sawAct, sawPrim, sawXw, sawFrac, sawIcon, sawDone)
 	}
 }

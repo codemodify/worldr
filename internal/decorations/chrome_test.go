@@ -31,6 +31,41 @@ func TestChromeGeometry(t *testing.T) {
 	}
 }
 
+func TestDrawIconClientAndDefault(t *testing.T) {
+	const w, h, stride = 40, 40, 160
+	dst := make([]byte, stride*h)
+	red := []byte{0x00, 0x00, 0xff, 0xff}
+	a := &engine.Actor{IconPix: red, IconW: 1, IconH: 1, IconStride: 4}
+	DrawIcon(dst, stride, w, h, 2, 3, 4, a)
+	i := 3*stride + 2*4
+	if dst[i] != 0x00 || dst[i+1] != 0x00 || dst[i+2] != 0xff {
+		t.Fatalf("client icon %x %x %x", dst[i], dst[i+1], dst[i+2])
+	}
+	dst = make([]byte, stride*h)
+	DrawIcon(dst, stride, w, h, 2, 3, 8, nil)
+	j := 3*stride + 2*4
+	if dst[j] == 0 && dst[j+1] == 0 && dst[j+2] == 0 {
+		t.Fatal("default icon")
+	}
+}
+
+func TestDrawSSDPaintsIconSlot(t *testing.T) {
+	const w, h, stride = 80, 60, 320
+	dst := make([]byte, stride*h)
+	pix := []byte{0x00, 0x00, 0xff, 0xff}
+	a := &engine.Actor{
+		X: 20, Y: 32, Width: 20, Height: 16, Focused: true,
+		IconPix: pix, IconW: 1, IconH: 1, IconStride: 4,
+	}
+	Draw(dst, stride, w, h, a)
+	ix := a.X - Border + Border + IconPad
+	iy := a.Y - TitleH + (TitleH-IconSz)/2
+	i := iy*stride + ix*4
+	if dst[i] != 0x00 || dst[i+1] != 0x00 || dst[i+2] != 0xff {
+		t.Fatalf("ssd icon %x %x %x at %d,%d", dst[i], dst[i+1], dst[i+2], ix, iy)
+	}
+}
+
 func TestDrawFocusedGlowOutsideFrame(t *testing.T) {
 	const w, h, stride = 80, 60, 320
 	dst := make([]byte, stride*h)

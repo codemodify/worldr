@@ -101,6 +101,20 @@ func TestLayoutLauncherRows(t *testing.T) {
 	}
 }
 
+func TestPanelDrawsFocusedIcon(t *testing.T) {
+	const w, h, stride = 240, 80, 960
+	dst := make([]byte, stride*h)
+	clear := PackBGRA([4]float32{0, 0, 0, 1})
+	red := []byte{0x00, 0x00, 0xff, 0xff}
+	CompositeDesktop(dst, stride, w, h, clear, nil, false, CursorBlit{}, Theater{}, OverviewDraw{},
+		ChromeDraw{PanelH: PanelH, Title: "foot", Icon: red, IconW: 1, IconH: 1, IconStride: 4}, false)
+	r := LayoutPanelWS(w, h, 0)
+	i := (r.Title.Y+4)*stride + r.Title.X*4
+	if dst[i] == 0 && dst[i+1] == 0 && dst[i+2] == 0 {
+		t.Fatal("expected panel icon in the title slot")
+	}
+}
+
 func TestCompositeDesktopPanelAlwaysOnBottom(t *testing.T) {
 	const w, h, stride = 240, 80, 960
 	dst := make([]byte, stride*h)

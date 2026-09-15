@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.13-dev — xdg_toplevel_icon
+
+- Advertise `xdg_toplevel_icon_manager_v1`. Bind sends `icon_size` 16 and 24, then `done`.
+- `create_icon` / `add_buffer` (shm snapshot) / `set_name` (stored, no theme lookup) / `set_icon` (null unsets). Closest buffer to 16px is used.
+- SSD title bar and the panel title slot draw the client icon, or a default glyph when unset.
+- No IME. No icon-theme loader.
+
 ## 0.9.12-dev — wp_fractional_scale preferred scale
 
 - `wp_fractional_scale_manager_v1` still advertised. `preferred_scale` is now driven by the output scale in 120ths (1.0 → 120, 1.25 → 150, 1.5 → 180, 2.0 → 240).

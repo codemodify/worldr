@@ -11,6 +11,8 @@ const (
 	Border  = 6
 	TitleH  = 28
 	AccentH = 4
+	IconSz  = 16
+	IconPad = 6
 )
 
 const (
@@ -58,6 +60,32 @@ func Draw(dst []byte, stride, dW, dH int, a *engine.Actor) {
 	engine.FillRect(dst, stride, dW, dH, x0, y0, Border, fh, frame)
 	engine.FillRect(dst, stride, dW, dH, x1-Border, y0, Border, fh, frame)
 	engine.FillRect(dst, stride, dW, dH, x0, y1-Border, fw, Border, frame)
+	DrawIcon(dst, stride, dW, dH, x0+Border+IconPad, y0+(TitleH-IconSz)/2, IconSz, a)
+}
+
+// DrawIcon paints a client icon or the default glyph at (x,y) sized size×size.
+func DrawIcon(dst []byte, stride, dW, dH, x, y, size int, a *engine.Actor) {
+	if size < 4 || dst == nil {
+		return
+	}
+	if a != nil && a.HasIcon() {
+		sw := a.IconStride
+		if sw <= 0 {
+			sw = a.IconW * 4
+		}
+		engine.BlitBGRAScaledAlpha(dst, stride, dW, dH, x, y, size, size, a.IconPix, sw, a.IconW, a.IconH, 1)
+		return
+	}
+	drawDefaultIcon(dst, stride, dW, dH, x, y, size)
+}
+
+func drawDefaultIcon(dst []byte, stride, dW, dH, x, y, size int) {
+	inset := size / 5
+	if inset < 1 {
+		inset = 1
+	}
+	engine.FillRect(dst, stride, dW, dH, x, y, size, size, 0xff2a3350)
+	engine.FillRect(dst, stride, dW, dH, x+inset, y+inset, size-2*inset, size-2*inset, colTitleStripe)
 }
 
 func drawTitleBar(dst []byte, stride, dW, dH, x, y, w int, focused bool) {

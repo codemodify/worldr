@@ -12,6 +12,7 @@ const (
 	globalPrimary         uint32 = 13
 	globalXwayland        uint32 = 14
 	globalFractionalScale uint32 = 15
+	globalToplevelIcon    uint32 = 16
 )
 
 // wp_cursor_shape_v1 shapes (enum starts at 1).

@@ -354,6 +354,9 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				WS:         scene.WorkspacePose(now),
 				Occupied:   scene.Occupied(),
 			}
+			if fa := focusedActor(desk); fa != nil {
+				ch.Icon, ch.IconW, ch.IconH, ch.IconStride = fa.IconPix, fa.IconW, fa.IconH, fa.IconStride
+			}
 			CompositeDesktop(fb, stride, int(w), int(h), pixel, actors, opt.SSD, cur,
 				Theater{Now: now, Tier: opt.Effects},
 				OverviewDraw{T: ov.Progress(now), Select: ov.Select},
