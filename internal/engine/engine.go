@@ -143,6 +143,22 @@ func (s *Scene) FocusAt(px, py int, titleH, border int) *Actor {
 	return hit
 }
 
+// FocusActor marks a as the focused window (expose pick).
+func (s *Scene) FocusActor(a *Actor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var prev *Actor
+	for _, x := range s.actors {
+		if x.Focused {
+			prev = x
+		}
+		x.Focused = x == a
+	}
+	if a != nil && a != prev {
+		a.FocusPulse = time.Now()
+	}
+}
+
 // PlaceNew puts a newly mapped window in an empty-ish slot.
 func (s *Scene) PlaceNew(a *Actor, screenW, screenH, border, titleH int) {
 	s.mu.Lock()

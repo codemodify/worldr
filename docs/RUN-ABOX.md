@@ -25,7 +25,8 @@ already running Hyprland/Sway/GNOME/KDE.
 | --- | --- |
 | Ctrl+Alt+F1…F7 | Switch virtual terminals. Your existing graphical session stays on its VT. |
 | Ctrl+C | Stop `worldr-shell` if it is in the foreground on that TTY. |
-| Esc or Q | Quit if evdev can open a keyboard (`input` group). |
+| Esc or Q | Quit if evdev can open a keyboard (`input` group). In overview, Esc leaves the grid first. |
+| F12 | Toggle expose/overview (nested window must be focused). Super+Tab if the host does not steal Super. |
 | `--duration=15s` | Always exits — use this the first time on a TTY. |
 
 If the TTY appears wedged: another TTY (`Ctrl+Alt+F3`), `pkill worldr-shell`,
@@ -69,7 +70,7 @@ Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). No huge vendored tree
 git clone https://github.com/codemodify/worldr.git
 cd worldr
 # this branch (stacked on XWayland / nested compositor):
-git checkout feat/window-effects-v0
+git checkout feat/overview-expose-v0
 
 export CGO_ENABLED=1
 make build
@@ -125,6 +126,32 @@ into worldr (title-bar drag still works).
 ```
 
 The same `CompositeDesktop` path is used on `--backend=vk-display` / `drm`.
+
+### Expose / overview (v0)
+
+With **two or more** clients on the worldr socket, focus the
+`worldr-shell (nested compositor)` window and press **F12**. Actors animate
+into a grid. Click a tile (or ←/→ / Tab, then Enter) to focus and leave.
+**Esc** leaves overview without quitting. **Esc** or **Q** outside overview
+still quits.
+
+| Key | Action |
+| --- | --- |
+| F12 | Toggle overview (works with forwarded nested `wl_keyboard` evdev or evdev+8) |
+| Super+Tab | Same toggle if KWin does not steal Super |
+| ← → Tab | Move selection in overview |
+| Enter | Focus selection and exit |
+| Esc | Exit overview; if already on the desktop, quit |
+| Q | Quit (desktop only) |
+
+Smoke without pressing keys (video-less):
+
+```sh
+./bin/worldr-shell --backend=wayland-client --overview-demo --duration=20s
+# other terminals: two foots on the printed WAYLAND_DISPLAY
+```
+
+Overview auto-enters ~0.6s after the first window maps.
 
 `--compositor=false` restores the old clear-only debug window (no socket).
 
@@ -252,6 +279,7 @@ without `/dev/dri`.
 | `--compositor` | true | Listen as Wayland server (on for `wayland-client`/`nested` too) |
 | `--xwayland` | false | Launch rootless Xwayland on the worldr socket |
 | `--effects` | `high` | Window theater: `high` (scale+fade+focus pulse) \| `low` (fade) \| `off` |
+| `--overview-demo` | false | Auto-enter expose after the first window maps |
 | `--wayland-display` | first free `wayland-N` | Socket name |
 | `--ssd` | true | Server-side decoration chrome |
 | `--card` | first `/dev/dri/cardN` | DRM device |
@@ -314,7 +342,7 @@ export XDG_RUNTIME_DIR=/run/user/$(id -u)
 - No `xdg_popup` / real subsurface stacking
 - Clipboard / primary selection objects bind; no MIME transfer yet
 - No zero-copy GPU composite (import is readback)
-- SSD is a colored frame + title hit region
+- SSD is thicker accent + title gradient + focused glow (still not a toolkit)
 - Software cursor: `wp_cursor_shape` theme + client shm hotspot (no hardware plane)
 - Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY
 - Pointer/keyboard keymap sent to clients is a tiny US map
