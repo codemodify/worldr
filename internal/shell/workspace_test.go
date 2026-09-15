@@ -13,20 +13,48 @@ func TestHandleWorkspaceKeysCtrlAltArrows(t *testing.T) {
 	scene.SetWorkspaces(3)
 	ctrl, alt := true, true
 	ptr := &input.Pointer{Keys: []input.Key{{Code: keyRight, Pressed: true}}}
-	handleWorkspaceKeys(scene, ptr, time.Unix(1, 0), &ctrl, &alt)
+	shift := false
+	handleWorkspaceKeys(scene, ptr, time.Unix(1, 0), &ctrl, &alt, &shift)
 	if scene.ActiveWorkspace() != 1 {
 		t.Fatal(scene.ActiveWorkspace())
 	}
 	ptr = &input.Pointer{Keys: []input.Key{{Code: keyLeft + 8, Pressed: true}}}
-	handleWorkspaceKeys(scene, ptr, time.Unix(2, 0), &ctrl, &alt)
+	handleWorkspaceKeys(scene, ptr, time.Unix(2, 0), &ctrl, &alt, &shift)
 	if scene.ActiveWorkspace() != 0 {
 		t.Fatal("evdev+8 left")
 	}
 	ctrl = false
 	ptr = &input.Pointer{Keys: []input.Key{{Code: keyRight, Pressed: true}}}
-	handleWorkspaceKeys(scene, ptr, time.Unix(3, 0), &ctrl, &alt)
+	handleWorkspaceKeys(scene, ptr, time.Unix(3, 0), &ctrl, &alt, &shift)
 	if scene.ActiveWorkspace() != 0 {
 		t.Fatal("need both modifiers")
+	}
+}
+
+func TestHandleWorkspaceKeysCtrlAltShiftMoves(t *testing.T) {
+	scene := engine.NewScene()
+	scene.SetWorkspaces(3)
+	a := &engine.Actor{Width: 10, Height: 10, Focused: true}
+	scene.Add(a)
+	ctrl, alt, shift := true, true, true
+	ptr := &input.Pointer{Keys: []input.Key{{Code: keyRight, Pressed: true}}}
+	handleWorkspaceKeys(scene, ptr, time.Unix(1, 0), &ctrl, &alt, &shift)
+	if a.Workspace != 1 || scene.ActiveWorkspace() != 1 {
+		t.Fatalf("move ws=%d active=%d", a.Workspace, scene.ActiveWorkspace())
+	}
+	ptr = &input.Pointer{Keys: []input.Key{{Code: keyLeft + 8, Pressed: true}}}
+	handleWorkspaceKeys(scene, ptr, time.Unix(2, 0), &ctrl, &alt, &shift)
+	if a.Workspace != 0 || scene.ActiveWorkspace() != 0 {
+		t.Fatalf("evdev+8 move back ws=%d active=%d", a.Workspace, scene.ActiveWorkspace())
+	}
+	shift = false
+	ptr = &input.Pointer{Keys: []input.Key{{Code: keyRight, Pressed: true}}}
+	handleWorkspaceKeys(scene, ptr, time.Unix(3, 0), &ctrl, &alt, &shift)
+	if a.Workspace != 0 {
+		t.Fatal("switch without shift must not move the window")
+	}
+	if scene.ActiveWorkspace() != 1 {
+		t.Fatal("switch still works")
 	}
 }
 

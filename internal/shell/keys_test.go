@@ -37,6 +37,18 @@ func TestCtrlAltEvdevOffset(t *testing.T) {
 	}
 }
 
+func TestShiftEvdevOffset(t *testing.T) {
+	if !isShift(keyLeftShift) || !isShift(keyRightShift) {
+		t.Fatal("shift")
+	}
+	if !isShift(keyLeftShift+8) || !isShift(keyRightShift+8) {
+		t.Fatal("shift evdev+8")
+	}
+	if isShift(keyLeft) {
+		t.Fatal("left is not shift")
+	}
+}
+
 func TestLauncherToggleKeys(t *testing.T) {
 	if !isLauncherToggle(59, false) || !isLauncherToggle(67, false) {
 		t.Fatal("F1")

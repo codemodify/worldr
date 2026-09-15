@@ -207,28 +207,36 @@ is `foot`, `weston-simple-shm`, and `xeyes` / `xterm` / `xcalc` when `--xwayland
 is on. Missing binaries log `launcher: … not on PATH` and the shell keeps
 running.
 
-### Workspaces (v0)
+### Workspaces (0.9.14)
 
 **2–4** virtual desktops, default **3** (`--workspaces=N`). New clients
 (launcher or an external `foot`) spawn on the **active** desktop. F12
-overview lists **only that desktop**.
+overview lists **only that desktop** and paints `desk N/M`. Empty desktops
+stay addressable (switch, pager click, and move-onto).
 
-Switch with **Ctrl+Alt+←/→** (evdev or evdev+8) or click the panel **pager
-dots**. The desktop layer slides horizontally (~260ms). Plasma often steals
-Ctrl+Alt+arrows — use the dots in the nested window.
+One scheme (no Super+1..N): **Ctrl+Alt+←/→** switches; **Ctrl+Alt+Shift+←/→**
+moves the focused window and follows (wraps). Evdev or evdev+8. The desktop
+layer slides horizontally (~260ms, reused). Plasma often steals Ctrl+Alt+arrows
+— use the pager dots in the nested window, or soak on a spare TTY.
+
+The panel pager shows **N/M** plus dots: dim = empty, bright = occupied,
+brand/larger = current.
 
 ```sh
 ./bin/worldr-shell --backend=wayland-client --duration=60s
 # F1 → foot on desktop 0
 # click the second pager dot (or Ctrl+Alt+→)
 # F1 → foot on desktop 1
+# focus the first foot, Ctrl+Alt+Shift+→  (window follows to desktop 1)
 ```
 
 | Key / click | Action |
 | --- | --- |
-| Ctrl+Alt+→ | Next desktop (wraps) |
-| Ctrl+Alt+← | Previous desktop (wraps) |
-| Pager dot | Jump to that desktop |
+| Ctrl+Alt+→ | Next desktop (wraps; empty dest OK) |
+| Ctrl+Alt+← | Previous desktop (wraps; empty dest OK) |
+| Ctrl+Alt+Shift+→ | Move focused window to next desktop and follow |
+| Ctrl+Alt+Shift+← | Move focused window to previous desktop and follow |
+| Pager **N/M** + dots | Current index / count; click a dot to jump |
 
 `--compositor=false` restores the old clear-only debug window (no socket).
 
@@ -417,7 +425,7 @@ disconnected cleanly** against the compositor.
 | Client | Buffer | Expected now | Notes |
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.9): Ctrl+Shift+C / Ctrl+Shift+V between worldr clients (`text/plain`); mouse-select + middle-click uses primary. Not bridged to Plasma’s clipboard yet. Cursors, activation, **fractional-scale** (0.9.12). **Icons** (0.9.13): `xdg_toplevel_icon_manager_v1` — clients that set an icon show it on the SSD title bar and panel; others get a default glyph. Still expected: text-input/IME. |
+| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.9): Ctrl+Shift+C / Ctrl+Shift+V between worldr clients (`text/plain`); mouse-select + middle-click uses primary. Not bridged to Plasma’s clipboard yet. Cursors, activation, **fractional-scale** (0.9.12). **Icons** (0.9.13): `xdg_toplevel_icon_manager_v1` — clients that set an icon show it on the SSD title bar and panel; others get a default glyph. **Workspaces** (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. Still expected: text-input/IME. |
 | `kitty` | linux-dmabuf (GL) | **Try** | On **vk-display** (0.9.10): Vulkan import + GPU blit into the compositor pass (ARGB/XRGB). Nested/drm still readback or LINEAR mmap. Log: `linux-dmabuf: Vulkan import + GPU sample`. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
@@ -467,6 +475,6 @@ Workaround — real display on **tty3**:
 - Compiz theater v0 is hardcoded (no plugin graph); `--effects=off` disables
 - Launcher reads XDG `.desktop` files (no icon theme yet; `Terminal=true` apps skipped; no ibus/fcitx IME)
 - Panel is CPU-composited chrome (not a toolkit)
-- Workspaces v0: no drag-to-desktop, no per-output set, overview is current-desktop only
+- Workspaces (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. No Super+1..N, no drag-to-desktop, no per-output set. Overview is current-desktop only (shows `desk N/M`). Empty desktops stay addressable.
 - vk-display/drm need DRM master on a spare VT (scripts/try-tty.sh). CI exercises refuse / no-DRM / render-node `--card` paths only; soak vk-display on abox after merge.
 - UI toolkit still deferred

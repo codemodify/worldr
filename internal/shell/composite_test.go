@@ -185,6 +185,26 @@ func TestCompositeDesktopOverviewMovesActor(t *testing.T) {
 	}
 }
 
+func TestCompositeDesktopOverviewDeskLabel(t *testing.T) {
+	const w, h, stride = 200, 120, 800
+	clear := PackBGRA([4]float32{0, 0, 0, 1})
+	dst := make([]byte, stride*h)
+	CompositeDesktop(dst, stride, w, h, clear, nil, false, CursorBlit{},
+		Theater{}, OverviewDraw{T: 1}, ChromeDraw{WS: engine.WorkspaceDraw{Count: 3, Active: 1, From: 1, To: 1, T: 1}}, false)
+	found := false
+	for y := 8; y < 24 && !found; y++ {
+		for x := 12; x < 80; x++ {
+			i := y*stride + x*4
+			if dst[i] != 0 || dst[i+1] != 0 || dst[i+2] != 0 {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected desk N/M label in overview")
+	}
+}
+
 func TestCompositeDesktopHidesOtherWorkspace(t *testing.T) {
 	const w, h, stride = 64, 48, 256
 	clear := PackBGRA([4]float32{0, 0, 0, 1})

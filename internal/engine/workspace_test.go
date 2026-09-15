@@ -169,3 +169,118 @@ func TestOccupied(t *testing.T) {
 		t.Fatalf("%v", occ)
 	}
 }
+
+func TestWorkspaceLabel(t *testing.T) {
+	if WorkspaceLabel(0, 3) != "1/3" || WorkspaceLabel(2, 3) != "3/3" {
+		t.Fatal(WorkspaceLabel(0, 3), WorkspaceLabel(2, 3))
+	}
+	if WorkspaceLabel(-1, 3) != "1/3" || WorkspaceLabel(9, 4) != "4/4" {
+		t.Fatal("clamp")
+	}
+	if WorkspaceLabel(0, 0) != "" {
+		t.Fatal("empty")
+	}
+}
+
+func TestEmptyWorkspaceStaysAddressable(t *testing.T) {
+	s := NewScene()
+	s.SetWorkspaces(3)
+	s.Add(&Actor{Width: 10, Height: 10, Focused: true})
+	if !s.SwitchTo(1, time.Unix(1, 0)) {
+		t.Fatal("switch to empty")
+	}
+	if s.ActiveWorkspace() != 1 {
+		t.Fatal(s.ActiveWorkspace())
+	}
+	if len(s.ActorsOn(1)) != 0 {
+		t.Fatal("empty dest")
+	}
+	occ := s.Occupied()
+	if occ[1] || !occ[0] {
+		t.Fatalf("%v", occ)
+	}
+	s.StepWorkspace(1, time.Unix(2, 0))
+	if s.ActiveWorkspace() != 2 {
+		t.Fatal("wrap through empty")
+	}
+	s.StepWorkspace(1, time.Unix(3, 0))
+	if s.ActiveWorkspace() != 0 {
+		t.Fatal("back to occupied")
+	}
+}
+
+func TestMoveFocusedFollowsAndWraps(t *testing.T) {
+	s := NewScene()
+	s.SetWorkspaces(3)
+	a := &Actor{Width: 10, Height: 10, Focused: true}
+	s.Add(a)
+	if !s.MoveFocused(-1, time.Unix(1, 0)) {
+		t.Fatal("wrap left")
+	}
+	if a.Workspace != 2 || s.ActiveWorkspace() != 2 {
+		t.Fatalf("ws=%d active=%d", a.Workspace, s.ActiveWorkspace())
+	}
+	if !a.Focused {
+		t.Fatal("follow keeps focus")
+	}
+	if !s.MoveFocused(1, time.Unix(2, 0)) {
+		t.Fatal("wrap right")
+	}
+	if a.Workspace != 0 || s.ActiveWorkspace() != 0 {
+		t.Fatalf("ws=%d active=%d", a.Workspace, s.ActiveWorkspace())
+	}
+}
+
+func TestMoveFocusedOntoEmptyWorkspace(t *testing.T) {
+	s := NewScene()
+	s.SetWorkspaces(3)
+	stay := &Actor{Width: 10, Height: 10}
+	s.Add(stay)
+	move := &Actor{Width: 10, Height: 10}
+	s.Add(move)
+	s.FocusActor(move)
+	if !s.MoveFocused(1, time.Unix(2, 0)) {
+		t.Fatal("move")
+	}
+	if move.Workspace != 1 || stay.Workspace != 0 {
+		t.Fatalf("move=%d stay=%d", move.Workspace, stay.Workspace)
+	}
+	if s.ActiveWorkspace() != 1 {
+		t.Fatal("follow")
+	}
+	if len(s.ActorsOn(1)) != 1 || s.ActorsOn(1)[0] != move {
+		t.Fatal("membership")
+	}
+	if len(s.ActorsOn(0)) != 1 || s.ActorsOn(0)[0] != stay {
+		t.Fatal("source")
+	}
+}
+
+func TestMoveActorTakesOwnerChildren(t *testing.T) {
+	s := NewScene()
+	s.SetWorkspaces(3)
+	parent := &Actor{Width: 40, Height: 40, Focused: true}
+	s.Add(parent)
+	pop := &Actor{Width: 10, Height: 10, NoChrome: true, Owner: parent}
+	s.Add(pop)
+	if !s.MoveActor(pop, 2) {
+		t.Fatal("move via popup")
+	}
+	if parent.Workspace != 2 || pop.Workspace != 2 {
+		t.Fatalf("parent=%d pop=%d", parent.Workspace, pop.Workspace)
+	}
+	if s.ActiveWorkspace() != 0 {
+		t.Fatal("MoveActor does not switch")
+	}
+}
+
+func TestMoveFocusedNoWindowStillSwitches(t *testing.T) {
+	s := NewScene()
+	s.SetWorkspaces(3)
+	if !s.MoveFocused(1, time.Unix(1, 0)) {
+		t.Fatal("empty switch")
+	}
+	if s.ActiveWorkspace() != 1 {
+		t.Fatal(s.ActiveWorkspace())
+	}
+}

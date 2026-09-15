@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.14-dev — workspaces polish
+
+- One shortcut scheme: **Ctrl+Alt+←/→** switches desktop (wraps); **Ctrl+Alt+Shift+←/→** moves the focused window and follows. No Super+1..N.
+- Panel pager shows **N/M** plus occupied dots (bright = has windows, brand = current). Overview labels `desk N/M`. Empty desktops stay addressable.
+- Move takes the focused toplevel and its Owner children (popups/subsurfaces). Reuses the existing ~260ms slide.
+- No IME. This finishes the original P1 list.
+
 ## 0.9.13-dev — xdg_toplevel_icon
 
 - Advertise `xdg_toplevel_icon_manager_v1`. Bind sends `icon_size` 16 and 24, then `done`.

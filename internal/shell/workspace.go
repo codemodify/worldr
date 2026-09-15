@@ -7,7 +7,7 @@ import (
 	"github.com/codemodify/worldr/internal/input"
 )
 
-func handleWorkspaceKeys(scene *engine.Scene, ptr *input.Pointer, now time.Time, ctrlHeld, altHeld *bool) map[uint32]bool {
+func handleWorkspaceKeys(scene *engine.Scene, ptr *input.Pointer, now time.Time, ctrlHeld, altHeld, shiftHeld *bool) map[uint32]bool {
 	consumed := map[uint32]bool{}
 	if scene == nil || ptr == nil {
 		return consumed
@@ -25,19 +25,34 @@ func handleWorkspaceKeys(scene *engine.Scene, ptr *input.Pointer, now time.Time,
 			}
 			continue
 		}
+		if isShift(k.Code) {
+			if shiftHeld != nil {
+				*shiftHeld = k.Pressed
+			}
+			continue
+		}
 		if !k.Pressed {
 			continue
 		}
 		if ctrlHeld == nil || altHeld == nil || !*ctrlHeld || !*altHeld {
 			continue
 		}
+		move := shiftHeld != nil && *shiftHeld
 		if isEvdev(k.Code, keyRight) {
-			scene.StepWorkspace(1, now)
+			if move {
+				scene.MoveFocused(1, now)
+			} else {
+				scene.StepWorkspace(1, now)
+			}
 			consumed[k.Code] = true
 			ptr.Quit = false
 		}
 		if isEvdev(k.Code, keyLeft) {
-			scene.StepWorkspace(-1, now)
+			if move {
+				scene.MoveFocused(-1, now)
+			} else {
+				scene.StepWorkspace(-1, now)
+			}
 			consumed[k.Code] = true
 			ptr.Quit = false
 		}
