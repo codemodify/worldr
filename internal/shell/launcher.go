@@ -11,10 +11,13 @@ import (
 	"github.com/codemodify/worldr/internal/input"
 )
 
-// LaunchItem is one hardcoded launcher entry (no .desktop scan).
+// LaunchItem is one launcher entry (from a .desktop file or the fallback list).
 type LaunchItem struct {
 	Label string
-	Bin   string
+	Bin   string   // Exec argv[0]
+	Args  []string // Exec argv[1:]
+	Icon  string   // Icon= (unused in v0 draw)
+	ID    string   // desktop-file id
 	X11   bool
 }
 
@@ -107,21 +110,6 @@ func handleLauncherDesktopClick(ln *Launcher, g *launcherGate, x, y, screenW, sc
 		return nil, true
 	}
 	return nil, true
-}
-
-// Catalog is the v0 command list. X11 entries appear only when Xwayland is on.
-func Catalog(xwayland bool) []LaunchItem {
-	out := []LaunchItem{
-		{Label: "foot", Bin: "foot", X11: false},
-		{Label: "weston-simple-shm", Bin: "weston-simple-shm", X11: false},
-	}
-	if xwayland {
-		out = append(out,
-			LaunchItem{Label: "xeyes", Bin: "xeyes", X11: true},
-			LaunchItem{Label: "xterm", Bin: "xterm", X11: true},
-		)
-	}
-	return out
 }
 
 // Toggle opens or closes the overlay.
@@ -248,6 +236,9 @@ func ClientEnviron(base []string, waylandDisplay, x11Display string, x11Client b
 // SpawnClient starts bin detached with the compositor env. Errors are written
 // to logw; the shell keeps running.
 func SpawnClient(item LaunchItem, waylandDisplay, x11Display string, logw io.Writer) error {
+	if item.Bin == "" {
+		return fmt.Errorf("launcher: empty Exec")
+	}
 	path, err := exec.LookPath(item.Bin)
 	if err != nil {
 		if logw != nil {
@@ -255,7 +246,7 @@ func SpawnClient(item LaunchItem, waylandDisplay, x11Display string, logw io.Wri
 		}
 		return err
 	}
-	cmd := exec.Command(path)
+	cmd := exec.Command(path, item.Args...)
 	cmd.Env = ClientEnviron(os.Environ(), waylandDisplay, x11Display, item.X11)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

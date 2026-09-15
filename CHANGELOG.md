@@ -3,6 +3,13 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.6-dev — XDG .desktop launcher
+
+- Launcher scans `$XDG_DATA_HOME` / `$XDG_DATA_DIRS` `applications/*.desktop` (`Name=`, `Exec=` with field codes stripped, optional `Icon=`).
+- Drops `Hidden=true`, `NoDisplay=true`, `Terminal=true`, non-`Application`. Light `OnlyShowIn` / `NotShowIn` when `XDG_CURRENT_DESKTOP` is set. Known X11 bins (`xeyes`, `xterm`, …) only when `--xwayland`.
+- Empty scan falls back to `foot` / `weston-simple-shm` (plus `xeyes` / `xterm` with Xwayland).
+- No IME work in this release.
+
 ## 0.9.5-dev — pointer button press/release hygiene
 
 - Track per-client `wl_pointer.button` state. A client only gets a release if it previously got the matching press while focused.

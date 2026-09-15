@@ -69,6 +69,20 @@ func TestFocusedTitle(t *testing.T) {
 	}
 }
 
+func TestLayoutLauncherClipsOverflow(t *testing.T) {
+	card, rows := LayoutLauncher(80, 800, 400, PanelH)
+	if card.Y+card.H > 400-PanelH {
+		t.Fatalf("card overlaps panel %+v", card)
+	}
+	if len(rows) >= 80 || len(rows) == 0 {
+		t.Fatalf("expected clipped rows, got %d", len(rows))
+	}
+	last := rows[len(rows)-1]
+	if last.Y+last.H > card.Y+card.H {
+		t.Fatalf("row overflows card %+v card=%+v", last, card)
+	}
+}
+
 func TestLayoutLauncherRows(t *testing.T) {
 	card, rows := LayoutLauncher(3, 800, 600, PanelH)
 	if len(rows) != 3 {
