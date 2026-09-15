@@ -21,6 +21,14 @@ type toplevelIcon struct {
 	snaps []*iconSnap
 }
 
+func applyToplevelIcon(a *engine.Actor, snap *iconSnap, name string) {
+	if a == nil {
+		return
+	}
+	a.IconName = name
+	snap.apply(a)
+}
+
 func (ic *iconSnap) apply(a *engine.Actor) {
 	if a == nil {
 		return
@@ -107,9 +115,11 @@ func (c *Client) reqIconMgr(_ *object, op uint16, cur *wayland.Cursor) error {
 			return err
 		}
 		var snap *iconSnap
+		var name string
 		if iid != 0 {
 			if io := c.objs[iid]; io != nil && io.icon != nil {
 				snap = pickIcon(io.icon.snaps, IconSize)
+				name = io.icon.name
 			}
 		}
 		to := c.objs[tid]
@@ -118,12 +128,13 @@ func (c *Client) reqIconMgr(_ *object, op uint16, cur *wayland.Cursor) error {
 			if c.pendingIcon == nil {
 				c.pendingIcon = map[uint32]iconPending{}
 			}
-			c.pendingIcon[tid] = iconPending{snap: snap}
+			c.pendingIcon[tid] = iconPending{snap: snap, name: name}
 			return nil
 		}
 		to.xdgT.icon = snap
+		to.xdgT.iconName = name
 		if to.xdgT.xdg != nil && to.xdgT.xdg.surf != nil {
-			snap.apply(to.xdgT.xdg.surf.actor)
+			applyToplevelIcon(to.xdgT.xdg.surf.actor, snap, name)
 		}
 	}
 	return nil

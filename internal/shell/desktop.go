@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/codemodify/worldr/internal/icontheme"
 )
 
 // maxLauncherItems caps the overlay so it fits a nested 720p window.
@@ -66,6 +68,7 @@ func LoadCatalog(dirs []string, currentDesktop string, xwayland bool) []LaunchIt
 	if len(out) > maxLauncherItems {
 		out = out[:maxLauncherItems]
 	}
+	loadCatalogIcons(out)
 	return out
 }
 
@@ -86,7 +89,46 @@ func fallbackCatalog(xwayland bool) []LaunchItem {
 			LaunchItem{Label: "xcalc", Bin: "xcalc", X11: true},
 		)
 	}
+	loadCatalogIcons(out)
 	return out
+}
+
+func loadCatalogIcons(items []LaunchItem) {
+	s := icontheme.Default()
+	s.Want = 24
+	for i := range items {
+		name := items[i].Icon
+		if name == "" {
+			name = filepath.Base(items[i].Bin)
+		}
+		if name == "" {
+			continue
+		}
+		if pix, w, h, st, ok := icontheme.Lookup(name, s); ok {
+			items[i].IconPix, items[i].IconW, items[i].IconH, items[i].IconStride = pix, w, h, st
+		}
+	}
+}
+
+// LookupDesktopIcon returns Icon= for a matching catalog entry, or appID.
+func LookupDesktopIcon(items []LaunchItem, appID string) string {
+	appID = strings.TrimSpace(appID)
+	if appID == "" {
+		return ""
+	}
+	base := strings.ToLower(filepath.Base(appID))
+	for _, it := range items {
+		if strings.EqualFold(it.ID, appID) || strings.EqualFold(it.Bin, appID) ||
+			strings.EqualFold(filepath.Base(it.Bin), appID) || strings.EqualFold(it.ID, base) {
+			if it.Icon != "" {
+				return it.Icon
+			}
+			if it.Bin != "" {
+				return filepath.Base(it.Bin)
+			}
+		}
+	}
+	return appID
 }
 
 func scanDesktopDir(dir, currentDesktop string, xwayland bool) ([]LaunchItem, error) {

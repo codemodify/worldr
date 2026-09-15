@@ -360,9 +360,10 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			}
 			actors := scene.Actors()
 			desk := desktopActors(scene)
+			FillThemeIcons(actors, ln.Items)
 			var ld *LauncherDraw
 			if ln.Open {
-				ld = &LauncherDraw{Items: ln.labels(), Select: ln.Select}
+				ld = ln.drawState()
 			}
 			vendor := uint32(0)
 			if p.vk != nil {

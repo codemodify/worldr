@@ -116,6 +116,7 @@ and explicit sync, not by opening the DRM device themselves.
 | `internal/platform/linux/native` | **cgo ABI**: `libvulkan` + `libdrm` (owned C session, not a second compositor). |
 | `internal/platform/linux/wlclient` | Debug nested Wayland *client* (wl_shm). Not the primary path. |
 | `internal/shell` | `worldr-shell` flags, safety, present loop, panel, launcher. |
+| `internal/icontheme` | XDG icon-theme PNG lookup (`Icon=` / AppID); client `xdg_toplevel_icon` still wins. |
 | `internal/input` | Best-effort evdev pointer + keys. Quit is Ctrl+Q in the shell. |
 | `internal/wayland` | Wire protocol encode/decode. |
 | `internal/version` | Version / phase string. |

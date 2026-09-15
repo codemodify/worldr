@@ -32,9 +32,10 @@ type Actor struct {
 	UnmapAt       time.Time // map-out start (zero = mapped)
 	FocusPulse    time.Time // last focus-gain
 	Workspace     int       // virtual desktop (0-based)
-	IconPix       []byte    // optional BGRA window icon
+	IconPix       []byte    // optional BGRA window icon (client buffer preferred)
 	IconW, IconH  int
 	IconStride    int
+	IconName      string // freedesktop name (set_name / AppID) when no client buffer
 }
 
 // HasIcon reports a client-supplied icon buffer.
