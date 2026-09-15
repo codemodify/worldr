@@ -22,7 +22,7 @@ const (
 	globalViewporter uint32 = 8
 	globalDataDev    uint32 = 9
 	globalSubcomp    uint32 = 10
-	// 11–14 are in extras.go (cursor, activation, primary, xwayland_shell)
+	// 11–15 are in extras.go (cursor, activation, primary, xwayland_shell, fractional_scale)
 )
 
 type objectKind int
@@ -65,6 +65,8 @@ const (
 	kindPrimSource
 	kindXwShell
 	kindXwSurface
+	kindFracScaleMgr
+	kindFracScale
 )
 
 type object struct {
@@ -311,6 +313,10 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqXwaylandShell(o, msg.Opcode, cur)
 	case kindXwSurface:
 		return c.reqXwaylandSurface(o, msg.Opcode, cur)
+	case kindFracScaleMgr:
+		return c.reqFracScaleMgr(o, msg.Opcode, cur)
+	case kindFracScale:
+		return c.reqFracScale(o, msg.Opcode, cur)
 	case kindKeyboard, kindOutput, kindDataDevice, kindPositioner, kindCallback, kindDmaFeedback, kindSubsurface, kindPrimSource:
 		return nil
 	default:
@@ -359,6 +365,7 @@ func (c *Client) advertise(reg uint32) error {
 		{globalActivation, "xdg_activation_v1", 1},
 		{globalPrimary, "zwp_primary_selection_device_manager_v1", 1},
 		{globalXwayland, "xwayland_shell_v1", 1},
+		{globalFractionalScale, "wp_fractional_scale_manager_v1", 1},
 	}
 	for _, gl := range globals {
 		p := wayland.PutU32(nil, gl.name)
@@ -436,6 +443,8 @@ func (c *Client) reqRegistry(_ *object, op uint16, cur *wayland.Cursor) error {
 		o.kind = kindPrimMgr
 	case globalXwayland:
 		o.kind = kindXwShell
+	case globalFractionalScale:
+		o.kind = kindFracScaleMgr
 	default:
 		switch iface {
 		case "wl_data_device_manager":
