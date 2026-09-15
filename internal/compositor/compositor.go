@@ -17,6 +17,14 @@ type DMABufImport = wlsrv.DMABufImport
 // DMABufPlane is one linux-dmabuf plane.
 type DMABufPlane = wlsrv.DMABufPlane
 
+// X11MapHints is XWM metadata applied to an xwayland actor.
+type X11MapHints = wlsrv.X11MapHints
+
+// ApplyX11Hints updates a scene actor when X11 properties change.
+func ApplyX11Hints(scene *engine.Scene, h X11MapHints) *engine.Actor {
+	return wlsrv.ApplyX11Hints(scene, h)
+}
+
 // Listen starts a Wayland socket. imp may be nil (shm-only).
 func Listen(displayName string, scene *engine.Scene, screenW, screenH int, imp wlsrv.DMABufImport) (*Server, error) {
 	return wlsrv.Listen(displayName, scene, screenW, screenH, imp)

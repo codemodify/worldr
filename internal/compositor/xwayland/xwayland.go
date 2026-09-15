@@ -2,7 +2,8 @@
 // and runs a tiny XWM so managed X11 windows become compositor actors.
 //
 // Surfaces use xwayland_shell_v1 (fallback: xdg_toplevel) on the existing
-// SSD / focus / shm / dmabuf path.
+// SSD / focus / shm / dmabuf path. The XWM advertises a small EWMH set
+// (_NET_SUPPORTED, active window, titles/class, delete/take-focus).
 package xwayland
 
 import (

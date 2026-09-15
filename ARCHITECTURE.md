@@ -163,7 +163,7 @@ actors + SSD → upload (`vkCmdCopyBufferToImage`) or dumb-buffer memcpy.
 - Vendoring large dependency trees
 - macOS / Windows as first-class targets
 - Full Compiz effect-graph plugin system (v0 is hardcoded map/unmap/focus)
-- Full EWMH / ICCCM XWM (spike maps managed windows + `xwayland_shell_v1` serials)
+- Full EWMH / ICCCM XWM (0.9.11 has `_NET_*` basics, titles/class, focus/stacking, OR/transient no-SSD — not reparenting/pager/IME)
 
 ## Vendor bring-up
 

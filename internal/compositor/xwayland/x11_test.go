@@ -49,6 +49,70 @@ func TestConfigureFromRequestEncodesMaskOrder(t *testing.T) {
 	}
 }
 
+func TestSetInputFocusPacket(t *testing.T) {
+	rec := &recordConn{}
+	xc := &xConn{c: rec, byteOrder: binary.LittleEndian}
+	if err := xc.setInputFocus(0xabc); err != nil {
+		t.Fatal(err)
+	}
+	if rec.n != 12 || rec.buf[0] != xOpSetInputFocus || rec.buf[1] != xRevertToPtr {
+		t.Fatalf("%x", rec.buf)
+	}
+	if binary.LittleEndian.Uint32(rec.buf[4:]) != 0xabc {
+		t.Fatal("window")
+	}
+}
+
+func TestSendClientMessagePacket(t *testing.T) {
+	rec := &recordConn{}
+	xc := &xConn{c: rec, byteOrder: binary.LittleEndian}
+	if err := xc.sendClientMessage(7, 9, [5]uint32{11, 0, 0, 0, 0}); err != nil {
+		t.Fatal(err)
+	}
+	if rec.n != 44 || rec.buf[0] != xOpSendEvent || rec.buf[12] != xEvClientMessage {
+		t.Fatalf("%x", rec.buf)
+	}
+	if binary.LittleEndian.Uint32(rec.buf[16:]) != 7 {
+		t.Fatal("event window")
+	}
+	if binary.LittleEndian.Uint32(rec.buf[20:]) != 9 {
+		t.Fatal("type")
+	}
+	if binary.LittleEndian.Uint32(rec.buf[24:]) != 11 {
+		t.Fatal("data0")
+	}
+}
+
+func TestChangeProp8Packet(t *testing.T) {
+	rec := &recordConn{}
+	xc := &xConn{c: rec, byteOrder: binary.LittleEndian}
+	if err := xc.changeProp8(1, 2, 3, []byte("worldr")); err != nil {
+		t.Fatal(err)
+	}
+	if rec.buf[0] != xOpChangeProperty || rec.buf[16] != 8 {
+		t.Fatalf("%x", rec.buf)
+	}
+	n := binary.LittleEndian.Uint32(rec.buf[20:])
+	if n != 6 || string(rec.buf[24:30]) != "worldr" {
+		t.Fatalf("n=%d %q", n, rec.buf[24:])
+	}
+}
+
+func TestCreateWindowPacket(t *testing.T) {
+	rec := &recordConn{}
+	xc := &xConn{c: rec, byteOrder: binary.LittleEndian, ridBase: 0x200000, ridMask: 0xfffff}
+	id, err := xc.createInputOutput(1, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != 0x200000 || rec.buf[0] != xOpCreateWindow {
+		t.Fatalf("id=%x %x", id, rec.buf)
+	}
+	if binary.LittleEndian.Uint16(rec.buf[22:]) != xClassInputOut {
+		t.Fatal("class")
+	}
+}
+
 func TestMapWindowPacket(t *testing.T) {
 	rec := &recordConn{}
 	xc := &xConn{c: rec, byteOrder: binary.LittleEndian}

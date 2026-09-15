@@ -3,6 +3,15 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.11-dev — XWayland EWMH / focus / stacking
+
+- Tiny XWM now advertises `_NET_SUPPORTED` / `_NET_SUPPORTING_WM_CHECK` (`worldr`) plus `_NET_ACTIVE_WINDOW`, `_NET_CLIENT_LIST`, `_NET_WM_WINDOW_TYPE`, `_NET_CLOSE_WINDOW`.
+- `WM_NAME` / `_NET_WM_NAME` / `WM_CLASS` map onto worldr actor title and app id (no more default `X11` once the client sets them).
+- Click-to-focus raises the actor and sends `SetInputFocus` + `WM_TAKE_FOCUS` when listed. `_NET_ACTIVE_WINDOW` / ConfigureRequest stack-Above raise in the scene.
+- `WM_DELETE_WINDOW` is sent for `_NET_CLOSE_WINDOW` when the client listed the protocol.
+- Override-redirect, `WM_TRANSIENT_FOR`, and popup-ish window types skip SSD and keep the X11 position (xterm/xcalc menus).
+- Not a full ICCCM/EWMH WM (no reparenting, pager, struts, or IME).
+
 ## 0.9.10-dev — dmabuf GPU sample (no scanout bypass)
 
 - `zwp_linux_dmabuf_v1` still advertised. LINEAR mmap and Vulkan readback remain the CPU fallback (nested, drm, ABGR, theater).
