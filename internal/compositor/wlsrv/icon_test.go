@@ -140,6 +140,66 @@ func TestAdvertiseToplevelIconAndSizes(t *testing.T) {
 	}
 }
 
+func TestSetIconNullClearsPending(t *testing.T) {
+	actor := &engine.Actor{}
+	snap := &iconSnap{pix: []byte{0x11, 0x22, 0x33, 0xff}, w: 1, h: 1, stride: 4}
+	snap.apply(actor)
+	if !actor.HasIcon() {
+		t.Fatal("setup")
+	}
+	surf := &surface{actor: actor}
+	xs := &xdgSurface{id: 6, surf: surf}
+	top := &xdgToplevel{id: 7, xdg: xs, icon: snap}
+	xs.top = top
+	c := &Client{objs: map[uint32]*object{
+		7: {id: 7, kind: kindXdgToplevel, xdgT: top},
+	}}
+	p := wayland.PutU32(nil, 7)
+	p = wayland.PutU32(p, 0)
+	if err := c.reqIconMgr(nil, 2, wayland.NewCursor(p, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if top.icon != nil {
+		t.Fatal("set_icon null did not clear pending icon")
+	}
+	if actor.HasIcon() {
+		t.Fatal("actor icon not cleared")
+	}
+}
+
+func TestSetIconNullBeforeToplevelStashesUnset(t *testing.T) {
+	c := &Client{objs: map[uint32]*object{}, srv: &Server{ScreenW: 800, ScreenH: 600}}
+	p := wayland.PutU32(nil, 7)
+	p = wayland.PutU32(p, 0)
+	if err := c.reqIconMgr(nil, 2, wayland.NewCursor(p, nil)); err != nil {
+		t.Fatal(err)
+	}
+	pending, ok := c.pendingIcon[7]
+	if !ok || pending.snap != nil {
+		t.Fatalf("want stashed unset, got %+v ok=%v", pending, ok)
+	}
+	actor := &engine.Actor{}
+	snap := &iconSnap{pix: []byte{0x11, 0x22, 0x33, 0xff}, w: 1, h: 1, stride: 4}
+	snap.apply(actor)
+	surf := &surface{actor: actor}
+	xs := &xdgSurface{id: 6, surf: surf}
+	c.objs[6] = &object{id: 6, kind: kindXdgSurface, xdgS: xs}
+	p = wayland.PutU32(nil, 7)
+	if err := c.reqXdgSurface(c.objs[6], 1, wayland.NewCursor(p, nil)); err != nil {
+		t.Fatal(err)
+	}
+	top := c.objs[7]
+	if top == nil || top.xdgT == nil || top.xdgT.icon != nil {
+		t.Fatal("pending null must apply on get_toplevel")
+	}
+	if actor.HasIcon() {
+		t.Fatal("actor icon not cleared on get_toplevel")
+	}
+	if _, ok := c.pendingIcon[7]; ok {
+		t.Fatal("pending should be consumed")
+	}
+}
+
 func TestSetIconNullClearsActor(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 	scene := engine.NewScene()
@@ -207,6 +267,8 @@ func TestSetIconNullClearsActor(t *testing.T) {
 		xsID   = 6
 		topID  = 7
 		mgrID  = 8
+		sync1  = 9
+		sync2  = 10
 	)
 	if err := wr.Send(2, 0, bindPayload(globalCompositor, "wl_compositor", 4, compID), nil); err != nil {
 		t.Fatal(err)
@@ -228,25 +290,62 @@ func TestSetIconNullClearsActor(t *testing.T) {
 	if err := wr.Send(2, 0, bindPayload(iconName, "xdg_toplevel_icon_manager_v1", 1, mgrID), nil); err != nil {
 		t.Fatal(err)
 	}
-	// set_icon(toplevel, null)
-	p = wayland.PutU32(nil, topID)
-	p = wayland.PutU32(p, 0)
-	if err := wr.Send(mgrID, 2, p, nil); err != nil {
-		t.Fatal(err)
+	if !waitDisplaySync(t, wr, c, rd, sync1) {
+		t.Fatal("sync after get_toplevel")
 	}
 
-	deadline = time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		s.Dispatch()
-		time.Sleep(2 * time.Millisecond)
-		s.mu.Lock()
-		cl := append([]*Client(nil), s.clients...)
-		s.mu.Unlock()
-		for _, cln := range cl {
-			if o := cln.objs[topID]; o != nil && o.xdgT != nil && o.xdgT.icon == nil {
-				return
-			}
+	if !plantToplevelIcon(s, topID, &iconSnap{pix: []byte{0x11, 0x22, 0x33, 0xff}, w: 1, h: 1, stride: 4}) {
+		t.Fatal("toplevel missing after display.sync")
+	}
+
+	p = wayland.PutU32(nil, topID)
+	p = wayland.PutU32(p, 0)
+	if err := wr.Send(mgrID, 2, p, nil); err != nil { // set_icon null
+		t.Fatal(err)
+	}
+	if !waitDisplaySync(t, wr, c, rd, sync2) {
+		t.Fatal("sync after set_icon null")
+	}
+
+	s.mu.Lock()
+	cl := append([]*Client(nil), s.clients...)
+	s.mu.Unlock()
+	for _, cln := range cl {
+		if o := cln.objs[topID]; o != nil && o.xdgT != nil && o.xdgT.icon == nil {
+			return
 		}
 	}
 	t.Fatal("set_icon null did not clear pending icon")
+}
+
+func waitDisplaySync(t *testing.T, wr *wayland.Writer, c *net.UnixConn, rd *wayland.Reader, cbID uint32) bool {
+	t.Helper()
+	if err := wr.Send(1, 0, wayland.PutU32(nil, cbID), nil); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = c.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+		msg, err := rd.Next()
+		if err != nil {
+			continue
+		}
+		if msg.Object == cbID && msg.Opcode == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func plantToplevelIcon(s *Server, topID uint32, snap *iconSnap) bool {
+	s.mu.Lock()
+	cl := append([]*Client(nil), s.clients...)
+	s.mu.Unlock()
+	for _, cln := range cl {
+		if o := cln.objs[topID]; o != nil && o.xdgT != nil {
+			o.xdgT.icon = snap
+			return true
+		}
+	}
+	return false
 }

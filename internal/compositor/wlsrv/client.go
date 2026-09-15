@@ -175,6 +175,12 @@ type Client struct {
 	dataDev  uint32
 	primDev  uint32
 	serverID uint32
+	// pendingIcon holds set_icon(snap|null) that arrived before get_toplevel.
+	pendingIcon map[uint32]iconPending
+}
+
+type iconPending struct {
+	snap *iconSnap
 }
 
 func newClient(s *Server, conn *net.UnixConn) *Client {
@@ -862,6 +868,13 @@ func (c *Client) reqXdgSurface(o *object, op uint16, cur *wayland.Cursor) error 
 			return err
 		}
 		t := &xdgToplevel{id: id, xdg: xs}
+		if p, ok := c.pendingIcon[id]; ok {
+			t.icon = p.snap
+			delete(c.pendingIcon, id)
+			if xs.surf != nil {
+				p.snap.apply(xs.surf.actor)
+			}
+		}
 		xs.top = t
 		c.objs[id] = &object{id: id, kind: kindXdgToplevel, xdgT: t}
 		return c.configure(xs)
@@ -1036,6 +1049,9 @@ func (c *Client) reqViewport(o *object, op uint16, cur *wayland.Cursor) error {
 }
 
 func (c *Client) send(object uint32, opcode uint16, payload []byte, fds []int) error {
+	if c == nil || c.wr == nil {
+		return nil
+	}
 	if payload == nil {
 		payload = []byte{}
 	}

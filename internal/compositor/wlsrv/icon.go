@@ -106,15 +106,20 @@ func (c *Client) reqIconMgr(_ *object, op uint16, cur *wayland.Cursor) error {
 		if err != nil {
 			return err
 		}
-		to := c.objs[tid]
-		if to == nil || to.xdgT == nil {
-			return nil
-		}
 		var snap *iconSnap
 		if iid != 0 {
 			if io := c.objs[iid]; io != nil && io.icon != nil {
 				snap = pickIcon(io.icon.snaps, IconSize)
 			}
+		}
+		to := c.objs[tid]
+		if to == nil || to.xdgT == nil {
+			// get_toplevel not processed yet — keep the last set/unset.
+			if c.pendingIcon == nil {
+				c.pendingIcon = map[uint32]iconPending{}
+			}
+			c.pendingIcon[tid] = iconPending{snap: snap}
+			return nil
 		}
 		to.xdgT.icon = snap
 		if to.xdgT.xdg != nil && to.xdgT.xdg.surf != nil {
