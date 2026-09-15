@@ -56,7 +56,7 @@ type Window struct {
 	hostInside                           bool
 	hostOffers                           map[uint32]*hostOffer
 	ownHost                              clipbridge.HostOwn
-	onClipImport                         func(primary bool, text []byte)
+	onClipImport                         func(primary bool, mime string, data []byte)
 	onClipFulfill                        func(primary bool, mime string, fd int)
 
 	configured bool

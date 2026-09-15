@@ -30,7 +30,8 @@ type dataSource struct {
 	client    *Client
 	mimes     []string
 	primary   bool
-	hostBytes []byte // nest import: transfer writes these instead of send
+	hostBytes []byte            // nest text import (compat)
+	hostParts map[string][]byte // nest import by MIME (text + image)
 }
 
 type dataOffer struct {
@@ -276,9 +277,61 @@ func (s *Server) setSelection(primary bool, from *Client, src *dataSource) {
 	for _, c := range cl {
 		c.sendSelection(primary)
 	}
-	if s.clipExport != nil && src != nil && len(src.hostBytes) == 0 && clipbridge.PickPlainMime(src.mimes) != "" {
+	if s.clipExport != nil && src != nil && !src.isHost() && clipbridge.Bridgeable(src.mimes) {
 		s.clipExport(primary, src.mimes)
 	}
+}
+
+func (src *dataSource) isHost() bool {
+	return src != nil && (len(src.hostBytes) > 0 || len(src.hostParts) > 0)
+}
+
+func (src *dataSource) addHost(mime string, data []byte) {
+	if src == nil {
+		return
+	}
+	if src.hostParts == nil {
+		src.hostParts = map[string][]byte{}
+	}
+	src.hostParts[mime] = data
+	if clipbridge.IsPlainText(mime) {
+		src.hostBytes = data
+		for _, m := range clipbridge.TextMimes() {
+			if matchMime(src.mimes, m) == "" {
+				src.mimes = append(src.mimes, m)
+			}
+		}
+		return
+	}
+	if matchMime(src.mimes, mime) == "" {
+		src.mimes = append(src.mimes, mime)
+	}
+}
+
+func (src *dataSource) hostPayload(mime string) []byte {
+	if src == nil {
+		return nil
+	}
+	if src.hostParts != nil {
+		if b, ok := src.hostParts[mime]; ok {
+			return b
+		}
+		if use := matchMime(keysOf(src.hostParts), mime); use != "" {
+			return src.hostParts[use]
+		}
+	}
+	if len(src.hostBytes) > 0 && (mime == "" || isPlainText(mime)) {
+		return src.hostBytes
+	}
+	return nil
+}
+
+func keysOf(m map[string][]byte) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 // SetClipExport is called when a worldr client set_selection of text (not a host import).
@@ -291,21 +344,43 @@ func (s *Server) SetClipExport(fn func(primary bool, mimes []string)) {
 
 // ImportHostText installs a host-backed text selection (nest Plasma → worldr).
 func (s *Server) ImportHostText(primary bool, text []byte) {
+	s.ImportHostPayload(primary, mimeTextPlain, text)
+}
+
+// ImportHostPayload installs or merges a host-backed MIME (text or image).
+func (s *Server) ImportHostPayload(primary bool, mime string, data []byte) {
 	if s == nil {
 		return
 	}
-	if len(text) == 0 {
+	if len(data) == 0 && clipbridge.IsPlainText(mime) {
 		s.setSelection(primary, nil, nil)
 		return
 	}
-	if len(text) > clipbridge.MaxTextBytes {
-		text = text[:clipbridge.MaxTextBytes]
+	if len(data) == 0 {
+		return
 	}
-	src := &dataSource{
-		mimes:     clipbridge.TextMimes(),
-		primary:   primary,
-		hostBytes: append([]byte(nil), text...),
+	capn := clipbridge.CapFor(mime)
+	if len(data) > capn {
+		data = data[:capn]
 	}
+	data = append([]byte(nil), data...)
+	s.mu.Lock()
+	cur := s.clip
+	if primary {
+		cur = s.prim
+	}
+	if cur != nil && cur.source != nil && cur.src == nil {
+		cur.source.addHost(mime, data)
+		cl := append([]*Client(nil), s.clients...)
+		s.mu.Unlock()
+		for _, c := range cl {
+			c.sendSelection(primary)
+		}
+		return
+	}
+	s.mu.Unlock()
+	src := &dataSource{primary: primary}
+	src.addHost(mime, data)
 	s.setSelection(primary, nil, src)
 }
 
@@ -375,8 +450,8 @@ func (s *Server) transfer(offer *dataOffer, mime string, fd int) {
 		return
 	}
 	src := offer.source
-	if len(src.hostBytes) > 0 {
-		clipbridge.WriteText(fd, src.hostBytes)
+	if b := src.hostPayload(mime); len(b) > 0 {
+		clipbridge.WriteBytes(fd, b, clipbridge.CapFor(mime))
 		return
 	}
 	if src.client == nil {

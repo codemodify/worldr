@@ -85,8 +85,8 @@ func (w *Window) HostPrimaryBound() bool {
 	return w.primmgr != 0 && w.primDev != 0
 }
 
-// SetClipImport receives text the host just offered (Plasma → worldr).
-func (w *Window) SetClipImport(fn func(primary bool, text []byte)) {
+// SetClipImport receives a host MIME payload (Plasma → worldr).
+func (w *Window) SetClipImport(fn func(primary bool, mime string, data []byte)) {
 	if w == nil {
 		return
 	}
@@ -105,24 +105,26 @@ func (w *Window) SetClipFulfill(fn func(primary bool, mime string, fd int)) {
 	w.mu.Unlock()
 }
 
-// OfferHostText publishes worldr’s text selection on the host data device.
+// OfferHostText publishes worldr’s selection on the host data device
+// (text/plain and image/png when the source offered them).
 func (w *Window) OfferHostText(primary bool, mimes []string) {
 	if w == nil {
 		return
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if clipbridge.PickPlainMime(mimes) == "" {
+	offer := clipbridge.HostOfferMimes(mimes)
+	if len(offer) == 0 {
 		return
 	}
 	if primary {
-		w.offerHostLocked(true, w.primmgr, w.primDev, primMgrCreateSrc, primSrcOffer, primSrcDestroy, primDevSetSel, &w.hostPrimSrc)
+		w.offerHostLocked(true, w.primmgr, w.primDev, primMgrCreateSrc, primSrcOffer, primSrcDestroy, primDevSetSel, &w.hostPrimSrc, offer)
 		return
 	}
-	w.offerHostLocked(false, w.ddmgr, w.dataDev, wlDataMgrCreateSrc, wlDataSrcOffer, wlDataSrcDestroy, wlDataDevSetSel, &w.hostSrc)
+	w.offerHostLocked(false, w.ddmgr, w.dataDev, wlDataMgrCreateSrc, wlDataSrcOffer, wlDataSrcDestroy, wlDataDevSetSel, &w.hostSrc, offer)
 }
 
-func (w *Window) offerHostLocked(primary bool, mgr, dev uint32, createOp, offerOp, destroyOp, setOp uint16, srcID *uint32) {
+func (w *Window) offerHostLocked(primary bool, mgr, dev uint32, createOp, offerOp, destroyOp, setOp uint16, srcID *uint32, mimes []string) {
 	if mgr == 0 || dev == 0 {
 		return
 	}
@@ -135,7 +137,7 @@ func (w *Window) offerHostLocked(primary bool, mgr, dev uint32, createOp, offerO
 	if err := w.send(mgr, createOp, wayland.PutU32(nil, id), nil); err != nil {
 		return
 	}
-	for _, m := range clipbridge.TextMimes() {
+	for _, m := range mimes {
 		_ = w.send(id, offerOp, wayland.PutString(nil, m), nil)
 	}
 	p := wayland.PutU32(nil, id)
@@ -145,7 +147,7 @@ func (w *Window) offerHostLocked(primary bool, mgr, dev uint32, createOp, offerO
 	}
 	*srcID = id
 	w.ownHost.Set(primary, true)
-	logClient("offered text to host primary=%v source=%d", primary, id)
+	logClient("offered clipboard to host primary=%v source=%d mimes=%v", primary, id, mimes)
 }
 
 func (w *Window) handleClip(msg wayland.Message) error {
@@ -236,10 +238,23 @@ func (w *Window) importHostSelection(primary bool, offerID uint32) {
 	if o == nil {
 		return
 	}
-	mime := clipbridge.PickPlainMime(o.mimes)
-	if mime == "" || w.wr == nil {
+	if w.wr == nil {
 		return
 	}
+	var recvs []string
+	if m := clipbridge.PickImageMime(o.mimes); m != "" {
+		recvs = append(recvs, m)
+	}
+	if m := clipbridge.PickPlainMime(o.mimes); m != "" {
+		recvs = append(recvs, m)
+	}
+	fn := w.onClipImport
+	for _, mime := range recvs {
+		w.receiveHost(offerID, primary, mime, fn)
+	}
+}
+
+func (w *Window) receiveHost(offerID uint32, primary bool, mime string, fn func(bool, string, []byte)) {
 	recvOp := wlDataOfferRecv
 	if primary {
 		recvOp = primOfferRecv
@@ -260,7 +275,6 @@ func (w *Window) importHostSelection(primary bool, offerID uint32) {
 		_ = r.Close()
 		return
 	}
-	fn := w.onClipImport
 	go func() {
 		defer r.Close()
 		_ = r.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -268,9 +282,10 @@ func (w *Window) importHostSelection(primary bool, offerID uint32) {
 		if err != nil || fn == nil {
 			return
 		}
-		if len(b) > clipbridge.MaxTextBytes {
-			b = b[:clipbridge.MaxTextBytes]
+		capn := clipbridge.CapFor(mime)
+		if len(b) > capn {
+			b = b[:capn]
 		}
-		fn(primary, b)
+		fn(primary, mime, b)
 	}()
 }

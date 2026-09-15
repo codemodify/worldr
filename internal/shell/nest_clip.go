@@ -12,8 +12,8 @@ func wireHostClipboard(win *wlclient.Window, srv *wlsrv.Server, stdout io.Writer
 	if win == nil || srv == nil {
 		return
 	}
-	win.SetClipImport(func(primary bool, text []byte) {
-		srv.ImportHostText(primary, text)
+	win.SetClipImport(func(primary bool, mime string, data []byte) {
+		srv.ImportHostPayload(primary, mime, data)
 	})
 	win.SetClipFulfill(func(primary bool, mime string, fd int) {
 		srv.SendSelectionTo(primary, mime, fd)
@@ -22,7 +22,7 @@ func wireHostClipboard(win *wlclient.Window, srv *wlsrv.Server, stdout io.Writer
 		win.OfferHostText(primary, mimes)
 	})
 	if win.HostClipBound() {
-		msg := "clipboard: nest host bridge on (Plasma ↔ worldr text/plain)"
+		msg := "clipboard: nest host bridge on (Plasma ↔ worldr text/plain + image/png)"
 		if win.HostPrimaryBound() {
 			msg += "; primary too"
 		}

@@ -100,6 +100,68 @@ func TestSendSelectionToHostBytes(t *testing.T) {
 	}
 }
 
+func TestImportHostPNGOffersToClient(t *testing.T) {
+	_, _, _, dst, dstRD, dstConn := newClipboardPair(t)
+	dst.dataDev = 31
+	dst.objs[31] = &object{id: 31, kind: kindDataDevice}
+	png := []byte{0x89, 'P', 'N', 'G', 9, 8, 7}
+	dst.srv.ImportHostPayload(false, "image/png", png)
+	got := drainDataDev(t, dstConn, dstRD, 31)
+	if !got.mimes["image/png"] {
+		t.Fatalf("mimes %v", got.mimes)
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	wfd, err := syscall.Dup(int(w.Fd()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	if err := dst.reqDataOffer(dst.objs[got.offerID], 1, wayland.NewCursor(wayland.PutString(nil, "image/png"), []int{wfd})); err != nil {
+		t.Fatal(err)
+	}
+	if string(readAll(t, r)) != string(png) {
+		t.Fatal("host png paste")
+	}
+}
+
+func TestWorldrSetSelectionExportsPNG(t *testing.T) {
+	src, _, _, _, _, _ := newClipboardPair(t)
+	src.objs[20] = &object{id: 20, kind: kindDataSource, src: &dataSource{id: 20, client: src}}
+	src.dataDev = 21
+	src.objs[21] = &object{id: 21, kind: kindDataDevice}
+	_ = src.reqDataSource(src.objs[20], 0, wayland.NewCursor(wayland.PutString(nil, "image/png"), nil))
+	var got []string
+	src.srv.SetClipExport(func(primary bool, mimes []string) {
+		got = append([]string(nil), mimes...)
+	})
+	p := wayland.PutU32(nil, 20)
+	p = wayland.PutU32(p, 1)
+	if err := src.reqDataDevice(src.objs[21], 1, wayland.NewCursor(p, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if clipbridge.PickImageMime(got) != "image/png" {
+		t.Fatalf("export %v", got)
+	}
+}
+
+func TestImportHostTextThenPNGMerges(t *testing.T) {
+	scene := engine.NewScene()
+	srv := &Server{Scene: scene, ScreenW: 800, ScreenH: 600}
+	srv.ImportHostText(false, []byte("abc"))
+	srv.ImportHostPayload(false, "image/png", []byte{1, 2, 3})
+	if srv.clip == nil || srv.clip.source == nil {
+		t.Fatal("sel")
+	}
+	src := srv.clip.source
+	if string(src.hostPayload("text/plain")) != "abc" || string(src.hostPayload("image/png")) != "\x01\x02\x03" {
+		t.Fatalf("merge %+v %+v", src.hostBytes, src.hostParts)
+	}
+}
+
 func TestImportHostTextPrimary(t *testing.T) {
 	_, _, _, dst, _, _ := newClipboardPair(t)
 	dst.primDev = 41
