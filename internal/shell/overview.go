@@ -135,9 +135,6 @@ func handleOverviewKeys(ov *Overview, ptr *input.Pointer, scene *engine.Scene, n
 			consumed[k.Code] = true
 			continue
 		}
-		if !stealNav && !ov.Want && isQuit(k.Code) {
-			ptr.Quit = true
-		}
 	}
 	return consumed
 }

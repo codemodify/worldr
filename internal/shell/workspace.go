@@ -51,3 +51,15 @@ func desktopActors(scene *engine.Scene) []*engine.Actor {
 	}
 	return scene.ActorsOn(scene.ActiveWorkspace())
 }
+
+// desktopHasClient is true if the active desktop has a mapped actor.
+// Stricter than "focused only": bare Esc must not quit while any client
+// is on this desktop (focus can lag a frame after spawn).
+func desktopHasClient(scene *engine.Scene) bool {
+	for _, a := range desktopActors(scene) {
+		if a != nil {
+			return true
+		}
+	}
+	return false
+}
