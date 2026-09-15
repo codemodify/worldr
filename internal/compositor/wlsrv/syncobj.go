@@ -138,19 +138,28 @@ func (c *Client) applySyncobjAcquire(s *surface) {
 	}
 	f := s.sync.pendingAcq
 	s.sync.pendingAcq = syncobj.Fence{}
-	// Vulkan timeline wait (vkWaitSemaphores) when the importer can;
-	// DRM ioctl fallback. Failure → implicit sync (Intel).
-	var w syncobj.Waiter
-	if c.srv != nil {
-		if tw, ok := c.srv.Import.(syncobj.Waiter); ok {
-			w = tw
-		}
-	}
-	if err := syncobj.WaitAcquire(f, 100*time.Millisecond, w); err != nil && c.srv != nil && c.srv.log != nil {
+	// Vulkan timeline wait (vkWaitSemaphores) when a waiter is attached
+	// (Server.Waiter, else Import). DRM ioctl fallback. Failure → implicit sync.
+	if err := syncobj.WaitAcquire(f, 100*time.Millisecond, commitWaiter(c.srv)); err != nil && c.srv != nil && c.srv.log != nil {
 		c.srv.log.Printf("drm-syncobj acquire wait fallback (implicit sync): %v", err)
 	}
 	s.sync.readyAcq.CloseFD()
 	s.sync.readyAcq = f
+}
+
+// commitWaiter prefers Server.Waiter (Vulkan session without Import) then
+// an Import that implements the timeline wait. Nil → DRM ioctl only.
+func commitWaiter(s *Server) syncobj.Waiter {
+	if s == nil {
+		return nil
+	}
+	if s.Waiter != nil {
+		return s.Waiter
+	}
+	if tw, ok := s.Import.(syncobj.Waiter); ok {
+		return tw
+	}
+	return nil
 }
 
 func (c *Client) applySyncobjRelease(s *surface) {
