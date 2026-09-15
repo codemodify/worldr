@@ -18,6 +18,8 @@ type Actor struct {
 	Title         string
 	AppID         string
 	Focused       bool
+	NoChrome      bool      // popup / subsurface — no SSD title or frame
+	Owner         *Actor    // parent toplevel for transients
 	Born          time.Time // map-in start (zero = already settled)
 	UnmapAt       time.Time // map-out start (zero = mapped)
 	FocusPulse    time.Time // last focus-gain
@@ -120,28 +122,50 @@ func (s *Scene) HasActors() bool {
 	return len(s.actors) > 0
 }
 
+// HitTop returns the top-most actor whose frame contains (px,py).
+// NoChrome actors use the buffer rect only (no title/border).
+func (s *Scene) HitTop(px, py, titleH, border int) *Actor {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.hitTopLocked(px, py, titleH, border)
+}
+
+func (s *Scene) hitTopLocked(px, py, titleH, border int) *Actor {
+	for i := len(s.actors) - 1; i >= 0; i-- {
+		a := s.actors[i]
+		if a == nil || !a.UnmapAt.IsZero() || a.Workspace != s.wsActive {
+			continue
+		}
+		l, t, r, b := actorHitBox(a, titleH, border)
+		if px >= l && px < r && py >= t && py < b {
+			return a
+		}
+	}
+	return nil
+}
+
+func actorHitBox(a *Actor, titleH, border int) (l, t, r, b int) {
+	if a.NoChrome {
+		return a.X, a.Y, a.X + a.Width, a.Y + a.Height
+	}
+	return a.X - border, a.Y - titleH, a.X + a.Width + border, a.Y + a.Height + border
+}
+
 // FocusAt marks the top-most actor containing (px,py) focused.
+// A NoChrome hit focuses its Owner toplevel (menus do not steal window focus).
 func (s *Scene) FocusAt(px, py int, titleH, border int) *Actor {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var hit, prev *Actor
+	var prev *Actor
 	for _, a := range s.actors {
 		if a.Focused {
 			prev = a
 			break
 		}
 	}
-	for i := len(s.actors) - 1; i >= 0; i-- {
-		a := s.actors[i]
-		if !a.UnmapAt.IsZero() || a.Workspace != s.wsActive {
-			continue
-		}
-		l, t := a.X-border, a.Y-titleH
-		r, b := a.X+a.Width+border, a.Y+a.Height+border
-		if px >= l && px < r && py >= t && py < b {
-			hit = a
-			break
-		}
+	hit := s.hitTopLocked(px, py, titleH, border)
+	if hit != nil && hit.NoChrome && hit.Owner != nil {
+		hit = hit.Owner
 	}
 	for _, a := range s.actors {
 		a.Focused = a == hit
@@ -150,6 +174,22 @@ func (s *Scene) FocusAt(px, py int, titleH, border int) *Actor {
 		hit.FocusPulse = time.Now()
 	}
 	return hit
+}
+
+// Raise moves a to the top of the stacking order (drawn last).
+func (s *Scene) Raise(a *Actor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if a == nil {
+		return
+	}
+	dst := s.actors[:0]
+	for _, x := range s.actors {
+		if x != a {
+			dst = append(dst, x)
+		}
+	}
+	s.actors = append(dst, a)
 }
 
 // FocusActor marks a as the focused window (expose pick).
@@ -174,7 +214,7 @@ func (s *Scene) PlaceNew(a *Actor, screenW, screenH, border, titleH int) {
 	defer s.mu.Unlock()
 	n := 0
 	for _, x := range s.actors {
-		if x != nil && x.Workspace == s.wsActive {
+		if x != nil && x.Workspace == s.wsActive && !x.NoChrome {
 			n++
 		}
 	}

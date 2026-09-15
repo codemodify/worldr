@@ -81,6 +81,24 @@ func TestAddAssignsActiveWorkspace(t *testing.T) {
 	}
 }
 
+func TestFocusAtPopupFocusesOwner(t *testing.T) {
+	s := NewScene()
+	parent := &Actor{X: 10, Y: 10, Width: 40, Height: 40}
+	s.Add(parent)
+	pop := &Actor{X: 80, Y: 12, Width: 20, Height: 20, NoChrome: true, Owner: parent}
+	s.Add(pop)
+	s.Raise(pop)
+	if s.FocusAt(85, 15, 28, 6) != parent {
+		t.Fatal("popup click focuses owner")
+	}
+	if !parent.Focused || pop.Focused {
+		t.Fatal("only owner focused")
+	}
+	if s.HitTop(85, 15, 28, 6) != pop {
+		t.Fatal("HitTop is the popup")
+	}
+}
+
 func TestFocusAtIgnoresOtherDesktop(t *testing.T) {
 	s := NewScene()
 	a := &Actor{X: 10, Y: 10, Width: 20, Height: 20}

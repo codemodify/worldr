@@ -134,6 +134,35 @@ func (c *Client) ownsFocusedSurface() bool {
 	return false
 }
 
+func (c *Client) surfaceAt(sx, sy int) *surface {
+	if c.srv == nil || c.srv.Scene == nil {
+		return c.focusedSurface()
+	}
+	ws := c.srv.Scene.ActiveWorkspace()
+	actors := c.srv.Scene.Actors()
+	z := make(map[*engine.Actor]int, len(actors))
+	for i, a := range actors {
+		z[a] = i
+	}
+	var best *surface
+	bestZ := -1
+	for _, o := range c.objs {
+		s := o.surf
+		if s == nil || s.actor == nil || s.actor.Workspace != ws {
+			continue
+		}
+		a := s.actor
+		if sx < a.X || sy < a.Y || sx >= a.X+a.Width || sy >= a.Y+a.Height {
+			continue
+		}
+		if zi, ok := z[a]; ok && zi >= bestZ {
+			best = s
+			bestZ = zi
+		}
+	}
+	return best
+}
+
 func (c *Client) pointerMotion(sx, sy int) {
 	c.ptrX, c.ptrY = sx, sy
 	if c.ptrID == 0 {
@@ -141,7 +170,7 @@ func (c *Client) pointerMotion(sx, sy int) {
 	}
 	s := c.grabbedSurface()
 	if s == nil {
-		s = c.focusedSurface()
+		s = c.surfaceAt(sx, sy)
 	}
 	if s == nil || s.actor == nil {
 		if c.entered != 0 {
@@ -160,7 +189,7 @@ func (c *Client) pointerMotion(sx, sy int) {
 		p = wayland.PutI32(p, int32(lx*256)) // wl_fixed
 		p = wayland.PutI32(p, int32(ly*256))
 		_ = c.send(c.ptrID, wlPointerEnter, p, nil)
-		if c.kbdSurf != s.id {
+		if !s.skipKeyboard() && c.kbdSurf != s.id {
 			if c.kbdSurf != 0 {
 				c.keyboardLeave(c.kbdSurf)
 			}
@@ -179,6 +208,10 @@ func (c *Client) pointerMotion(sx, sy int) {
 
 func (c *Client) pointerButton(sx, sy int, pressed bool) {
 	c.pointerMotion(sx, sy)
+	if pressed {
+		c.dismissPopupsIfOutside(sx, sy)
+		c.pointerMotion(sx, sy)
+	}
 	if c.ptrID == 0 {
 		return
 	}

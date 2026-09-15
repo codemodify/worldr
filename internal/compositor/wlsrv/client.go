@@ -40,6 +40,7 @@ const (
 	kindXdgWm
 	kindXdgSurface
 	kindXdgToplevel
+	kindXdgPopup
 	kindSeat
 	kindPointer
 	kindKeyboard
@@ -77,6 +78,9 @@ type object struct {
 	surf *surface
 	xdgS *xdgSurface
 	xdgT *xdgToplevel
+	xdgP *xdgPopup
+	pos  *positioner
+	sub  *subsurface
 	dma  *dmaBuf
 }
 
@@ -116,6 +120,7 @@ type surface struct {
 	attached *object
 	actor    *engine.Actor
 	xdg      *xdgSurface
+	sub      *subsurface
 	sx, sy   int32
 	destW    int
 	destH    int
@@ -126,9 +131,13 @@ type xdgSurface struct {
 	id      uint32
 	surf    *surface
 	top     *xdgToplevel
+	pop     *xdgPopup
 	serial  uint32
 	acked   uint32
 	pending bool
+	geoX    int32
+	geoY    int32
+	hasGeo  bool
 }
 
 type xdgToplevel struct {
@@ -269,6 +278,14 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqXdgSurface(o, msg.Opcode, cur)
 	case kindXdgToplevel:
 		return c.reqXdgToplevel(o, msg.Opcode, cur)
+	case kindXdgPopup:
+		return c.reqXdgPopup(o, msg.Opcode, cur)
+	case kindPositioner:
+		return c.reqPositioner(o, msg.Opcode, cur)
+	case kindSubcomp:
+		return c.reqSubcomp(o, msg.Opcode, cur)
+	case kindSubsurface:
+		return c.reqSubsurface(o, msg.Opcode, cur)
 	case kindSeat:
 		return c.reqSeat(o, msg.Opcode, cur)
 	case kindLinuxDmabuf:
@@ -283,12 +300,6 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqViewporter(o, msg.Opcode, cur)
 	case kindViewport:
 		return c.reqViewport(o, msg.Opcode, cur)
-	case kindSubcomp:
-		id, err := cur.U32()
-		if err == nil {
-			c.objs[id] = &object{id: id, kind: kindSubsurface}
-		}
-		return nil
 	case kindDataDeviceManager:
 		id, err := cur.U32()
 		if err != nil {
@@ -318,7 +329,7 @@ func (c *Client) dispatch(msg wayland.Message) error {
 		return c.reqFracScaleMgr(o, msg.Opcode, cur)
 	case kindFracScale:
 		return c.reqFracScale(o, msg.Opcode, cur)
-	case kindKeyboard, kindOutput, kindDataDevice, kindPositioner, kindCallback, kindDmaFeedback, kindSubsurface, kindPrimSource:
+	case kindKeyboard, kindOutput, kindDataDevice, kindCallback, kindDmaFeedback, kindPrimSource:
 		return nil
 	default:
 		return nil
@@ -586,6 +597,10 @@ func (c *Client) reqSurface(o *object, op uint16, cur *wayland.Cursor) error {
 		if c.entered == o.id {
 			c.pointerLeaveCurrent()
 		}
+		if s.xdg != nil && s.xdg.pop != nil {
+			c.popupDone(s.xdg.pop)
+		}
+		c.unmapSubsOf(s)
 		if s.actor != nil {
 			c.srv.Scene.Remove(s.actor)
 		}
@@ -627,10 +642,30 @@ func (c *Client) commit(s *surface) {
 			c.srv.log.Printf("dmabuf resolve: %v", err)
 		}
 	}
-	xdgReady := s.xdg != nil && s.xdg.top != nil && s.xdg.acked != 0
-	if s.attached != nil && (xdgReady || s.xwayland) {
+	if s.sub != nil && s.sub.sync {
+		s.sub.cached = s.attached
+		return
+	}
+	if s.attached != nil && c.surfaceReady(s) {
 		c.mapSurface(s)
 	}
+	c.applyChildSubs(s)
+}
+
+func (c *Client) surfaceReady(s *surface) bool {
+	if s == nil || s.attached == nil {
+		return false
+	}
+	if s.xwayland {
+		return true
+	}
+	if s.sub != nil {
+		return s.sub.parent != nil
+	}
+	if s.xdg == nil || s.xdg.acked == 0 {
+		return false
+	}
+	return s.xdg.top != nil || s.xdg.pop != nil
 }
 
 func (c *Client) mapSurface(s *surface) {
@@ -676,15 +711,26 @@ func (c *Client) mapSurface(s *surface) {
 	if s.destW > 0 && s.destH > 0 {
 		w, h = s.destW, s.destH
 	}
+	child := c.isChildSurface(s)
 	if s.actor == nil {
-		s.actor = &engine.Actor{}
-		c.srv.Scene.PlaceNew(s.actor, c.srv.ScreenW, c.srv.ScreenH, decorations.Border, decorations.TitleH)
-		c.srv.Scene.Add(s.actor)
+		s.actor = &engine.Actor{NoChrome: child}
+		if child {
+			c.placeChild(s)
+			c.srv.Scene.Add(s.actor)
+			c.srv.Scene.Raise(s.actor)
+		} else {
+			c.srv.Scene.PlaceNew(s.actor, c.srv.ScreenW, c.srv.ScreenH, decorations.Border, decorations.TitleH)
+			c.srv.Scene.Add(s.actor)
+		}
+	} else if child {
+		c.placeChild(s)
+		c.srv.Scene.Raise(s.actor)
 	}
 	s.actor.Width = w
 	s.actor.Height = h
 	s.actor.Stride = stride
 	s.actor.Pixels = pix
+	s.actor.NoChrome = child
 	if s.xdg != nil && s.xdg.top != nil {
 		s.actor.Title = s.xdg.top.title
 		s.actor.AppID = s.xdg.top.app
@@ -709,7 +755,7 @@ func (c *Client) reqXdgWm(_ *object, op uint16, cur *wayland.Cursor) error {
 		if err != nil {
 			return err
 		}
-		c.objs[id] = &object{id: id, kind: kindPositioner}
+		c.objs[id] = &object{id: id, kind: kindPositioner, pos: &positioner{id: id}}
 	case 2: // get_xdg_surface
 		id, err := cur.U32()
 		if err != nil {
@@ -740,6 +786,7 @@ func (c *Client) reqXdgSurface(o *object, op uint16, cur *wayland.Cursor) error 
 	}
 	switch op {
 	case 0:
+		c.dismissXdg(xs)
 		delete(c.objs, o.id)
 	case 1: // get_toplevel
 		id, err := cur.U32()
@@ -750,6 +797,14 @@ func (c *Client) reqXdgSurface(o *object, op uint16, cur *wayland.Cursor) error 
 		xs.top = t
 		c.objs[id] = &object{id: id, kind: kindXdgToplevel, xdgT: t}
 		return c.configure(xs)
+	case 2: // get_popup
+		return c.getXdgPopup(xs, cur)
+	case 3: // set_window_geometry
+		x, _ := cur.I32()
+		y, _ := cur.I32()
+		_, _ = cur.I32()
+		_, _ = cur.I32()
+		xs.geoX, xs.geoY, xs.hasGeo = x, y, true
 	case 4: // ack_configure
 		ser, err := cur.U32()
 		if err != nil {
@@ -761,7 +816,13 @@ func (c *Client) reqXdgSurface(o *object, op uint16, cur *wayland.Cursor) error 
 }
 
 func (c *Client) configure(xs *xdgSurface) error {
-	if xs == nil || xs.top == nil {
+	if xs == nil {
+		return nil
+	}
+	if xs.pop != nil {
+		return c.configurePopup(xs.pop)
+	}
+	if xs.top == nil {
 		return nil
 	}
 	w, h := c.srv.ScreenW*2/3, c.srv.ScreenH*2/3
@@ -801,9 +862,12 @@ func (c *Client) reqXdgToplevel(o *object, op uint16, cur *wayland.Cursor) error
 	}
 	switch op {
 	case 0:
-		if t.xdg != nil && t.xdg.surf != nil && t.xdg.surf.actor != nil {
-			c.srv.Scene.Remove(t.xdg.surf.actor)
-			t.xdg.surf.actor = nil
+		if t.xdg != nil {
+			c.dismissChildPopups(t.xdg)
+			if t.xdg.surf != nil && t.xdg.surf.actor != nil {
+				c.srv.Scene.Remove(t.xdg.surf.actor)
+				t.xdg.surf.actor = nil
+			}
 		}
 		delete(c.objs, o.id)
 	case 2:
@@ -924,4 +988,3 @@ func (c *Client) focusedSurface() *surface {
 	}
 	return nil
 }
-

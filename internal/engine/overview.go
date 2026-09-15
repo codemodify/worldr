@@ -124,7 +124,7 @@ func HomeFrame(a *Actor, ssd bool, border, titleH int) GridCell {
 	if a == nil {
 		return GridCell{}
 	}
-	if !ssd {
+	if !ssd || a.NoChrome {
 		return GridCell{X: a.X, Y: a.Y, W: a.Width, H: a.Height}
 	}
 	return GridCell{

@@ -283,7 +283,8 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 		}
 		if ptr.Click {
 			a := scene.FocusAt(ptr.X, ptr.Y, decorations.TitleH, decorations.Border)
-			if a != nil && decorations.HitTitle(a, ptr.X, ptr.Y) {
+			top := scene.HitTop(ptr.X, ptr.Y, decorations.TitleH, decorations.Border)
+			if a != nil && decorations.HitTitle(a, ptr.X, ptr.Y) && (top == nil || !top.NoChrome) {
 				dragging = true
 				drag = a
 				dx, dy = ptr.X-a.X, ptr.Y-a.Y

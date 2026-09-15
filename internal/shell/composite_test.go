@@ -36,6 +36,26 @@ func TestCompositeDesktopFakeActor(t *testing.T) {
 	}
 }
 
+func TestCompositeDesktopNoChromeSkipsSSD(t *testing.T) {
+	const w, h, stride = 64, 48, 256
+	dst := make([]byte, stride*h)
+	clear := PackBGRA([4]float32{0.04, 0.06, 0.12, 1})
+	actor := &engine.Actor{
+		X: 10, Y: 12, Width: 4, Height: 2, Stride: 16,
+		Pixels: []byte{
+			0x11, 0x22, 0x33, 0xff, 0x11, 0x22, 0x33, 0xff, 0x11, 0x22, 0x33, 0xff, 0x11, 0x22, 0x33, 0xff,
+			0x44, 0x55, 0x66, 0xff, 0x44, 0x55, 0x66, 0xff, 0x44, 0x55, 0x66, 0xff, 0x44, 0x55, 0x66, 0xff,
+		},
+		NoChrome: true, Focused: true,
+	}
+	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, true, CursorBlit{}, Theater{}, OverviewDraw{}, ChromeDraw{})
+	cy := actor.Y - 2
+	ci := cy*stride + actor.X*4
+	if cy >= 0 && (dst[ci] != dst[0] || dst[ci+1] != dst[1] || dst[ci+2] != dst[2]) {
+		t.Fatal("popup must not paint SSD above the buffer")
+	}
+}
+
 func TestCompositeDesktopCursor(t *testing.T) {
 	const w, h, stride = 32, 32, 128
 	dst := make([]byte, stride*h)
