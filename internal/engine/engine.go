@@ -11,42 +11,41 @@ import (
 
 // Actor is a window (or other scene object) in the cinematic desktop.
 type Actor struct {
-	X, Y          int
-	Width, Height int
-	BufW, BufH    int // pixel buffer; 0 = same as Width/Height (scale 1 / no viewport)
-	Stride        int
-	Pixels        []byte // BGRA8 / XRGB8888, length >= Stride*Height
-	Title         string
-	AppID         string
-	Focused       bool
-	NoChrome      bool   // popup / subsurface — no SSD title or frame
-	Owner         *Actor // parent toplevel for transients
-	X11Win        uint32 // X11 window id when this actor is rootless Xwayland
-	GPUSlot       int    // 1-based retained dmabuf; 0 = CPU pixels only
-	ScanFD        int    // borrowed dmabuf fd for KMS scanout; 0 = none
-	ScanFourcc    uint32
-	ScanMod       uint64
-	ScanOff       uint32
-	ScanStride    uint32
-	AcqFD         int // drm-syncobj acquire fd (dup); 0 = none
-	AcqPoint      uint64
-	RelFD         int // drm-syncobj release fd (dup); signaled after present
-	RelPoint      uint64
-	PlaneSkip     bool      // this frame: pixels on an overlay plane; still draw SSD
-	Born          time.Time // map-in start (zero = already settled)
-	UnmapAt       time.Time // map-out start (zero = mapped)
-	FocusPulse    time.Time // last focus-gain
-	Workspace     int       // virtual desktop (0-based)
-	IconPix       []byte    // optional BGRA window icon (client buffer preferred)
-	IconW, IconH  int
-	IconStride    int
-	IconName      string  // freedesktop name (set_name / AppID) when no client buffer
-	WobbleX       float64 // decaying move impulse (high theater)
-	WobbleY       float64
-	WobbleAt      time.Time
-	wobblePX      int
-	wobblePY      int
-	wobbleOn      bool
+	X, Y           int
+	Width, Height  int
+	BufW, BufH     int // pixel buffer; 0 = same as Width/Height (scale 1 / no viewport)
+	Stride         int
+	Pixels         []byte // BGRA8 / XRGB8888, length >= Stride*Height
+	Title          string
+	AppID          string
+	Focused        bool
+	NoChrome       bool   // popup / subsurface — no SSD title or frame
+	Owner          *Actor // parent toplevel for transients
+	X11Win         uint32 // X11 window id when this actor is rootless Xwayland
+	GPUSlot        int    // 1-based retained dmabuf; 0 = CPU pixels only
+	ScanFD         int    // borrowed dmabuf fd for KMS scanout; 0 = none
+	ScanFourcc     uint32
+	ScanMod        uint64
+	ScanOff        uint32
+	ScanStride     uint32
+	AcqFD          int // drm-syncobj acquire fd (dup); 0 = none
+	AcqPoint       uint64
+	RelFD          int // drm-syncobj release fd (dup); signaled after present
+	RelPoint       uint64
+	PlaneSkip      bool      // this frame: pixels on an overlay plane; still draw SSD
+	Born           time.Time // map-in start (zero = already settled)
+	UnmapAt        time.Time // map-out start (zero = mapped)
+	FocusPulse     time.Time // last focus-gain
+	Workspace      int       // virtual desktop (0-based)
+	IconPix        []byte    // optional BGRA window icon (client buffer preferred)
+	IconW, IconH   int
+	IconStride     int
+	IconName       string // freedesktop name (set_name / AppID) when no client buffer
+	GrabOn         bool   // title-drag grab for the wobble mesh
+	GrabLX, GrabLY int
+	wobbleOn       bool
+	mesh           *wobbleMesh
+	burn           *burnState
 }
 
 // HasIcon reports a client-supplied icon buffer.
@@ -192,7 +191,7 @@ func (s *Scene) Sweep(now time.Time) {
 	}
 	dst := s.actors[:0]
 	for _, a := range s.actors {
-		if a != nil && !a.UnmapAt.IsZero() && now.Sub(a.UnmapAt) >= MapOutDuration {
+		if a != nil && !a.UnmapAt.IsZero() && now.Sub(a.UnmapAt) >= MapOutLen(s.tier) {
 			continue
 		}
 		dst = append(dst, a)

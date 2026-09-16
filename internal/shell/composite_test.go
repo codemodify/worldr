@@ -243,6 +243,74 @@ func TestCompositeDesktopHidesOtherWorkspace(t *testing.T) {
 	}
 }
 
+func TestCompositeDesktopBurnDissolvesBottom(t *testing.T) {
+	const w, h, stride = 80, 64, 320
+	clear := PackBGRA([4]float32{0, 0, 0, 1})
+	const aw, ah = 24, 20
+	pix := make([]byte, aw*ah*4)
+	for i := 0; i < len(pix); i += 4 {
+		pix[i], pix[i+1], pix[i+2], pix[i+3] = 0x30, 0x40, 0x50, 0xff
+	}
+	now := time.Unix(20, 0)
+	actor := &engine.Actor{
+		X: 16, Y: 20, Width: aw, Height: ah, Stride: aw * 4, Pixels: pix,
+		UnmapAt: now, NoChrome: true,
+	}
+	actor.TickBurn(now.Add(engine.BurnDuration/2), engine.TierHigh)
+	dst := make([]byte, stride*h)
+	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{},
+		Theater{Now: now.Add(engine.BurnDuration / 2), Tier: engine.TierHigh}, OverviewDraw{}, ChromeDraw{}, false)
+	top := 20*stride + 20*4
+	if dst[top] == 0 && dst[top+1] == 0 && dst[top+2] == 0 {
+		t.Fatal("mid-burn top should remain")
+	}
+	bot := (20+ah-1)*stride + 20*4
+	if dst[bot] == 0x30 && dst[bot+1] == 0x40 && dst[bot+2] == 0x50 {
+		t.Fatal("mid-burn bottom should dissolve")
+	}
+}
+
+func TestCompositeDesktopWobbleWarps(t *testing.T) {
+	const w, h, stride = 96, 72, 384
+	clear := PackBGRA([4]float32{0, 0, 0, 1})
+	const aw, ah = 16, 12
+	pix := make([]byte, aw*ah*4)
+	for i := 0; i < len(pix); i += 4 {
+		pix[i], pix[i+1], pix[i+2], pix[i+3] = 0x20, 0x80, 0xe0, 0xff
+	}
+	now := time.Unix(30, 0)
+	actor := &engine.Actor{
+		X: 10, Y: 18, Width: aw, Height: ah, Stride: aw * 4, Pixels: pix, NoChrome: true,
+	}
+	actor.TickWobble(now, engine.TierHigh)
+	actor.X = 36
+	actor.TickWobble(now.Add(time.Millisecond), engine.TierHigh)
+	if !actor.MeshLive() {
+		t.Fatal("expected live mesh after a jump")
+	}
+	dst := make([]byte, stride*h)
+	var scratch []byte
+	var pts []float32
+	CompositeDesktop(dst, stride, w, h, clear, []*engine.Actor{actor}, false, CursorBlit{},
+		Theater{Now: now.Add(2 * time.Millisecond), Tier: engine.TierHigh, Scratch: &scratch, MeshPts: &pts},
+		OverviewDraw{}, ChromeDraw{}, false)
+	var n int
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			i := y*stride + x*4
+			if dst[i] == 0x20 && dst[i+1] == 0x80 && dst[i+2] == 0xe0 {
+				n++
+			}
+		}
+	}
+	if n < 8 {
+		t.Fatalf("expected mesh-warped pixels, got %d", n)
+	}
+	if cap(scratch) == 0 && actor.ScaledBuffer() {
+		t.Fatal("scratch")
+	}
+}
+
 func TestCompositeDesktopSeams(t *testing.T) {
 	const w, h, stride = 80, 40, 320
 	clear := PackBGRA([4]float32{0, 0, 0, 1})

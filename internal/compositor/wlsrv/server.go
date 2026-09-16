@@ -166,6 +166,31 @@ func (s *Server) dropClient(c *Client) {
 	s.log.Printf("client disconnected")
 }
 
+// RequestClose sends xdg_toplevel.close for the actor's surface. The shell
+// also Scene.Remove so --effects=high can burn the window away immediately.
+func (s *Server) RequestClose(a *engine.Actor) {
+	if s == nil || a == nil {
+		return
+	}
+	s.mu.Lock()
+	cl := append([]*Client(nil), s.clients...)
+	s.mu.Unlock()
+	for _, c := range cl {
+		if c == nil {
+			continue
+		}
+		for _, o := range c.objs {
+			if o == nil || o.xdgT == nil || o.xdgT.xdg == nil || o.xdgT.xdg.surf == nil {
+				continue
+			}
+			if o.xdgT.xdg.surf.actor == a {
+				_ = c.send(o.xdgT.id, 1, nil, nil)
+				return
+			}
+		}
+	}
+}
+
 // PointerButton delivers a pointer click in screen space.
 // Each client only receives wl_pointer.button release if it previously
 // received the matching press while focused (see pointerButtons).

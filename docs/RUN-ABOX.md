@@ -123,7 +123,8 @@ foot
 You should see a bottom panel (clock + **apps** / **grid**) and foot (or the
 shm client) with a cyan/magenta SSD frame inside the
 `worldr-shell (nested compositor)` window. On map it **scale+fades+rises in** (~280ms);
-on close it scale+fades toward the panel (~240ms, minimize-to-panel).
+title-drag **wobbles** (8×6 mesh jelly). Close (SSD × or quit the client)
+**burns** away (~720ms). `--effects=low` is fade-only; `off` is instant.
 Clicking another window gives a short lift/shadow/glow pulse. Workspace
 switch is ease-in-out with a light dim. Pointer and keys while that window is focused are forwarded
 into worldr (title-bar drag still works). Pointer buttons are paired
@@ -441,7 +442,7 @@ without `/dev/dri`.
 | `--color` | `#0b1020` | Clear color |
 | `--compositor` | true | Listen as Wayland server (on for `wayland-client`/`nested` too) |
 | `--xwayland` | false | Launch rootless Xwayland on the worldr socket |
-| `--effects` | `high` | Window theater: `high` (wobbly+cube+expose) \| `low` (fade) \| `off` |
+| `--effects` | `high` | Window theater: `high` (mesh wobble+burn+cube+expose) \| `low` (fade) \| `off` |
 | `--overview-demo` | false | Auto-enter expose after the first window maps |
 | `--workspaces` | `3` | Virtual desktops (clamped 2–4) |
 | `--scale` | `0` (auto) | Output scale `1` / `1.25` / `1.5` / `2`. Auto: nest follows host `wl_output` / `wp_fractional_scale`; vk-display/drm stay 1.0. Explicit `--scale` always wins (unless `--output-scales`). |
@@ -482,7 +483,7 @@ disconnected cleanly** against the compositor.
 | Client | Buffer | Expected now | Notes |
 | --- | --- | --- | --- |
 | `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.19 / **0.9.35**): Ctrl+Shift+C / Ctrl+Shift+V `text/plain` between worldr clients and, when nested, Plasma ↔ foot (clear and serial-0 offer fixed). `image/png` (and `image/bmp`) between clients; nest host forwards png when advertised. Mouse-select + middle-click uses primary (bridged if the host advertises it). Cursors, activation, **fractional-scale** (0.9.16 / **0.9.35**: nest follows Plasma HiDPI, including the output the window entered; `--scale` overrides). **Icons** (0.9.18 / **0.9.28**): theme PNG then SVG from `.desktop` `Icon=` / `AppID` (`Inherits=` + hicolor; librsvg if `make` found it); `xdg_toplevel_icon` buffer still wins. **Workspaces** (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. Still expected: text-input/IME. |
+| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.19 / **0.9.35**): Ctrl+Shift+C / Ctrl+Shift+V `text/plain` between worldr clients and, when nested, Plasma ↔ foot (clear and serial-0 offer fixed). `image/png` (and `image/bmp`) between clients; nest host forwards png when advertised. Mouse-select + middle-click uses primary (bridged if the host advertises it). Cursors, activation, **fractional-scale** (0.9.16 / **0.9.35**: nest follows Plasma HiDPI, including the output the window entered; `--scale` overrides). **Icons** (0.9.18 / **0.9.28**): theme PNG then SVG from `.desktop` `Icon=` / `AppID` (`Inherits=` + hicolor; librsvg if `make` found it); `xdg_toplevel_icon` buffer still wins. **Workspaces** (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. **Theater** (0.9.36): title-drag wobbles; SSD × / client quit burns. Still expected: text-input/IME. |
 | `kitty` | linux-dmabuf (GL) | **Try** | On **vk-display** (0.9.10+): Vulkan import + GPU blit. **0.9.17**: fullscreen ARGB/XRGB may KMS-scanout on `--backend=drm` (`kms scanout: primary dmabuf`). vk-display logs `kms scanout fallback` (Vulkan holds DRM master) then blits. Nested still CPU. |
 | `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
 | `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
@@ -536,7 +537,7 @@ Workaround — real display on **tty3**:
 - Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
 - Fractional scale (0.9.16 / 0.9.21 / **0.9.33** / **0.9.35**): nest follows host `preferred_scale` / `wl_output.scale`. **0.9.35:** every host output is bound; `wl_surface.enter` selects that output’s integer scale when frac is missing; a late `OnHostScale` still sees the current value. `--scale` overrides all outputs. `--outputs=N` advertises N tiled `wl_output`s; `--output-scales` sets each. Drag across a seam is `leave`/`enter` + new `preferred_scale`. vk-display/drm default 1.0. Viewport / `set_buffer_scale` / window geometry size the logical window. Still one physical FB (no real DRM connectors).
 - Window icons (0.9.18 / **0.9.25** / **0.9.28**): `xdg_toplevel_icon` shm buffers on SSD + panel win when set. Else XDG theme PNG, then SVG (`Icon=` / `AppID` / `set_name`) walking `index.theme` `Inherits=` then hicolor. librsvg when built with `librsvg2-dev` + `make` (`-tags=librsvg`); else the simple raster. No full Directory/Size graph. No IME (`zwp_text_input`).
-- Compiz theater (**0.9.24** / **0.9.32**): hardcoded scale/fade/rise map-in, minimize-to-panel unmap, focus glow, ease-in-out workspace slide. **0.9.32 high:** cheap wobbly on move (spring offset, no mesh), cube-style workspace foreshorten, expose polish (in-out ease, selected scale, title, ↑/↓). `--effects=off|low|high`. Frame loop reuses slices + expose grid (no per-frame actor-list / grid storm). No plugin graph.
+- Compiz theater (**0.9.24** / **0.9.32** / **0.9.36**): hardcoded scale/fade/rise map-in, focus glow, ease-in-out workspace slide. **0.9.36 high:** real 8×6 mesh wobble on title-drag (not the old spring offset); Compiz burn/fire dissolve on close/unmap (SSD × or client quit; 720ms). Cube-style workspace foreshorten and expose polish stay. `--effects=off|low|high`. Frame loop reuses slices, expose grid, mesh points, and the window pack (no per-frame alloc storm). No plugin graph.
 - Launcher reads XDG `.desktop` files and theme PNGs for `Icon=` (0.9.18). `Terminal=true` apps skipped; no ibus/fcitx IME
 - Panel is CPU-composited chrome (not a toolkit)
 - Workspaces (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. No Super+1..N, no drag-to-desktop, no per-output workspace set. Overview is current-desktop only (shows `desk N/M`). Empty desktops stay addressable.

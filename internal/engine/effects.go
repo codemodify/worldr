@@ -2,7 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"math"
 	"strings"
 	"time"
 )
@@ -17,9 +16,6 @@ const (
 	FocusLiftPx     = 6
 	FocusShadow     = 0.55
 	FocusGlow       = 0.70
-	WobbleMax       = 22.0
-	WobbleDecay     = 0.86
-	WobbleHz        = 15.0
 	CubeForeshorten = 0.28
 	CubePull        = 0.18
 )
@@ -53,7 +49,7 @@ type Tier int
 const (
 	TierOff  Tier = iota // instant map/unmap, no pulse
 	TierLow              // fade only
-	TierHigh             // scale+fade+rise+glow+minimize + wobbly + cube
+	TierHigh             // scale+fade+rise+glow + mesh wobble + burn + cube
 )
 
 // ParseTier reads --effects=off|low|high|auto.
@@ -93,11 +89,12 @@ type Visual struct {
 	Progress float64 // 0..1 along Phase
 	Phase    Phase
 	Gone     bool
+	Warped   bool // live wobble mesh — skip the identity blit
 }
 
 // Identity reports a settled window (fast blit path).
 func (v Visual) Identity() bool {
-	return !v.Gone && v.Phase == PhaseIdle && v.Scale == 1 && v.Alpha == 1 &&
+	return !v.Gone && !v.Warped && v.Phase == PhaseIdle && v.Scale == 1 && v.Alpha == 1 &&
 		v.Lift == 0 && v.Shadow == 0 && v.Glow == 0 && v.SlideX == 0 && v.SlideY == 0
 }
 
@@ -108,13 +105,16 @@ func (a *Actor) VisualAt(now time.Time, tier Tier) Visual {
 	}
 	if !a.UnmapAt.IsZero() {
 		dt := now.Sub(a.UnmapAt)
-		if dt >= MapOutDuration {
+		out := MapOutLen(tier)
+		if dt >= out {
 			return Visual{Gone: true, Phase: PhaseMapOut, Progress: 1}
 		}
-		p := EaseInCubic(float64(dt) / float64(MapOutDuration))
+		p := EaseInCubic(float64(dt) / float64(out))
 		v := Visual{Scale: 1, Alpha: 1 - p, Phase: PhaseMapOut, Progress: p}
 		if tier == TierHigh {
-			v.Scale = 1 - p*(1-MapFromScale)
+			// Burn handles dissolve in-place; keep full size/alpha.
+			v.Scale, v.Alpha = 1, 1
+			v.Progress = float64(dt) / float64(out)
 		}
 		return v
 	}
@@ -139,69 +139,14 @@ func (a *Actor) VisualAt(now time.Time, tier Tier) Visual {
 				v.Lift = int(float64(FocusLiftPx)*p + 0.5)
 				v.Shadow = FocusShadow * p
 				v.Glow = FocusGlow * p
-				wx, wy, sc := a.wobblePose(now)
-				v.SlideX, v.SlideY, v.Scale = wx, wy, sc
+				v.Warped = a.MeshLive()
 			}
 			return v
 		}
 	}
 	v := Visual{Scale: 1, Alpha: 1, Phase: PhaseIdle}
 	if tier == TierHigh {
-		wx, wy, sc := a.wobblePose(now)
-		v.SlideX, v.SlideY, v.Scale = wx, wy, sc
-	}
-	return v
-}
-
-// TickWobble samples a move impulse and decays the spring. No alloc.
-func (a *Actor) TickWobble(now time.Time, tier Tier) {
-	if a == nil {
-		return
-	}
-	if tier != TierHigh {
-		a.WobbleX, a.WobbleY = 0, 0
-		a.wobblePX, a.wobblePY = a.X, a.Y
-		a.wobbleOn = true
-		return
-	}
-	if !a.wobbleOn {
-		a.wobblePX, a.wobblePY = a.X, a.Y
-		a.wobbleOn = true
-		a.WobbleAt = now
-		return
-	}
-	dx, dy := a.X-a.wobblePX, a.Y-a.wobblePY
-	a.wobblePX, a.wobblePY = a.X, a.Y
-	if dx != 0 || dy != 0 {
-		a.WobbleX += float64(dx) * 0.38
-		a.WobbleY += float64(dy) * 0.38
-		a.WobbleAt = now
-	}
-	a.WobbleX = clampWobble(a.WobbleX * WobbleDecay)
-	a.WobbleY = clampWobble(a.WobbleY * WobbleDecay)
-}
-
-func (a *Actor) wobblePose(now time.Time) (sx, sy int, scale float64) {
-	scale = 1
-	if a == nil || (a.WobbleX == 0 && a.WobbleY == 0) {
-		return 0, 0, 1
-	}
-	s := math.Sin(now.Sub(a.WobbleAt).Seconds() * WobbleHz * 2 * math.Pi)
-	sx = int(a.WobbleX*s + 0.5)
-	sy = int(a.WobbleY*s*0.7 + 0.5)
-	scale = 1 + 0.025*s*(math.Abs(a.WobbleX)+math.Abs(a.WobbleY))/WobbleMax
-	return sx, sy, scale
-}
-
-func clampWobble(v float64) float64 {
-	if v > WobbleMax {
-		return WobbleMax
-	}
-	if v < -WobbleMax {
-		return -WobbleMax
-	}
-	if v > -0.12 && v < 0.12 {
-		return 0
+		v.Warped = a.MeshLive()
 	}
 	return v
 }

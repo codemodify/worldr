@@ -31,7 +31,7 @@ tryable `worldr-shell`.
 2. Minimal Wayland server (surface → textured window actor) — done
 3. SSD borders + input/focus — done (simple chrome)
 4. XWayland — done (`--xwayland`, tiny XWM + `xwayland_shell_v1`)
-5. Compiz-style theater v0 — done (map/unmap, wobbly/cube/expose on high)
+5. Compiz-style theater v0 — done (map/unmap, mesh wobble + burn + cube/expose on high)
 6. Expose/overview v0 — done (F12 grid)
 7. Panel + launcher v0 — done (bottom bar, F1 spawn)
 8. Workspaces — done (2–4 desktops, pager N/M, slide, move-window)
