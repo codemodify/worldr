@@ -3,6 +3,12 @@
 Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
 Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
 
+## 0.9.36-dev — mesh wobble + burn dissolve
+
+- `--effects=high`: title-drag uses a real 8×6 deformable mesh (springs to rest + neighbors; grab vertex pins to the pointer). The cheap spring offset is gone. Mesh + pack buffers are reused (no per-frame alloc storm).
+- Close / unmap on high is a Compiz-style burn (hash-front dissolve + ember band + rising sparks, 720ms). Click the SSD × or quit the client (`Scene.Remove`). `xdg_toplevel.close` is sent so the client exits; burn starts immediately.
+- `--effects=low` stays fade-only; `off` is still instant. No IME. No plugin graph.
+
 ## 0.9.35-dev — nest clipboard / scale edges
 
 - Host `wl_data_device.selection(null)` now clears the nest clipboard (and primary). Worldr `set_selection(null)` clears the Plasma offer. Host-originated clear does not echo back.

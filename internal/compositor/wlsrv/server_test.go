@@ -94,3 +94,11 @@ func TestAdvertiseGlobals(t *testing.T) {
 			sawComp, sawXdg, sawSub, sawData, sawDma, sawCursor, sawAct, sawPrim, sawXw, sawFrac, sawIcon, sawDone)
 	}
 }
+
+func TestRequestCloseNoop(t *testing.T) {
+	var s *Server
+	s.RequestClose(&engine.Actor{})
+	s = &Server{}
+	s.RequestClose(nil)
+	s.RequestClose(&engine.Actor{Title: "missing"})
+}

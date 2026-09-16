@@ -8,11 +8,13 @@ import "github.com/codemodify/worldr/internal/engine"
 
 // Geometry of the chrome around the client buffer.
 const (
-	Border  = 6
-	TitleH  = 28
-	AccentH = 4
-	IconSz  = 16
-	IconPad = 6
+	Border   = 6
+	TitleH   = 28
+	AccentH  = 4
+	IconSz   = 16
+	IconPad  = 6
+	CloseSz  = 14
+	ClosePad = 7
 )
 
 const (
@@ -64,6 +66,7 @@ func Draw(dst []byte, stride, dW, dH int, a *engine.Actor) {
 	engine.FillRect(dst, stride, dW, dH, x1-Border, y0, Border, fh, frame)
 	engine.FillRect(dst, stride, dW, dH, x0, y1-Border, fw, Border, frame)
 	DrawIcon(dst, stride, dW, dH, x0+Border+IconPad, y0+(TitleH-IconSz)/2, IconSz, a)
+	drawClose(dst, stride, dW, dH, a)
 }
 
 // DrawIcon paints a client icon or the default glyph at (x,y) sized size×size.
@@ -127,10 +130,46 @@ func lerpBGRA(a, b uint32, t float64) uint32 {
 	return mix(0) | mix(8)<<8 | mix(16)<<16 | mix(24)<<24
 }
 
-// HitTitle reports whether (px,py) is on the title bar (not the client buffer).
+// CloseRect is the SSD close chip on the title bar (empty when NoChrome).
+func CloseRect(a *engine.Actor) (x, y, w, h int) {
+	if a == nil || a.NoChrome {
+		return 0, 0, 0, 0
+	}
+	x = a.X + a.Width + Border - ClosePad - CloseSz
+	y = a.Y - TitleH + (TitleH-CloseSz)/2
+	return x, y, CloseSz, CloseSz
+}
+
+// HitClose reports a click on the SSD close chip.
+func HitClose(a *engine.Actor, px, py int) bool {
+	x, y, w, h := CloseRect(a)
+	if w < 1 || h < 1 {
+		return false
+	}
+	return px >= x && px < x+w && py >= y && py < y+h
+}
+
+// HitTitle reports whether (px,py) is on the title bar (not the client buffer
+// and not the close chip — × starts a close, not a drag).
 func HitTitle(a *engine.Actor, px, py int) bool {
 	if a == nil || a.NoChrome {
 		return false
 	}
+	if HitClose(a, px, py) {
+		return false
+	}
 	return px >= a.X-Border && px < a.X+a.Width+Border && py >= a.Y-TitleH && py < a.Y
+}
+
+func drawClose(dst []byte, stride, dW, dH int, a *engine.Actor) {
+	x, y, w, h := CloseRect(a)
+	if w < 1 || h < 1 {
+		return
+	}
+	engine.FillRect(dst, stride, dW, dH, x, y, w, h, 0xff2a3a90)
+	// Two-pixel X so the chip reads as close in a nested demo.
+	for i := 3; i < w-3; i++ {
+		engine.FillRect(dst, stride, dW, dH, x+i, y+i, 2, 2, 0xffe8f0f8)
+		engine.FillRect(dst, stride, dW, dH, x+w-2-i, y+i, 2, 2, 0xffe8f0f8)
+	}
 }

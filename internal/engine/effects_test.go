@@ -69,15 +69,22 @@ func TestVisualMapOutThenGone(t *testing.T) {
 	now := time.Unix(2000, 0)
 	a := &Actor{UnmapAt: now}
 	v0 := a.VisualAt(now, TierHigh)
-	if v0.Gone || v0.Alpha != 1 || v0.Scale != 1 {
+	if v0.Gone || v0.Alpha != 1 || v0.Scale != 1 || v0.Phase != PhaseMapOut {
 		t.Fatalf("unmap t0 %+v", v0)
 	}
-	vMid := a.VisualAt(now.Add(MapOutDuration/2), TierHigh)
-	if vMid.Gone || vMid.Alpha >= 1 || vMid.Scale >= 1 {
-		t.Fatalf("unmap mid %+v", vMid)
+	vMid := a.VisualAt(now.Add(BurnDuration/2), TierHigh)
+	if vMid.Gone || vMid.Alpha != 1 || vMid.Scale != 1 || vMid.Progress < 0.4 || vMid.Progress > 0.6 {
+		t.Fatalf("high burn mid %+v", vMid)
 	}
-	if !a.VisualAt(now.Add(MapOutDuration), TierHigh).Gone {
-		t.Fatal("expected gone")
+	if !a.VisualAt(now.Add(BurnDuration), TierHigh).Gone {
+		t.Fatal("expected gone after burn")
+	}
+	low := a.VisualAt(now.Add(MapOutDuration/2), TierLow)
+	if low.Gone || low.Alpha >= 1 || low.Scale != 1 {
+		t.Fatalf("low fade mid %+v", low)
+	}
+	if !a.VisualAt(now.Add(MapOutDuration), TierLow).Gone {
+		t.Fatal("low gone")
 	}
 }
 
@@ -127,7 +134,7 @@ func TestVisualPhaseMachine(t *testing.T) {
 	if a.VisualAt(a.UnmapAt, TierHigh).Phase != PhaseMapOut {
 		t.Fatal("map-out")
 	}
-	if !a.VisualAt(a.UnmapAt.Add(MapOutDuration), TierHigh).Gone {
+	if !a.VisualAt(a.UnmapAt.Add(BurnDuration), TierHigh).Gone {
 		t.Fatal("gone")
 	}
 }
@@ -170,23 +177,24 @@ func TestMinimizeDeltaTowardPanel(t *testing.T) {
 
 func TestTickWobbleImpulseAndDecay(t *testing.T) {
 	now := time.Unix(7000, 0)
-	a := &Actor{X: 10, Y: 20}
+	a := &Actor{X: 10, Y: 20, Width: 80, Height: 40}
 	a.TickWobble(now, TierHigh)
-	if a.WobbleX != 0 || a.WobbleY != 0 {
+	if a.MeshLive() {
 		t.Fatal("first sample is rest")
 	}
 	a.X, a.Y = 40, 20
 	a.TickWobble(now.Add(time.Millisecond), TierHigh)
-	if a.WobbleX == 0 {
-		t.Fatal("move must impulse")
+	if !a.MeshLive() {
+		t.Fatal("move must deform the mesh")
 	}
-	amp := a.WobbleX
-	a.TickWobble(now.Add(2*time.Millisecond), TierHigh)
-	if a.WobbleX >= amp {
-		t.Fatal("must decay")
+	for i := 0; i < 240 && a.MeshLive(); i++ {
+		a.TickWobble(now.Add(time.Duration(i+2)*time.Millisecond), TierHigh)
+	}
+	if a.MeshLive() {
+		t.Fatal("must settle")
 	}
 	a.TickWobble(now, TierOff)
-	if a.WobbleX != 0 {
+	if a.MeshLive() {
 		t.Fatal("off clears")
 	}
 }
@@ -272,6 +280,10 @@ func TestSceneRemoveSweepsAfterMapOut(t *testing.T) {
 		t.Fatal("should keep actor during map-out")
 	}
 	s.Sweep(a.UnmapAt.Add(MapOutDuration))
+	if !s.HasActors() {
+		t.Fatal("high sweep waits for burn")
+	}
+	s.Sweep(a.UnmapAt.Add(BurnDuration))
 	if s.HasActors() {
 		t.Fatal("sweep should drop")
 	}

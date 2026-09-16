@@ -19,11 +19,13 @@ type CursorBlit struct {
 // Theater is the Compiz-style pose applied on the shared present path
 // (nested wayland-client, vk-display, drm).
 type Theater struct {
-	Now    time.Time
-	Tier   engine.Tier
-	PanelH int // minimize-to-panel target
-	Grid   *[]engine.GridCell
-	Seams  []int // interior X edges between logical outputs
+	Now     time.Time
+	Tier    engine.Tier
+	PanelH  int // minimize-to-panel target (low); high burns in place
+	Grid    *[]engine.GridCell
+	Seams   []int // interior X edges between logical outputs
+	Scratch *[]byte
+	MeshPts *[]float32
 }
 
 // CompositeDesktop draws the cinematic clear, window actors, optional SSD,
@@ -130,10 +132,11 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 	if v.Gone {
 		return
 	}
-	mx, my := 0, 0
-	if fx.Tier == engine.TierHigh && v.Phase == engine.PhaseMapOut {
-		mx, my = engine.MinimizeDelta(a, v, w, h, fx.PanelH)
+	if fx.Tier == engine.TierHigh && (v.Warped || v.Phase == engine.PhaseMapOut) {
+		drawActorMeshOrBurn(dst, stride, w, h, a, ssd && !a.NoChrome, v, fx, ox)
+		return
 	}
+	mx, my := 0, 0
 	slideA := engine.SlideFade(ox, w)
 	cubeS, cubeA, cubeX := 1.0, slideA, 0
 	if fx.Tier == engine.TierHigh && ox != 0 {
@@ -201,6 +204,96 @@ func drawActor(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, fx Theat
 	}
 	srcW, srcH := a.PixelSize()
 	engine.BlitBGRAScaledAlpha(dst, stride, w, h, sx, sy, sw, sh, a.Pixels, a.Stride, srcW, srcH, alpha)
+}
+
+// drawActorMeshOrBurn packs SSD+content once, then either warps the pack
+// through the live wobble mesh or dissolves it with the burn front.
+func drawActorMeshOrBurn(dst []byte, stride, w, h int, a *engine.Actor, ssd bool, v engine.Visual, fx Theater, ox int) {
+	pix, sStride, pw, ph := packActor(fx.Scratch, a, ssd)
+	if pix == nil || pw < 1 || ph < 1 {
+		return
+	}
+	bx, by, _, _ := a.MeshBox()
+	if v.Phase == engine.PhaseMapOut {
+		engine.DrawBurn(dst, stride, w, h, bx, by, pix, sStride, pw, ph, v.Progress, a)
+		return
+	}
+	var pts []float32
+	if fx.MeshPts != nil {
+		pts = *fx.MeshPts
+	}
+	cols, rows, pts := a.MeshGrid(pts)
+	if fx.MeshPts != nil {
+		*fx.MeshPts = pts
+	}
+	if ox != 0 && len(pts) >= 2 {
+		for i := 0; i < len(pts); i += 2 {
+			pts[i] += float32(ox)
+		}
+	}
+	engine.BlitMesh(dst, stride, w, h, pix, sStride, pw, ph, cols, rows, pts, v.Alpha)
+}
+
+func packActor(scratch *[]byte, a *engine.Actor, ssd bool) (pix []byte, stride, pw, ph int) {
+	if a == nil {
+		return nil, 0, 0, 0
+	}
+	if !ssd || a.NoChrome {
+		srcW, srcH := a.PixelSize()
+		if a.ScaledBuffer() {
+			pw, ph = a.Width, a.Height
+			if pw < 1 {
+				pw = 1
+			}
+			if ph < 1 {
+				ph = 1
+			}
+			n := pw * ph * 4
+			buf := takeScratch(scratch, n)
+			engine.FillBGRA(buf, pw*4, pw, ph, 0)
+			engine.BlitBGRAScaledAlpha(buf, pw*4, pw, ph, 0, 0, pw, ph, a.Pixels, a.Stride, srcW, srcH, 1)
+			return buf, pw * 4, pw, ph
+		}
+		return a.Pixels, a.Stride, a.Width, a.Height
+	}
+	_, _, pw, ph = a.MeshBox()
+	if pw < 1 {
+		pw = 1
+	}
+	if ph < 1 {
+		ph = 1
+	}
+	n := pw * ph * 4
+	buf := takeScratch(scratch, n)
+	engine.FillBGRA(buf, pw*4, pw, ph, 0)
+	ox, oy := a.X, a.Y
+	a.X, a.Y = decorations.Border, decorations.TitleH
+	decorations.Draw(buf, pw*4, pw, ph, a)
+	srcW, srcH := a.PixelSize()
+	if a.ScaledBuffer() {
+		engine.BlitBGRAScaledAlpha(buf, pw*4, pw, ph, decorations.Border, decorations.TitleH, a.Width, a.Height, a.Pixels, a.Stride, srcW, srcH, 1)
+	} else {
+		engine.BlitBGRA(buf, pw*4, pw, ph, decorations.Border, decorations.TitleH, a.Pixels, a.Stride, a.Width, a.Height)
+	}
+	a.X, a.Y = ox, oy
+	return buf, pw * 4, pw, ph
+}
+
+func takeScratch(p *[]byte, n int) []byte {
+	if n < 0 {
+		n = 0
+	}
+	if p == nil {
+		return make([]byte, n)
+	}
+	buf := *p
+	if cap(buf) < n {
+		buf = make([]byte, n)
+	} else {
+		buf = buf[:n]
+	}
+	*p = buf
+	return buf
 }
 
 func drawFocusGlow(dst []byte, stride, w, h, x, y, fw, fh int, glow float64) {

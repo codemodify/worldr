@@ -19,6 +19,26 @@ func TestDrawSkipsNoChrome(t *testing.T) {
 	if HitTitle(a, 20, 10) {
 		t.Fatal("NoChrome has no title hit")
 	}
+	if HitClose(a, 20, 10) {
+		t.Fatal("NoChrome has no close hit")
+	}
+}
+
+func TestHitCloseOnTitleChip(t *testing.T) {
+	a := &engine.Actor{X: 40, Y: 40, Width: 80, Height: 40}
+	cx, cy, cw, ch := CloseRect(a)
+	if cw != CloseSz || ch != CloseSz {
+		t.Fatalf("close %d×%d", cw, ch)
+	}
+	if !HitClose(a, cx+cw/2, cy+ch/2) {
+		t.Fatal("center of chip")
+	}
+	if HitTitle(a, cx+cw/2, cy+ch/2) {
+		t.Fatal("close must not count as a title drag")
+	}
+	if !HitTitle(a, a.X+8, a.Y-4) {
+		t.Fatal("title left of the chip still drags")
+	}
 }
 
 func TestChromeGeometry(t *testing.T) {

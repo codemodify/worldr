@@ -209,8 +209,8 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 	case engine.TierLow:
 		fmt.Fprintln(stdout, "theater: effects=low (fade-only map/unmap)")
 	default:
-		fmt.Fprintf(stdout, "theater: effects=high (wobbly move, cube workspace, expose polish; map %s / minimize-to-panel %s)\n",
-			engine.MapInDuration, engine.MapOutDuration)
+		fmt.Fprintf(stdout, "theater: effects=high (mesh wobble on title-drag, burn on close/unmap, cube workspace, expose polish; map %s / burn %s)\n",
+			engine.MapInDuration, engine.BurnDuration)
 	}
 
 	var ov Overview
@@ -372,7 +372,12 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 					srv.X11OnFocus(a.X11Win)
 				}
 			}
-			if a != nil && decorations.HitTitle(a, ptr.X, ptr.Y) && (top == nil || !top.NoChrome) {
+			if a != nil && decorations.HitClose(a, ptr.X, ptr.Y) && (top == nil || !top.NoChrome) {
+				scene.Remove(a)
+				if srv != nil {
+					srv.RequestClose(a)
+				}
+			} else if a != nil && decorations.HitTitle(a, ptr.X, ptr.Y) && (top == nil || !top.NoChrome) {
 				dragging = true
 				drag = a
 				dx, dy = ptr.X-a.X, ptr.Y-a.Y
@@ -418,7 +423,15 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 			actors := scene.ActorsInto(p.actors)
 			p.actors = actors
 			for _, a := range actors {
+				if a == nil {
+					continue
+				}
+				a.GrabOn = dragging && a == drag
+				if a.GrabOn {
+					a.GrabLX, a.GrabLY = dx, dy
+				}
 				a.TickWobble(now, opt.Effects)
+				a.TickBurn(now, opt.Effects)
 			}
 			desk := p.desk[:0]
 			active := scene.ActiveWorkspace()
@@ -542,7 +555,7 @@ func Run(stdout, stderr io.Writer, opt Options) error {
 				p.seamsBuf = p.seamsBuf[:0]
 			}
 			CompositeDesktop(fb, stride, int(w), int(h), pixel, actors, opt.SSD, cur,
-				Theater{Now: now, Tier: opt.Effects, PanelH: PanelH, Grid: &p.cellsBuf, Seams: p.seamsBuf},
+				Theater{Now: now, Tier: opt.Effects, PanelH: PanelH, Grid: &p.cellsBuf, Seams: p.seamsBuf, Scratch: &p.scratchBuf, MeshPts: &p.meshPts},
 				OverviewDraw{T: ov.Progress(now), Select: ov.Select},
 				ch, gpuOverlay)
 			layers := gpuLayersInto(p.layersBuf, actors, ch, int(w), gpuOverlay)
@@ -584,6 +597,8 @@ type presenter struct {
 	layersBuf   []native.GPULayer
 	cellsBuf    []engine.GridCell
 	seamsBuf    []int
+	scratchBuf  []byte
+	meshPts     []float32
 	consume     map[uint32]bool
 }
 
@@ -643,7 +658,7 @@ func gpuLayersInto(dst []native.GPULayer, actors []*engine.Actor, ch ChromeDraw,
 		return dst
 	}
 	for _, a := range actors {
-		if a == nil || a.GPUSlot <= 0 || a.ScaledBuffer() || a.PlaneSkip {
+		if a == nil || a.GPUSlot <= 0 || a.ScaledBuffer() || a.PlaneSkip || a.MeshLive() || !a.UnmapAt.IsZero() {
 			continue
 		}
 		ox, show := ch.WS.OffsetFor(a.Workspace, screenW)
