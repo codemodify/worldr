@@ -1,72 +1,70 @@
 #!/usr/bin/env bash
-# Spare-TTY smoke for worldr-session → worldr-shell (Intel Mesa / abox).
-#
-# From Plasma:
-#   1. Ctrl+Alt+F3  → log in on tty3
-#   2. cd to this repo (or set WORLDR_ROOT)
-#   3. ./scripts/try-tty.sh
-#   4. When it exits (15s default): Ctrl+Alt+F1 or F2 back to Plasma
-#
-# Do not run this from a graphical session. It refuses if WAYLAND_DISPLAY
-# or DISPLAY is set, or if XDG_SESSION_TYPE is wayland/x11.
-
+# Bounded, recorded real-display qualification from a spare Linux TTY.
 set -euo pipefail
 
-DURATION="${DURATION:-15s}"
-BACKEND="${BACKEND:-auto}"
-CARD="${CARD:-}"
-ROOT="${WORLDR_ROOT:-}"
+WORLDR_DURATION="${DURATION:-15s}"
+WORLDR_BACKEND="${BACKEND:-vk-display}"
+WORLDR_CARD="${CARD:-}"
+WORLDR_PROJECT="${WORLDR_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+WORLDR_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+WORLDR_REPORT="${REPORT_DIR:-$WORLDR_PROJECT/dist/direct-$WORLDR_STAMP}"
+WORLDR_STATE="${STATE:-$WORLDR_REPORT/workspace.json}"
+WORLDR_METRICS="${METRICS:-$WORLDR_REPORT/metrics.json}"
 
-if [[ -z "$ROOT" ]]; then
-	ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" || "${XDG_SESSION_TYPE:-}" == wayland || "${XDG_SESSION_TYPE:-}" == x11 ]]; then
+    echo 'Refusing direct display in a graphical session. Use --backend=nested here.' >&2
+    echo 'For physical display testing, switch to a spare TTY and log in there.' >&2
+    exit 2
 fi
-
-echo "worldr try-tty: root=$ROOT backend=$BACKEND duration=$DURATION card=${CARD:-first}"
-
-if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
-	echo "refusing: graphical session env is set" >&2
-	echo "  WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-} DISPLAY=${DISPLAY:-}" >&2
-	echo "This script is for a spare TTY. Ctrl+Alt+F3, log in, then run again." >&2
-	echo "Do not pass --take-over-display from Plasma." >&2
-	exit 2
-fi
-
-case "${XDG_SESSION_TYPE:-}" in
-wayland|x11)
-	echo "refusing: XDG_SESSION_TYPE=${XDG_SESSION_TYPE} looks graphical." >&2
-	echo "Switch to tty3 (Ctrl+Alt+F3) so the session type is tty." >&2
-	exit 2
-	;;
+case "$WORLDR_BACKEND" in
+    vk-display|drm) ;;
+    *) echo 'BACKEND must be vk-display or drm for this TTY script.' >&2; exit 2 ;;
 esac
+cd "$WORLDR_PROJECT"
+make build
+mkdir -p "$WORLDR_REPORT"
+{
+    printf 'worldr direct-display qualification\n'
+    printf 'started_utc=%s\n' "$WORLDR_STAMP"
+    printf 'backend=%s\n' "$WORLDR_BACKEND"
+    printf 'duration=%s\n' "$WORLDR_DURATION"
+    printf 'card=%s\n' "${WORLDR_CARD:-auto}"
+    printf 'kernel=%s\n' "$(uname -srmo)"
+    printf 'tty=%s\n' "$(tty 2>/dev/null || printf unknown)"
+    printf 'session_type=%s\n' "${XDG_SESSION_TYPE:-tty}"
+} >"$WORLDR_REPORT/system.txt"
 
-if [[ ! -e /dev/dri ]]; then
-	echo "warning: no /dev/dri — vk-display/drm will fail. Need video/render + a GPU." >&2
-elif ! compgen -G /dev/dri/card* >/dev/null; then
-	echo "warning: no /dev/dri/card* (render nodes alone are not enough). Need a KMS primary node." >&2
+list_args=(--list-outputs)
+if [[ -n "$WORLDR_CARD" ]]; then list_args+=(--card="$WORLDR_CARD"); fi
+./bin/worldr-shell "${list_args[@]}" >"$WORLDR_REPORT/outputs.txt" 2>&1
+
+args=(--backend="$WORLDR_BACKEND" --duration="$WORLDR_DURATION" --take-over-display \
+      --project="$WORLDR_PROJECT" --terminal --state="$WORLDR_STATE" --metrics="$WORLDR_METRICS")
+if [[ -n "$WORLDR_CARD" ]]; then args+=(--card="$WORLDR_CARD"); fi
+printf 'Starting native scene workspace for %s. Ctrl+Q quits. Return to your desktop with its VT shortcut.\n' "$WORLDR_DURATION"
+printf 'Qualification artifacts: %s\n' "$WORLDR_REPORT"
+set +e
+./bin/worldr-shell "${args[@]}" "$@" 2>&1 | tee "$WORLDR_REPORT/worldr.log"
+status=${PIPESTATUS[0]}
+set -e
+{
+    printf 'exit_status=%d\n' "$status"
+    printf 'finished_utc=%s\n' "$(date -u +%Y%m%dT%H%M%SZ)"
+    printf 'metrics_present=%s\n' "$([[ -s "$WORLDR_METRICS" ]] && printf yes || printf no)"
+    printf 'state_present=%s\n' "$([[ -s "$WORLDR_STATE" ]] && printf yes || printf no)"
+} >"$WORLDR_REPORT/result.txt"
+if (( status == 0 )); then
+    printf 'Direct-display run completed. Record the visual/input checklist in %s/checklist.txt.\n' "$WORLDR_REPORT"
+    cat >"$WORLDR_REPORT/checklist.txt" <<'EOF'
+Mark PASS/FAIL and add hardware-specific observations:
+[ ] image appears on every selected connector at the intended mode
+[ ] pointer and keyboard remain responsive; Ctrl+Q exits
+[ ] terminal text, resize, drag, depth movement and inertial throw behave correctly
+[ ] moving or focusing another window does not cancel an existing throw
+[ ] VT switch away/back restores input and rendering
+[ ] suspend/resume restores input and rendering
+[ ] connector unplug/replug preserves the surviving workspace and recovers the output
+[ ] no corruption, stuck cursor, process leak or unexpected desktop-session interference
+EOF
 fi
-
-if [[ -z "${XDG_RUNTIME_DIR:-}" ]]; then
-	export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-	mkdir -p "$XDG_RUNTIME_DIR"
-	echo "set XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
-fi
-
-cd "$ROOT"
-if [[ ! -x bin/worldr-shell || ! -x bin/worldr-session ]]; then
-	echo "building bin/worldr-shell + bin/worldr-session (CGO_ENABLED=1)…"
-	export CGO_ENABLED=1
-	make build
-fi
-
-echo
-echo "Starting worldr-session → worldr-shell. First soak is duration-capped ($DURATION)."
-echo "Preferred: BACKEND=vk-display (Intel iGPU / Mesa). Fallback: BACKEND=drm."
-echo "Panel / overview / launcher / workspaces / effects use CompositeDesktop on this path too."
-echo "When it exits: Ctrl+Alt+F1 or F2 → Plasma. If wedged: Ctrl+Alt+F4, pkill worldr-shell."
-echo
-
-args=(--backend="$BACKEND" --duration="$DURATION")
-if [[ -n "$CARD" ]]; then
-	args+=(--card="$CARD")
-fi
-exec ./bin/worldr-session --shell ./bin/worldr-shell -- "${args[@]}" "$@"
+exit "$status"

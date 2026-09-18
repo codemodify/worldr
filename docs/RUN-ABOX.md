@@ -1,546 +1,293 @@
-# Run worldr-shell on abox (Arch, Intel Arrow Lake)
+# Build and run on abox
 
-First tryable build: a `worldr-shell` binary that **builds with Go** and either
+The default experience is a general spatial workspace with native PTY terminals,
+a read-only native project browser, and compatible Wayland applications.
+AXIAL / 07 is available from the general workspace APPS rail or `--axial` as a
+hosted native 3D tool with retained meshes, shared depth/picking and session
+restore. It also remains available as a standalone engineering study with retained meshes
+and an instrument surface.
 
-1. **clears the screen** via Vulkan `VK_KHR_display` or DRM/KMS, or
-2. **nests** as a Wayland client on Plasma **and hosts clients** in that window, or
-3. **shows a compositor seat** on a spare TTY / headless.
-
-This machine: Intel Arrow Lake iGPU, Mesa 26.2.2, Vulkan 1.4, Arch Linux.
-
-## Safety — do not steal your current session by accident
-
-`vk-display` and `drm` take **DRM master** and will blank / replace the active
-VT. If `WAYLAND_DISPLAY` or `DISPLAY` is set, `worldr-shell` **refuses** those
-backends unless you pass `--take-over-display`.
-
-**Preferred first try (safe):** nested compositor window on your current desktop
-(`--backend=wayland-client` or `--backend=nested`), then `foot` on the printed
-`WAYLAND_DISPLAY`.
-
-**Preferred real-display try:** a **spare TTY** (tty3 via **Ctrl+Alt+F3**),
-not the VT that is already running Plasma/Hyprland/Sway/GNOME.
-
-| Key | What it does |
-| --- | --- |
-| Ctrl+Alt+F1…F7 | Switch virtual terminals. Your existing graphical session stays on its VT. |
-| Ctrl+C | Stop `worldr-shell` if it is in the foreground on that TTY. |
-| Ctrl+Q | Quit the compositor (explicit chord). Bare **Q** never quits — type in foot freely. |
-| F12 | Toggle expose/overview (nested window must be focused). Super+Tab if the host does not steal Super. Also the panel **grid** button. |
-| F1 | Open the in-shell launcher (Super+Space if the host does not steal Super). Also the panel **apps** button. |
-| Ctrl+Alt+←/→ | Switch virtual desktop (pager dots if the host steals this combo). |
-| `--duration=15s` | Always exits — use this the first time on a TTY. |
-
-If the TTY appears wedged: another TTY (`Ctrl+Alt+F4`), `pkill worldr-shell`,
-then **Ctrl+Alt+F1** or **F2** back to Plasma. The DRM backend tries to restore
-the previous CRTC on exit.
-
-## Packages (Arch)
+## Arch dependencies
 
 ```sh
-sudo pacman -S --needed \
-  go gcc pkgconf \
-  vulkan-headers vulkan-icd-loader vulkan-intel vulkan-tools \
-  mesa libdrm wayland wayland-protocols \
-  librsvg \
-  weston \
-  xorg-xwayland xorg-xeyes xterm xorg-xcalc
-```
-
-`weston` provides `weston-simple-shm`. `xorg-xwayland` + `xterm` / `xorg-xeyes` / `xorg-xcalc` are for `--xwayland`.
-
-`vulkan-radeon` / `nvidia-utils` are fine later; **abox is Intel first**.
-
-Groups (logind `uaccess` usually covers the active VT; still useful):
-
-```sh
-sudo usermod -aG video,render,input "$USER"
-# re-login
-```
-
-Confirm the ICD:
-
-```sh
-vulkaninfo --summary
-# expect a Mesa Intel device, Vulkan 1.4
-ls /dev/dri/
-```
-
-## Build
-
-Needs CGO, `libvulkan`, and `libdrm` (the C ABI boundary). Optional `librsvg`
-(`pkg-config librsvg-2.0`) turns on `-tags=librsvg` in `make` for real SVG
-icons; without it the simple raster is used. No huge vendored trees.
-
-```sh
-git clone https://github.com/codemodify/worldr.git
-cd worldr
-# this branch (stacked on .desktop launcher):
-git checkout cursor/tty-vk-display-soak-c92c
-
-export CGO_ENABLED=1
+sudo pacman -S --needed go gcc pkgconf vulkan-headers vulkan-icd-loader libdrm wayland libxkbcommon libvterm fontconfig pango libxcb seatd libinput systemd-libs vulkan-intel
 make build
-# → bin/worldr-shell  bin/worldr-session
+make test-gpu
 ```
 
-Or: `go build -o bin/worldr-shell ./cmd/worldr-shell`
+The bring-up target is Intel Arrow Lake with Mesa. Use the appropriate Vulkan
+driver on other GPUs. `./bin/worldr-shell --list-devices` reports devices.
+Debian/Ubuntu builds need `libvulkan-dev`, `libdrm-dev`, `libwayland-dev`,
+`libxkbcommon-dev`, `libvterm-dev` (libvterm 0.3+), `libfontconfig1-dev`, `libpango1.0-dev`,
+`libxcb1-dev`, `libxcb-composite0-dev`, `libxcb-res0-dev`, `libxcb-xfixes0-dev`, `libseat-dev`,
+`libinput-dev`, and `libudev-dev` with Go, a C toolchain,
+pkg-config, and a driver.
 
-List GPUs (no display takeover):
+If the Vulkan loader is installed but its headers are supplied by a separate
+Vulkan-Headers checkout, point the build at that checkout:
 
 ```sh
-./bin/worldr-shell --list-devices
+make VULKAN_HEADERS=/path/to/Vulkan-Headers build
+make VULKAN_HEADERS=/path/to/Vulkan-Headers test
 ```
 
-## Recommended safe try (nested compositor on Plasma)
+Use the actual local checkout path; this does not replace the other development
+libraries or the Vulkan driver.
 
-This is the **desktop demo**: a window on your existing session that *is* the
-worldr compositor. Clients you launch against the printed socket appear **inside
-that window** with SSD.
+Shader development needs a shader compiler; `make shaders` regenerates the
+checked-in binaries from GLSL. Generated XDG-shell protocol C/header files are
+also checked in, so normal builds need no protocol scanner. Font data comes
+from the Go module dependency; native terminal glyphs missing from Go Mono use
+installed fonts through Fontconfig. Installing a font with the desired symbols
+provides coverage; this does not add text shaping or color emoji support.
+
+## In Plasma or another Wayland desktop
 
 ```sh
-# keep your Plasma/KWin WAYLAND_DISPLAY (usually wayland-0) for this process
-./bin/worldr-shell --backend=wayland-client --duration=60s
-# alias: --backend=nested
+./bin/worldr-shell --backend=nested --project=. --terminal
+./bin/worldr-shell --backend=nested --duration=20s --demo
+./bin/worldr-shell --backend=nested --experience=axial --state=documents/axial.json
+./bin/worldr-shell --backend=nested --app=foot
+./bin/worldr-shell --backend=nested --app=foot --app=foot -- --config=/dev/null
+./bin/worldr-shell --backend=nested --terminal --app=foot
 ```
 
-The shell prints something like:
+Nested presentation uses a Vulkan swapchain on the host's surface. No per-frame
+readback or shared-memory framebuffer transport is involved. The host supplies
+logical XKB keys, modifiers, pointer input, resize, and close events.
 
-```
-present: backend=wayland-client size=1280x720 …
-wayland compositor: WAYLAND_DISPLAY=wayland-1  (example: WAYLAND_DISPLAY=wayland-1 foot)
-nested compositor: clients appear inside this window. Keep this WAYLAND_DISPLAY=wayland-0 for the host; use WAYLAND_DISPLAY=wayland-1 for foot/weston-simple-shm.
-```
+The commands below use the general workspace unless `--experience=axial` is
+specified. `--demo` selects AXIAL automatically unless an experience was explicitly
+selected; it cannot be combined with `--experience=workspace`.
 
-**Other terminal** (same user, same `XDG_RUNTIME_DIR`):
+Drag a window’s top grip to move it; release while moving to throw it. The window
+coasts smoothly to a stop. Grab again or press Escape to stop a coast. Scroll
+while dragging to change depth; Ctrl+Z restores the whole gesture. Reduced Motion
+keeps direct dragging and disables throws. Super+drag also moves content planes
+when the host does not reserve that chord.
+
+`--project=.` opens a native directory list and UTF-8 file preview. Use Up/Refresh,
+arrows/Enter/Backspace, or double-click an entry. Copy Path or Ctrl+Shift+C copies
+the selected path. The read-only preview is limited to 1 MiB per file and 5000
+entries per directory; child symlinks and special files are never opened.
+
+In AXIAL, drag to orbit and click a part or its tree entry to inspect it. E explodes the
+assembly, Space pauses time, left/right scrub time, F focuses the model, and R
+resets it. Ctrl+Z undoes an edit; Ctrl+Shift+Z or Ctrl+Y redoes it. A full drag is
+one edit. Escape cancels an active gesture or restores the normal view.
+Ctrl+Alt+Q or the host window close button exits; Ctrl+Q also exits when the
+workspace owns the keyboard. Ordinary shortcuts reach a focused application.
+
+Use the Cinematic/Adaptive header controls or P to switch presentation. Cinematic
+keeps spatial framing and stronger wire/rim accents; Adaptive calms them during
+focus (F) and restores them when leaving focus. The model has a blue/silver
+palette, light-responsive highlights and smoothly shaded cylinder walls. Its
+world-space grid and rings hide in Read/Overview and fade during Adaptive focus.
+Both modes retain the same content and controls. Selective depth-aware background
+glow, directional shadows, moving fill lights, opt-in final-frame highlight
+bloom, thin-glass transmission/refraction and depth-composited holographic mesh
+projections are implemented. Reduced Motion freezes the projection phase. The
+compositor keeps the global finish neutral to preserve exact client/UI pixels
+and cursor bounds. Output is still SDR sRGB; HDR signaling, ICC/wide-gamut
+transforms and true volumetric scattering remain future work.
+
+Press B or use the panel depth button to bring the live instrument panel forward
+or send it behind the assembly. The panel has its own play/pause and timeline
+controls linked to the same synthetic study data. Occluding geometry blocks
+new clicks on the panel; an active scrub retains pointer capture. Front/back
+placement participates in undo/redo and document persistence. This demonstrates
+native content surfaces. Add `--app=foot` for an actual terminal process.
+
+In AXIAL, `--app=foot` takes the instrument panel’s place; the default workspace
+has no synthetic study panel. Click
+the terminal to type, use **Read selected** for a readable view and **Return to space**
+to restore its context. The depth control changes its placement; Compact/Wide
+changes the client's configured size so terminal programs reflow. Selection
+drags retain the target surface even outside the scene viewport. Clicking the
+workspace returns keyboard ownership to its native controls. Ctrl+Alt+Q exits
+worldr regardless of who owns the keyboard; Ctrl+Q and Ctrl+S reach the terminal
+while it has focus. A foot process exiting withdraws its window and leaves other
+applications and the native workspace running.
+
+**Place / Group** enables dragging and Shift+click multi-selection. Grouped
+windows retain their relative positions when moved or sent deeper into space.
+**Overview** (Ctrl+Alt+O from any app; O with workspace focus) retrieves obscured
+apps. Unmodified arrows select thumbnails one step per fresh press; modified
+arrows are consumed. Enter/keypad Enter or Escape returns to the prior view
+without restoring application keyboard focus. A second fresh Enter opens Read
+and grants typing focus to the selected app, even if it was obscured in space.
+Held overview keys and their releases cannot type into the returned application.
+**Portals** in the desktop footer, or Ctrl+Alt+G from any app, opens all live
+window groups across named spaces. Use arrows and Enter to travel, or use
+Ctrl+Alt+Left/Right directly. Portal travel centers the camera and selection
+without moving windows or granting application focus; zooming out leaves the
+windows free of automatic application-name cards.
+**New Terminal** or Ctrl+Alt+Enter creates an independent native shell
+and selects it; click its content or press a fresh Enter to read and type. The shortcut works from a focused
+native or legacy app, including with keypad Enter. This control is available even without `--terminal`
+and when no applications remain. **Close Selected** requests closing only the
+active window, even within a selected group; a legacy client can show an
+unsaved-work dialog before closing. Neither process action is undoable.
+Repeated `--app` options share trailing arguments; `--apps=profile.json` gives
+each launch its own stable ID and argument list. See the README profile example.
+
+`--terminal` starts a native PTY shell with worldr-owned presentation. Use
+Ctrl+Shift+C/V for selected text and paste, and Shift to override a TUI's mouse
+tracking for selection/scrollback. Native, legacy and desktop clipboards share
+offers; data transfers happen on explicit paste. Native text transfer is bounded
+to 1 MiB and two seconds, and focus loss cancels a pending native paste. Native
+shell exit keeps the final output visible until Close Selected dismisses it.
+Native glyphs use embedded Go Mono with bounded Fontconfig fallback and retained
+RGBA surfaces. Text shaping, color emoji and soft-wrap-aware selection remain ahead.
+
+The native shell points compatible GUI programs at worldr's private server.
+Run these inside that shell after installing the relevant applications:
 
 ```sh
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-export WAYLAND_DISPLAY=wayland-1   # must be the name the shell printed, not wayland-0
-foot
-# or: weston-simple-shm
+foot --config=/dev/null &
+QT_QPA_PLATFORM=wayland konsole --separate --nofork &
+chromium --ozone-platform=wayland --disable-gpu \
+  --user-data-dir="$(mktemp -d -t worldr-chromium.XXXXXX)" --no-first-run about:blank &
 ```
 
-You should see a bottom panel (clock + **apps** / **grid**) and foot (or the
-shm client) with a cyan/magenta SSD frame inside the
-`worldr-shell (nested compositor)` window. On map it **scale+fades+rises in** (~280ms);
-title-drag **wobbles** (8×6 mesh jelly). Close (SSD × or quit the client)
-**burns** away (~720ms). `--effects=low` is fade-only; `off` is instant.
-Clicking another window gives a short lift/shadow/glow pulse. Workspace
-switch is ease-in-out with a light dim. Pointer and keys while that window is focused are forwarded
-into worldr (title-bar drag still works). Pointer buttons are paired
-per client: a nested host release is forwarded only after a matching
-press, and leave-while-down emits that matching release. Foot should
-not log `stray button release event (compositor bug?)`.
+The separate Chromium profile prevents an existing browser instance from taking
+the launch. It is a temporary directory created for this command. The command
+above deliberately requests software client rendering; supported GPU clients can
+instead use the bounded explicit-modifier DMA-BUF path. Worldr renders its scene with Vulkan
+in both cases. The private server is also available when a terminal was opened
+through New Terminal instead of `--terminal`.
+
+X11 support is opt-in and requires the `xorg-xwayland` package on Arch or
+`xwayland` on Debian. Use `--x11-app=xmessage -- 'Hello from X11'` for an explicit
+launch, `"x11": true` in an application profile, or `--xwayland --terminal` to
+allow X11 programs launched from the native shell. The private Xwayland process
+has its own authentication cookie. It uses glamor DMA-BUF buffers when the
+Xwayland binary, Vulkan importer and accessible DRM render node share an
+explicit XRGB/ARGB modifier. If those capabilities are absent, or glamor fails
+during startup, Worldr starts it with software SHM instead. The X11 `CLIPBOARD`
+selection is bridged lazily to Wayland, native and nested-host clipboard
+endpoints. XDND versions 3–5 provide copy-only drags between managed X11
+windows; cross-protocol X11/Wayland drags are not implemented.
+
+At most 32 live windows and 32 saved placements are supported. Closed windows
+retain their saved placements, so old layout entries can fill the document with
+fewer live windows. Launch failures show a temporary notice below the header.
+If a new terminal cannot fit the saved layout, it is closed immediately and the
+prior layout is preserved. Reopening native launch slots reuses their placement;
+it starts a fresh shell rather than restoring process memory.
+
+Use **Forget Closed Placements** in the row below the header to free entries
+belonging to closed windows. It appears only when such entries exist and works
+even with no live apps. Live positions, groups and selection remain intact.
+Ctrl+Z restores forgotten entries if the combined layout still fits; a capacity
+conflict shows a notice instead of hiding a new live window. Redo leaves any
+reopened window intact. Cleanup is always an explicit action.
+
+Real foot workflows cover typing, resize and spatial management. Isolated
+Chromium/Konsole tests cover content, menus, nested submenus and dialogs, and
+Chromium verifies XDG shell v3 negotiation. A socket-level test covers explicit
+and reactive popup repositioning through configure acknowledgement and parent
+resize; popup pixels remain clipped to their root application image. Raw protocol
+coverage also verifies clipped buffer damage, scaled surface damage, immutable
+earlier frames and full-copy fallback for clients that omit damage. Opt-in
+Xwayland is tested with real xmessage windows; nested native fields support
+text-input-v3 IME.
+Wayland drag-and-drop is tested between two Chromium processes. Explicit
+single-plane XRGB/ARGB/XBGR/ABGR DMA-BUF buffers in 8888 and 2101010 layouts are
+copied GPU-to-GPU into retained LINEAR snapshots when Vulkan supports the exact
+format/modifier pair. This covers LINEAR and capability-gated non-LINEAR
+modifiers with one modifier plane, up to 256 advertised pairs; unadvertised
+pairs fall back in the client, normally to SHM. Multi-plane YUV, primary
+selection, cross-protocol X11/Wayland drag-and-drop and arbitrary DMA-BUF
+formats are not provided. A real Xwayland gate verifies both a nonempty glamor
+render and forced SHM fallback. The XDND gate transfers a real UTF-8 selection
+between two authenticated X11 clients and covers cancellation, target unmap,
+legacy version completion and the two-second unfinished-drop bound.
+To run the real foot and Vulkan integration tests after installing foot:
 
 ```sh
-./bin/worldr-shell --backend=wayland-client --effects=off --duration=60s   # no theater
-./bin/worldr-shell --backend=wayland-client --effects=low --duration=60s   # fade only
+make test-compat
+make test-integration
+make test-nested
+WORLDR_TEST_DMABUF=1 WORLDR_TEST_DMABUF_MODIFIERS=1 \
+  go test -v ./internal/platform/linux/apps ./internal/platform/linux/native -run DMABuf
+WORLDR_TEST_TOOLKITS=1 go test -v ./internal/platform/linux/apps \
+  -run 'Test(ToolkitProbe|ChromiumPopupInputAndDismissal|ChromiumClientCursorChangesAndHides|KonsoleDialogAndPopupDisconnect)$'
+WORLDR_TEST_SYSTEM_FONTS=1 go test ./internal/nativeapps -run TestSystemFontFallbackBoxDrawing
 ```
 
-The same `CompositeDesktop` path is used on `--backend=vk-display` / `drm`.
+The second command requires Chromium and Konsole for all cases to run; missing
+executables are skipped. It uses isolated profiles and local pages on a private
+Wayland server, including popup, dialog and cursor cases beyond the first-frame probe.
+The font check requires an installed font with rounded box-drawing glyphs.
+`make test-compat` includes real native-shell launch, close/reopen and clipboard
+tests as well as foot and Vulkan integration. Install Vim and Bash to exercise
+the optional terminal editor and foreground-job tests. `make test-integration`
+adds real media, Chromium/Konsole, Xwayland and DMA-BUF workflows. `make
+test-nested` drives a private Wayland compositor, so its scripted input cannot
+reach the host desktop.
 
-### Expose / overview (v0)
+With `--state`, an existing document loads and Ctrl+S or normal exit saves it.
+A missing file starts fresh and is created on save. Camera, placement, selection,
+presentation and Reduced Motion persist; AXIAL also saves its study timeline.
+Workspace and AXIAL documents have distinct identities and cannot be interchanged.
+Undo history does not persist. Saving cancels a held pointer gesture and settles
+a released throw at its current position; velocity is never saved. No default document file is
+written when the option is absent. Invalid/mismatched state files are rejected.
 
-With **two or more** clients on the **active desktop**, focus the
-`worldr-shell (nested compositor)` window and press **F12**. Actors on that
-desktop animate into a grid (other workspaces stay hidden). Click a tile
-(or ←/→ / Tab, then Enter) to focus and leave.
-**Esc** leaves overview without quitting. **Ctrl+Q** quits the compositor.
-Bare **Q** / **Esc** never quit while a client is on the desktop.
-
-| Key | Action |
-| --- | --- |
-| F12 | Toggle overview (works with forwarded nested `wl_keyboard` evdev or evdev+8) |
-| Super+Tab | Same toggle if KWin does not steal Super |
-| ← → Tab | Move selection in overview |
-| Enter | Focus selection and exit |
-| Esc | Exit overview (does not quit). On an empty desktop, still quits. |
-| Ctrl+Q | Quit the compositor |
-
-Smoke without pressing keys (video-less):
+## Headless rendering and capture
 
 ```sh
-./bin/worldr-shell --backend=wayland-client --overview-demo --duration=20s
-# other terminals: two foots on the printed WAYLAND_DISPLAY
+make preview
+./bin/worldr-shell --backend=headless --frames=181 --demo --snapshot=dist/study.png
+./bin/worldr-shell --backend=nested --duration=10s --snapshot=dist/current.png
 ```
 
-Overview auto-enters ~0.6s after the first window maps.
+A Vulkan device is required. Software Vulkan such as Lavapipe can check rendering
+correctness, but its timing is not hardware GPU performance. Export renders the
+current document into a separate offscreen target and reads that image back;
+it does not add readback to the interactive presentation loop.
 
-### Panel + launcher (v0)
+Reported submit/wait time is observed on the CPU. It is not a GPU timestamp or
+an input-to-photon measurement. Presentation teardown waits for device idleness
+so in-flight resources are not destroyed; there is no finite teardown deadline.
 
-A **bottom panel** is always composited (clock, `worldr` label, focused
-window title, **apps**, **grid**). The compositor output is the area above
-the bar so new windows do not sit under it.
+## Direct display on a spare TTY
 
-**Launch foot without a second terminal:** focus the nested worldr window,
-press **F1** (or click **apps**), highlight `foot`, Enter. The child gets
-the printed `WAYLAND_DISPLAY` (host `wayland-0` is stripped). Super+Space
-is the same bind when KWin does not steal Super.
-
-**Menus (0.9.8):** in foot, right-click the terminal. The context menu is an
-`xdg_popup` (no SSD title bar) stacked above the window. Clicks on the menu
-should reach the popup surface.
-
-**Clipboard (0.9.19 / 0.9.25):** in foot, select text, Ctrl+Shift+C, then Ctrl+Shift+V
-(or another worldr client). Middle-click pastes the primary selection.
-
-**Drag-and-drop (0.9.29):** drag text or a supported image (`png`/`jpeg`/`webp`/`bmp`)
-from one worldr client onto another (copy action). Drop on empty desktop/panel
-cancels — no icon-canvas target yet.
-**Images:** copy `image/png`, `image/jpeg`, `image/webp`, or `image/bmp` between
-worldr clients (exact MIME). Nested under Plasma: `text/plain` still works;
-those image types are forwarded both ways when the host advertises them.
-vk-display/drm stay in-compositor only.
-
-**Scale (0.9.16 / 0.9.21):** nested under Plasma, worldr reads host `wl_output.scale`
-and `wp_fractional_scale` `preferred_scale` (120ths) and drives its own
-output. A 150% Plasma panel → `preferred_scale` 180, `wl_output.scale` 2.
-abox try saw **1.75** (`preferred_scale=210/120`, `wl_output.scale=2`).
-`--scale=1.5` (or `1.25` / `2`) still overrides. **0.9.33:** `--outputs=2`
-tiles two logical `wl_output`s LTR on the same framebuffer; `--output-scales=1,1.5`
-sets per-output scale (and then host `--scale` is not applied). Drag across
-the seam sends `wl_surface.leave`/`enter`. vk-display/drm stay **1.0**
-unless `--scale` / `--output-scales` is set. **0.9.21:** `xdg_surface.set_window_geometry` width/height
-crop the actor so GTK4 CSD shadows are not wrapped in SSD.
-
-**KMS scanout (0.9.17 / 0.9.23 / 0.9.30):** on a spare TTY, `--backend=drm`, start `kitty` (or
-another GL client) and fullscreen it. One opaque ARGB/XRGB buffer that covers
-the output should print `kms scanout: primary dmabuf`. Windowed dmabuf clients
-may print `kms overlay` (overlay plane + desktop on primary). A small software
-cursor may print `kms cursor` (hardware cursor plane). Failure of either stays
-on the blit path (`kms overlay fallback` / `kms cursor fallback`). Overview,
-launcher, workspace slide, theater, or shm (`foot`) stay compose.
-`--backend=vk-display` keeps **primary** on the GPU blit (`kms scanout fallback`).
-**0.9.31:** when DRM master is available, vk-display opens a planes-only sidecar
-and `VK_EXT_acquire_drm_display` so windowed dmabuf / small cursor can print
-`kms overlay` / `kms cursor` (same fallbacks if atomic rejects). **0.9.30:** drm
-opens an offscreen Vulkan ICD so acquire waits are `vkWaitSemaphores` (log
-`linux-drm-syncobj: … Vulkan timeline wait`), not ioctl-only. NVIDIA/AMD: same
-try; expect fallback if `AddFB2` rejects the modifier. Nested is unchanged.
-
-**Icons (0.9.18):** `xdg_toplevel_icon` buffers still win when the client sets
-one. Otherwise worldr looks up `.desktop` `Icon=` / `AppID` in `$XDG_ICON_THEME`
-then **hicolor** (`…/icons/<theme>/<size>/apps/<name>.png`, then `pixmaps/`).
-Launcher rows show those PNGs, or a rasterized SVG when no PNG exists.
-Missing → default glyph. Complex SVG (filters/text) stays the default glyph.
-`$XDG_ICON_THEME=breeze` (Plasma) or `Adwaita` (GNOME) if unset. Foot often
-has `utilities-terminal` / `foot` in hicolor on Arch.
-
-| Key / click | Action |
-| --- | --- |
-| F1 | Toggle launcher |
-| Super+Space | Same toggle if the host allows Super |
-| Panel **apps** | Open launcher (stays open). Click **apps** again to close. Outside-click dismisses only after pointer release. |
-| Panel **grid** | Toggle overview (same as F12) |
-| ↑ ↓ Tab | Move launcher selection |
-| Enter / click row | Spawn that command |
-| Esc | Close launcher (does not quit) |
-
-The list is scanned from XDG `.desktop` files (`~/.local/share/applications`
-and `$XDG_DATA_DIRS/applications`). `Name=` is shown; `Exec=` is launched
-with `%f` / `%F` / `%u` / `%U` field codes stripped. `Hidden` / `NoDisplay`
-/ `Terminal=true` entries are skipped. If the scan is empty, the fallback
-is `foot`, `weston-simple-shm`, and `xeyes` / `xterm` / `xcalc` when `--xwayland`
-is on. Missing binaries log `launcher: … not on PATH` and the shell keeps
-running.
-
-### Workspaces (0.9.14)
-
-**2–4** virtual desktops, default **3** (`--workspaces=N`). New clients
-(launcher or an external `foot`) spawn on the **active** desktop. F12
-overview lists **only that desktop** and paints `desk N/M`. Empty desktops
-stay addressable (switch, pager click, and move-onto).
-
-One scheme (no Super+1..N): **Ctrl+Alt+←/→** switches; **Ctrl+Alt+Shift+←/→**
-moves the focused window and follows (wraps). Evdev or evdev+8. The desktop
-layer slides horizontally (~260ms, reused). Plasma often steals Ctrl+Alt+arrows
-— use the pager dots in the nested window, or soak on a spare TTY.
-
-The panel pager shows **N/M** plus dots: dim = empty, bright = occupied,
-brand/larger = current.
-
-```sh
-./bin/worldr-shell --backend=wayland-client --duration=60s
-# F1 → foot on desktop 0
-# click the second pager dot (or Ctrl+Alt+→)
-# F1 → foot on desktop 1
-# focus the first foot, Ctrl+Alt+Shift+→  (window follows to desktop 1)
-```
-
-| Key / click | Action |
-| --- | --- |
-| Ctrl+Alt+→ | Next desktop (wraps; empty dest OK) |
-| Ctrl+Alt+← | Previous desktop (wraps; empty dest OK) |
-| Ctrl+Alt+Shift+→ | Move focused window to next desktop and follow |
-| Ctrl+Alt+Shift+← | Move focused window to previous desktop and follow |
-| Pager **N/M** + dots | Current index / count; click a dot to jump |
-
-`--compositor=false` restores the old clear-only debug window (no socket).
-
-Host-side bind is clamped (`min(our_max, advertised)`): compositor, shm,
-`xdg_wm_base`, `wl_seat` (v≤5), `wl_data_device_manager` (v≤3),
-`zwp_primary_selection_device_manager_v1`, `wl_output` (v≤2), and
-`wp_fractional_scale_manager_v1` when advertised. Advertise/bind lines go
-to stderr as `wayland-client: global …` / `bind …`.
-
-If the host window fails to map, paste those lines. Workaround: spare TTY
-`scripts/try-tty.sh`.
-
-### X11 apps via XWayland (spike)
-
-Same nested window, plus a rootless Xwayland child attached to the **worldr**
-socket (not Plasma’s Xwayland) and a tiny compositing XWM (`-wm` fd,
-`CompositeRedirectSubwindows` + MapRequest / ConfigureRequest).
-X11 windows become actors via `xwayland_shell_v1`. Managed normals get SSD;
-titles come from `WM_NAME` / `_NET_WM_NAME` and `WM_CLASS`. Override-redirect
-and transients (menus, tooltips) skip SSD and keep the client position.
-
-```sh
-./bin/worldr-shell --backend=wayland-client --xwayland --duration=60s
-```
-
-The shell prints `xwayland: DISPLAY=:N`. **Other terminal:**
-
-```sh
-export DISPLAY=:N          # the number the shell printed — not $DISPLAY from Plasma
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-xeyes
-# or: xterm
-# harder: xcalc (menus should appear without SSD; click another xterm to restack)
-```
-
-Do **not** set `WAYLAND_DISPLAY` for xeyes/xterm (they are X11 clients).
-Do **not** use the host `DISPLAY=:0` — that is Plasma, not worldr.
-
-If `Xwayland` is missing: `pacman -S xorg-xwayland`. X11 clients are **not** on
-a stock Arch desktop — also `sudo pacman -S xorg-xeyes xterm xorg-xcalc`. The compositor
-still hosts foot. 0.9.11: `_NET_SUPPORTED` / active window / titles / click-to-focus
-and raise; override-redirect and `WM_TRANSIENT_FOR` skip SSD. Still not a full
-ICCCM WM (no reparenting, no pager/struts, no IME). xterm Ctrl+right-click or
-xcalc menus are the harder check.
-worldr now requests a free `DISPLAY` starting at `:1` so it does not clash with
-Plasma’s `:0` (avoids `_XSERVTransSocketUNIXCreateListener: server already running`).
-
-Fullscreen nested (still inside your compositor):
-
-```sh
-./bin/worldr-shell --backend=wayland-client --fullscreen-client --duration=15s
-```
-
-## Real display on a spare TTY (vk-display soak)
-
-`vk-display` / `drm` take DRM master. **Daily demo stays nested** on Plasma
-(`--backend=wayland-client`). This path is the architecture’s real compositor
-seat on **bare-metal Intel iGPU** (abox / Mesa). The cloud agent does not have
-a TTY; soak on the machine after merge.
-
-`--backend=auto` prefers **nested** when `WAYLAND_DISPLAY` is set. On a TTY
-with `/dev/dri/card*` and no graphical session env it tries **vk-display**,
-then **drm**. Takeover is refused unless `--take-over-display`. A leftover
-`XDG_SESSION_TYPE=wayland` **without** a host socket also refuses (that used
-to pick vk-display and steal the GPU). `--card` must be `/dev/dri/cardN`
-(not `renderD*`). GPU waits on vk-display time out after **2s** so a lost
-master does not hang the VT forever.
-
-Panel, overview, launcher, workspaces, and effects use the same
-`CompositeDesktop` path as nested.
-
-### Exact abox soak (Intel iGPU)
-
-Leave Plasma on its VT. Do **not** pass `--take-over-display` from the desktop.
-
-1. **Ctrl+Alt+F3** → tty3. Log in (real logind session).
-2. Groups if needed (once): `sudo usermod -aG video,render "$USER"` then re-login.
-3. Confirm the node and ICD:
-
-```sh
-ls /dev/dri/card*          # need cardN, not only renderD128
-vulkaninfo --summary       # Mesa Intel, Vulkan 1.4
-echo "seat=$XDG_SEAT vt=$XDG_VTNR type=$XDG_SESSION_TYPE"
-# type should be tty (or empty). WAYLAND_DISPLAY and DISPLAY must be unset.
-```
-
-4. `cd` to the worldr tree and soak **vk-display** first (15s cap):
+Save current work and switch to a spare TTY (for example Ctrl+Alt+F3), log in, and
+run:
 
 ```sh
 ./scripts/try-tty.sh
-# explicit:
-DURATION=15s BACKEND=vk-display ./scripts/try-tty.sh
-# second GPU / wrong card:
-# CARD=/dev/dri/card1 DURATION=15s BACKEND=drm ./scripts/try-tty.sh
+# Or select the KMS primary node explicitly:
+CARD=/dev/dri/card1 BACKEND=vk-display DURATION=15s ./scripts/try-tty.sh
+# Inspect connectors without taking ownership, then select/order them explicitly:
+./bin/worldr-shell --list-outputs
+./bin/worldr-shell --backend=vk-display --output=508 --output=517
 ```
 
-The script builds `bin/worldr-shell` + `bin/worldr-session` if needed, refuses a
-graphical session env, sets `XDG_RUNTIME_DIR`, and runs
-`worldr-session --shell … -- --duration=15s` (XDG session type `wayland`,
-desktop `worldr`).
+`vk-display` presents the scene through a Vulkan display swapchain.
+`BACKEND=drm` is a diagnostic fallback that reads an offscreen Vulkan image back
+into a DRM dumb buffer. The script refuses graphical-session variables. Return
+to the existing desktop using its VT shortcut, commonly Ctrl+Alt+F1 or F2.
 
-5. Success looks like a dark cinematic clear + bottom panel, and:
+The redesigned physical-display/VT path is currently unverified. It needs real
+hardware with suitable device permissions and supported Vulkan display extensions.
+Passing offscreen or nested tests does not validate KMS, VT switching, display
+restoration, suspend/resume or input permissions. Direct mode uses libseat for
+DRM/input leases and libinput/udev for hotplug, relative and absolute devices.
+It closes graphics and input before acknowledging a seat disable, recreates them
+after enable, and cancels held keyboard/pointer state across the transition.
+Connected DRM outputs form one bounded desktop (up to eight); `--output` fixes
+their left-to-right order. A connector change rebuilds the output set while the
+workspace and applications remain alive.
 
-```
-present: backend=vk-display size=… device=…
-seat: kind=tty …
-desktop: CompositeDesktop (panel, overview, launcher, workspaces, effects) …
-wayland compositor: WAYLAND_DISPLAY=wayland-1
-```
-
-6. From **another TTY or SSH** (same user), attach a client:
-
-```sh
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-export WAYLAND_DISPLAY=wayland-1   # name the shell printed
-foot                               # or F1 on the TTY if evdev keys work
-```
-
-7. When the duration expires (or **Ctrl+Q** / Ctrl+C): **Ctrl+Alt+F1** or **F2**
-   back to Plasma.
-
-**If the TTY looks wedged:** **Ctrl+Alt+F4**, `pkill worldr-shell`, then F1/F2.
-vk-display present/teardown waits at most 2s; if KMS is still blank, a VT
-switch usually restores Plasma’s CRTC.
-
-**vk-display failed, drm fallback:**
-
-```sh
-DURATION=15s BACKEND=drm ./scripts/try-tty.sh
-```
-
-Manual equivalent:
-
-```sh
-unset WAYLAND_DISPLAY DISPLAY
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-./bin/worldr-shell --backend=vk-display --duration=15s --color=#0b1020
-# fallback: --backend=drm --duration=15s
-```
-
-### If you insist on running from the graphical session
-
-```sh
-./bin/worldr-shell --backend=vk-display --take-over-display --duration=10s
-```
-
-This can yank the GPU from your running compositor. Prefer **tty3**.
-
-## Headless / CI
-
-```sh
-./bin/worldr-shell --backend=headless --duration=2s
-```
-
-Creates a Vulkan instance if an ICD exists; with no GPU it still runs a blank
-compositor seat (if `--compositor` is on, default) and exits. Useful on VMs
-without `/dev/dri`.
-
-## Flags
-
-| Flag | Default | Meaning |
-| --- | --- | --- |
-| `--backend` | `auto` | `vk-display` \| `drm` \| `wayland-client` \| `nested` \| `headless` |
-| `--take-over-display` | false | Allow vk-display/drm while WAYLAND_DISPLAY/DISPLAY or XDG_SESSION_TYPE=wayland\|x11 |
-| `--duration` | 0 (until signal) | Safety timer |
-| `--color` | `#0b1020` | Clear color |
-| `--compositor` | true | Listen as Wayland server (on for `wayland-client`/`nested` too) |
-| `--xwayland` | false | Launch rootless Xwayland on the worldr socket |
-| `--effects` | `high` | Window theater: `high` (mesh wobble+burn+cube+expose) \| `low` (fade) \| `off` |
-| `--overview-demo` | false | Auto-enter expose after the first window maps |
-| `--workspaces` | `3` | Virtual desktops (clamped 2–4) |
-| `--scale` | `0` (auto) | Output scale `1` / `1.25` / `1.5` / `2`. Auto: nest follows host `wl_output` / `wp_fractional_scale`; vk-display/drm stay 1.0. Explicit `--scale` always wins (unless `--output-scales`). |
-| `--outputs` | `1` | Logical `wl_output`s tiled left-to-right (1–4) on one framebuffer. |
-| `--output-scales` | empty | Per-output scales, comma list (`1,1.5`). Empty = `--scale` / host on every output. |
-| `--wayland-display` | first free `wayland-N` | Socket name |
-| `--ssd` | true | Server-side decoration chrome |
-| `--card` | first `/dev/dri/cardN` | DRM device |
-| `--list-devices` | | Print Vulkan devices and exit |
-
-`worldr-session` (0.9.34) wraps the shell for a login/session:
-
-| Flag | Default | Meaning |
-| --- | --- | --- |
-| `--shell` | sibling / PATH | `worldr-shell` binary |
-| `--login` | false | Prompt for username (must be the current uid; no PAM) |
-| `--user` | empty | Autologin that name (same uid rule) |
-| `--desktop` | `worldr` | `XDG_CURRENT_DESKTOP` / `XDG_SESSION_DESKTOP` |
-| `--print-env` | false | Print session env and exit |
-| `--dry-run` | false | Resolve env/shell and exit |
-| `--` | | Remaining args go to `worldr-shell` |
-
-Display managers: copy `contrib/wayland-sessions/worldr.desktop` to
-`/usr/share/wayland-sessions/`.
-
-## Binding choice
-
-Vulkan and DRM are a **thin owned C wrapper** (`internal/platform/linux/native`)
-linked against `libvulkan` and `libdrm`. Generated no-cgo bindings
-(`lukem570/vulkan-go`) omit `VK_KHR_display`. wgpu is not used.
-
-## Client matrix (abox)
-
-PR #2 (`feat/linux-dmabuf-and-clients`) **builds** on abox. Headless reports
-`linux-dmabuf: Vulkan import + readback enabled`. **foot connected and
-disconnected cleanly** against the compositor.
-
-| Client | Buffer | Expected now | Notes |
-| --- | --- | --- | --- |
-| `weston-simple-shm` | wl_shm | **Works** | First smoke test |
-| `foot` | wl_shm | **Works (confirmed on abox)** | Seat + full US xkb + SSD. Type freely; **Ctrl+Q** quits worldr. Pointer press/release is paired per client — the `stray button release event (compositor bug?)` warning should be gone (0.9.5). **Right-click** should open the context menu (`xdg_popup`, 0.9.8) without a title bar. **Copy/paste** (0.9.19 / **0.9.35**): Ctrl+Shift+C / Ctrl+Shift+V `text/plain` between worldr clients and, when nested, Plasma ↔ foot (clear and serial-0 offer fixed). `image/png` (and `image/bmp`) between clients; nest host forwards png when advertised. Mouse-select + middle-click uses primary (bridged if the host advertises it). Cursors, activation, **fractional-scale** (0.9.16 / **0.9.35**: nest follows Plasma HiDPI, including the output the window entered; `--scale` overrides). **Icons** (0.9.18 / **0.9.28**): theme PNG then SVG from `.desktop` `Icon=` / `AppID` (`Inherits=` + hicolor; librsvg if `make` found it); `xdg_toplevel_icon` buffer still wins. **Workspaces** (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. **Theater** (0.9.36): title-drag wobbles; SSD × / client quit burns. Still expected: text-input/IME. |
-| `kitty` | linux-dmabuf (GL) | **Try** | On **vk-display** (0.9.10+): Vulkan import + GPU blit. **0.9.17**: fullscreen ARGB/XRGB may KMS-scanout on `--backend=drm` (`kms scanout: primary dmabuf`). vk-display logs `kms scanout fallback` (Vulkan holds DRM master) then blits. Nested still CPU. |
-| `alacritty` | linux-dmabuf | **Try** | Same as kitty; may want more EGL/Vulkan extras |
-| `firefox` | dmabuf + gtk extras | **Unlikely** | Popups/subsurfaces exist (0.9.8); still needs clipboard MIME, idle-inhibit, etc. |
-| `brave` / Chromium | ozone Wayland + dmabuf | **Try (0.9.27)** | 0.9.26 fixed Qt-shim `selection(nil)` SEGV. 0.9.27: nest dmabuf feedback is LINEAR-only; `create_immed` keeps the fd; `wl_surface.enter` + `preferred_buffer_scale`; `xdg_toplevel` `activated` + `xdg_activation` focus. Prefer GPU (`--ozone-platform=wayland`). If the GPU process still dies: `--disable-gpu`. |
-| `ark` | Qt6 Wayland | **Try (0.9.27)** | 0.9.26: no `selection` before `keyboard.enter`. 0.9.27: surface.enter, preferred_buffer_scale, activated configure, activation focus. Window should stay up. |
-| `gnome-disks` | GTK4 + fractional scale | **Try (0.9.21)** | 0.9.20 at nest host scale **1.75** left a huge empty gap between content and SSD (window geometry width/height was dropped; CSD shadow counted as the client). 0.9.21 crops to `set_window_geometry`. |
-| X11 apps | XWayland | **Try (`--xwayland`)** | Rootless `Xwayland` + EWMH-ish XWM. `DISPLAY=:N xeyes` / `xterm` map as SSD actors with real titles. `xcalc` (or xterm’s Ctrl+right-click menu) should be chrome-less. Click-to-focus raises + `SetInputFocus`. |
-
-GPU-accelerated path (vk-display, 0.9.10): client dmabuf → Vulkan import → **sample/blit in the compositor pass**. **0.9.17 KMS scanout:** one fullscreen opaque ARGB/XRGB dmabuf on `--backend=drm` → `drmPrimeFDToHandle` + `AddFB2` + atomic/`SetCrtc` (Intel first; NVIDIA/AMD best-effort). Ineligible or `vk-display` (no second DRM master) → existing blit. Nested/shm unchanged.
-
-Start `kitty` only after the shell prints `linux-dmabuf: Vulkan import + readback enabled`.
-
-### Nested compositor on Plasma/KWin (abox)
-
-PR #3 (`feat/client-harden`) maps a host window: 514 frames, exit 0, binds
-clamped to compositor/shm/`xdg_wm_base`. This branch **adds the compositor
-into that window**.
-
-`auto` in a graphical session now picks this path (nested + socket), not a
-clear-only debug rectangle.
-
-Host binds (clamped): compositor, shm, `xdg_wm_base`, `wl_seat` ≤ v5 (pointer +
-keyboard forwarded into worldr), `wl_output` ≤ v2, `wp_fractional_scale` when
-advertised, and `wp_cursor_shape_manager_v1` v1 (default arrow on enter; shm
-`set_cursor` fallback). Still skipped: viewporter, dmabuf.
-
-**Success:** window titled `worldr-shell (nested compositor)` + bottom panel
-with pager dots. **F1 → foot** on desktop 0, switch desktop, **F1 → foot**
-on desktop 1.
-
-**If the host window dies:** paste `wayland-client: global/bind` lines.
-Workaround — real display on **tty3**:
-
-```sh
-# Ctrl+Alt+F3, login, then:
-./scripts/try-tty.sh
-```
-
-## Known gaps
-
-- XWayland (0.9.11): `--xwayland` rootless + tiny XWM + `xwayland_shell_v1`. EWMH basics (`_NET_SUPPORTED`, active window, titles/class, delete/take-focus). Not a full ICCCM WM (no reparenting/pager). Overlay menus skip SSD.
-- `xdg_popup` + `wl_subsurface` stacking (0.9.8): menus/tooltips/dropdowns. Positioner uses size + anchor + offset (no constraint/flip). Foot right-click menu is the abox check.
-- Clipboard (0.9.19 / **0.9.25** / **0.9.35**): `text/plain` + `image/png` / `image/jpeg` / `image/webp` / `image/bmp` between worldr clients. Nested: Plasma ↔ worldr for text and those images when the host advertises them. Primary bridged if advertised. **0.9.35:** host or worldr `selection(null)` clears the other side; host `set_selection` waits for a seat serial (KWin rejects 0). vk-display/drm have no host to bind.
-- Drag-and-drop (**0.9.29**): `wl_data_device.start_drag` between worldr clients for those same MIME types (copy). Empty-desktop drop cancels (no icon canvas — follow-up). No nest-host DND bridge.
-- dmabuf (0.9.17+ / **0.9.23** / **0.9.30** / **0.9.31**): GPU sample on vk-display; **KMS primary scanout** for one fullscreen ARGB/XRGB on `--backend=drm`; **overlay** for one windowed dmabuf when the card has an overlay plane; **cursor plane** for a small ARGB cursor. **0.9.31:** `--backend=vk-display` uses a planes-only DRM sidecar + `VK_EXT_acquire_drm_display` for overlay/cursor when master is available (primary stays Vulkan blit). **0.9.20 / 0.9.23 / 0.9.30:** `wp_linux_drm_syncobj_manager_v1` when `DRM_CAP_SYNCOBJ_TIMELINE` (log `linux-drm-syncobj: … advertised`). Acquire waits on a Vulkan timeline (`vkWaitSemaphores`) before blit/sample/scanout on **every** present path that has a Vulkan session — including `--backend=drm`, which now opens an offscreen ICD so it is no longer ioctl-only. DRM ioctl is the fallback. Release is signaled after present. Miss → implicit sync. Nested host still CPU-composites. Soak: spare TTY, `kitty` — look for the Vulkan syncobj line plus `kms overlay` / `kms cursor` on vk-display, or `kms scanout` on drm.
-- SSD is thicker accent + title gradient + focused glow (still not a toolkit)
-- Software cursor (0.9.21 / **0.9.22** / **0.9.23** / **0.9.31**): nest binds host `wp_cursor_shape_manager_v1` and `set_shape(default)` on enter (shm arrow fallback) using the enter serial, **without taking `Window.mu` again** (0.9.21 deadlocked `TakeInput` vs `readLoop` — frozen nest, no click/key). Client `set_cursor` / cursor-shape still draw the software overlay; null `set_cursor` keeps the default arrow. `--backend=drm` tries a hardware cursor plane when the image is ≤256×256; miss stays software. **0.9.31:** vk-display tries the same cursor plane when the DRM sidecar holds master. Nested stays software.
-- Nested demo: host pointer/keys while the worldr window is focused; evdev still used on TTY. Unmatched host `wl_pointer.button` releases are dropped (foot stray-release warning should be gone).
-- Brave / ark (**0.9.26** / **0.9.27**): do **not** send `wl_data_device.selection` on `get_data_device` (0.9.26). 0.9.27 nest `zwp_linux_dmabuf` feedback is LINEAR-only so ozone can mmap; `create_immed` keeps the client fd; first map sends `wl_surface.enter` + `preferred_buffer_scale` (compositor v6) and `xdg_toplevel.configure` with `activated`. `xdg_activation.activate` focuses + `wl_keyboard.enter`. `WAYLAND_DEBUG=1`: after `get_keyboard` expect `keymap` + `repeat_info`; after first commit expect `wl_surface.enter`. Remaining flag if GPU still dies: `brave --ozone-platform=wayland --disable-gpu`. GNOME Disks still deferred (GTK). No IME.
-- Fractional SSD (0.9.21): window geometry width/height crop CSD padding at non-integer scales (1.75 nest). Viewport dest + buffer-scale + preferred_scale still size the logical surface.
-- Keymap is a full US layout (`keymap_us.xkb`). **Ctrl+Q** quits; normal typing goes to the focused client. No IME (`zwp_text_input`) yet.
-- Fractional scale (0.9.16 / 0.9.21 / **0.9.33** / **0.9.35**): nest follows host `preferred_scale` / `wl_output.scale`. **0.9.35:** every host output is bound; `wl_surface.enter` selects that output’s integer scale when frac is missing; a late `OnHostScale` still sees the current value. `--scale` overrides all outputs. `--outputs=N` advertises N tiled `wl_output`s; `--output-scales` sets each. Drag across a seam is `leave`/`enter` + new `preferred_scale`. vk-display/drm default 1.0. Viewport / `set_buffer_scale` / window geometry size the logical window. Still one physical FB (no real DRM connectors).
-- Window icons (0.9.18 / **0.9.25** / **0.9.28**): `xdg_toplevel_icon` shm buffers on SSD + panel win when set. Else XDG theme PNG, then SVG (`Icon=` / `AppID` / `set_name`) walking `index.theme` `Inherits=` then hicolor. librsvg when built with `librsvg2-dev` + `make` (`-tags=librsvg`); else the simple raster. No full Directory/Size graph. No IME (`zwp_text_input`).
-- Compiz theater (**0.9.24** / **0.9.32** / **0.9.36**): hardcoded scale/fade/rise map-in, focus glow, ease-in-out workspace slide. **0.9.36 high:** real 8×6 mesh wobble on title-drag (not the old spring offset); Compiz burn/fire dissolve on close/unmap (SSD × or client quit; 720ms). Cube-style workspace foreshorten and expose polish stay. `--effects=off|low|high`. Frame loop reuses slices, expose grid, mesh points, and the window pack (no per-frame alloc storm). No plugin graph.
-- Launcher reads XDG `.desktop` files and theme PNGs for `Icon=` (0.9.18). `Terminal=true` apps skipped; no ibus/fcitx IME
-- Panel is CPU-composited chrome (not a toolkit)
-- Workspaces (0.9.14): Ctrl+Alt+←/→ switch, Ctrl+Alt+Shift+←/→ move+follow. No Super+1..N, no drag-to-desktop, no per-output workspace set. Overview is current-desktop only (shows `desk N/M`). Empty desktops stay addressable.
-- Session / login (**0.9.34**): `worldr-session` sets XDG session env and starts `worldr-shell`. `--login` / `--user` only accept the current uid (no PAM, no greetd, no user switch). `contrib/wayland-sessions/worldr.desktop` is the DM entry. Isolation still later. No IME.
-- vk-display/drm need DRM master on a spare VT (scripts/try-tty.sh). CI exercises refuse / no-DRM / render-node `--card` paths only; soak vk-display on abox after merge.
-- UI toolkit still deferred
+Direct keyboard mapping still assumes US XKB with application repeat defaults
+of 25 Hz after 600 ms. It does not import an existing seat's held keys or lock
+state. Ctrl+Alt+F1 through F12 asks libseat to switch sessions. Physical
+multi-monitor, VT and suspend/resume behavior still requires a spare-TTY hardware
+run; color management, direct-session IME and an AT-SPI desktop-bus adapter remain
+unfinished. Login sessions expose native Files, media, terminal and model-control
+semantics through a private `0600` JSON Unix socket for an external adapter.
+GPU targets use 4×
+MSAA where supported, with a feature-checked 1× fallback.

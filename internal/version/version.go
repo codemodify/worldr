@@ -1,11 +1,11 @@
-// Package version reports the scaffold / release identifier.
+// Package version reports the native scene engine development version.
 package version
 
 // Phase is the current development phase.
-const Phase = "5"
+const Phase = "native-scene"
 
-// Version is the placeholder semver for this tree.
-const Version = "0.9.36-dev"
+// Version identifies the architecture reset; this is not a stable desktop release.
+const Version = "0.10.0-dev"
 
 // String returns the version identifier.
 func String() string {

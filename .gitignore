@@ -32,6 +32,11 @@ go.work.sum
 *~
 .DS_Store
 
+# Local runtime state and Python caches
+/.worldr-trash/
+__pycache__/
+*.py[cod]
+
 # Crash dumps (Linux desktop / compositor bring-up)
 *.core
 core

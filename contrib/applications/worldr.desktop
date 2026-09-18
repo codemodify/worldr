@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=worldr Workspace
+Comment=Open worldr inside the current Wayland desktop
+Exec=worldr-shell --backend=nested
+TryExec=worldr-shell
+Icon=applications-engineering
+Terminal=false
+Type=Application
+Categories=Utility;Development;

@@ -2,11 +2,12 @@
 
 // Package native is the cgo ABI boundary for Vulkan and DRM/KMS.
 //
-// Binding choice: a thin owned C wrapper around libvulkan + libdrm, not
-// lukem570/vulkan-go (no VK_KHR_display) and not wgpu. See ARCHITECTURE.md.
+// A thin owned C wrapper exposes Vulkan graphics, presentation and DRM device
+// ownership. See ARCHITECTURE.md.
 package native
 
 /*
+#cgo LDFLAGS: -lm
 #cgo pkg-config: vulkan libdrm
 #include "vk_session.h"
 #include "drm_session.h"
@@ -16,7 +17,11 @@ import "C"
 
 import (
 	"fmt"
-	"strings"
+	"path/filepath"
+
+	"github.com/codemodify/worldr/internal/platform/linux/dmabuf"
+	"github.com/codemodify/worldr/internal/render"
+	"golang.org/x/sys/unix"
 	"unsafe"
 )
 
@@ -27,7 +32,7 @@ func cErr(buf []C.char) error {
 	if s == "" {
 		return fmt.Errorf("native: unknown error")
 	}
-	return fmt.Errorf("%s", s)
+	return nativeError(s)
 }
 
 // Available is true when this binary was built with linux+cgo.
@@ -43,9 +48,13 @@ func ListDevices() (string, error) {
 	return C.GoString(&out[0]), nil
 }
 
-// VK is a Vulkan session (headless or VK_KHR_display).
+// VK owns a Vulkan device and its headless, Wayland, or direct display target.
 type VK struct {
-	ptr *C.worldr_vk
+	ptr                *C.worldr_vk
+	frame              *frameState
+	atlas              render.Atlas
+	dmabufFormats      []dmabuf.Format
+	dmabufFormatsReady bool
 }
 
 // OpenVK creates a Vulkan session. mode: 0 headless, 1 vk-display.
@@ -62,8 +71,8 @@ func OpenVK(display bool, w, h uint32) (*VK, error) {
 	return &VK{ptr: ptr}, nil
 }
 
-// OpenVKOnDRM creates VK_KHR_display on a planes-only DRM master via
-// VK_EXT_acquire_drm_display so overlay/cursor ioctls share the same fd.
+// OpenVKOnDRM creates VK_KHR_display using an already acquired DRM master
+// and the connector selected by that session.
 func OpenVKOnDRM(d *DRM) (*VK, error) {
 	if d == nil || d.ptr == nil {
 		return nil, fmt.Errorf("drm session closed")
@@ -87,6 +96,10 @@ func (v *VK) Close() {
 	}
 	C.worldr_vk_destroy(v.ptr)
 	v.ptr = nil
+	v.frame = nil
+	v.atlas = render.Atlas{}
+	v.dmabufFormats = nil
+	v.dmabufFormatsReady = false
 }
 
 func (v *VK) DeviceName() string {
@@ -96,6 +109,30 @@ func (v *VK) DeviceName() string {
 	return C.GoString(C.worldr_vk_device_name(v.ptr))
 }
 
+// RenderNode returns the DRM render node for the selected physical device.
+// An empty result means the driver did not expose VK_EXT_physical_device_drm.
+func (v *VK) RenderNode() string {
+	if v == nil || v.ptr == nil {
+		return ""
+	}
+	var major, minor C.uint32_t
+	if C.worldr_vk_render_node(v.ptr, &major, &minor) != 0 {
+		return ""
+	}
+	nodes, _ := filepath.Glob("/dev/dri/renderD*")
+	for _, path := range nodes {
+		var stat unix.Stat_t
+		if unix.Stat(path, &stat) != nil {
+			continue
+		}
+		if unix.Major(uint64(stat.Rdev)) == uint32(major) &&
+			unix.Minor(uint64(stat.Rdev)) == uint32(minor) {
+			return path
+		}
+	}
+	return ""
+}
+
 func (v *VK) Size() (w, h uint32) {
 	if v == nil || v.ptr == nil {
 		return 0, 0
@@ -103,181 +140,9 @@ func (v *VK) Size() (w, h uint32) {
 	return uint32(C.worldr_vk_width(v.ptr)), uint32(C.worldr_vk_height(v.ptr))
 }
 
-func (v *VK) VendorID() uint32 {
-	if v == nil || v.ptr == nil {
-		return 0
-	}
-	return uint32(C.worldr_vk_vendor_id(v.ptr))
-}
-
-func (v *VK) ClearPresent(r, g, b, a float32) error {
-	errb := make([]C.char, errBuf)
-	if C.worldr_vk_clear_present(v.ptr, C.float(r), C.float(g), C.float(b), C.float(a), &errb[0], C.int(len(errb))) != 0 {
-		return cErr(errb)
-	}
-	return nil
-}
-
-func (v *VK) UploadPresent(bgra []byte, stride uint32) error {
-	if len(bgra) == 0 {
-		return fmt.Errorf("empty framebuffer")
-	}
-	errb := make([]C.char, errBuf)
-	if C.worldr_vk_upload_present(v.ptr, (*C.uint8_t)(unsafe.Pointer(&bgra[0])), C.uint32_t(stride), &errb[0], C.int(len(errb))) != 0 {
-		return cErr(errb)
-	}
-	return nil
-}
-
-// HasDMABuf is true when the device can import client dma-bufs via Vulkan.
-func (v *VK) HasDMABuf() bool {
-	return v != nil && v.ptr != nil && C.worldr_vk_has_dmabuf(v.ptr) != 0
-}
-
-// IsDisplay is true for a VK_KHR_display session (GPU overlay present).
+// IsDisplay reports whether rendering presents to a Vulkan swapchain.
 func (v *VK) IsDisplay() bool {
 	return v != nil && v.ptr != nil && C.worldr_vk_is_display(v.ptr) != 0
-}
-
-// HasTimeline is true when the device can import a DRM syncobj as a Vulkan timeline.
-func (v *VK) HasTimeline() bool {
-	return v != nil && v.ptr != nil && C.worldr_vk_has_timeline(v.ptr) != 0
-}
-
-// DisplayPlanes is the VK_KHR_display plane count (0 if unknown / not display).
-func (v *VK) DisplayPlanes() int {
-	if v == nil || v.ptr == nil {
-		return 0
-	}
-	return int(C.worldr_vk_display_planes(v.ptr))
-}
-
-// WaitTimeline imports fd as a timeline semaphore and vkWaitSemaphores(point).
-func (v *VK) WaitTimeline(fd int, point uint64, timeoutNS uint64) error {
-	if v == nil || v.ptr == nil {
-		return fmt.Errorf("vulkan session closed")
-	}
-	if fd < 0 {
-		return fmt.Errorf("syncobj fd")
-	}
-	errb := make([]C.char, errBuf)
-	if C.worldr_vk_wait_timeline_fd(v.ptr, C.int(fd), C.uint64_t(point), C.uint64_t(timeoutNS),
-		&errb[0], C.int(len(errb))) != 0 {
-		return cErr(errb)
-	}
-	return nil
-}
-
-// GPULayer is one retained dmabuf blit onto the swapchain (1-based slot).
-type GPULayer struct {
-	Slot int
-	X, Y int
-	W, H int
-}
-
-// DMABufPlane is one linux-dmabuf plane (compositor owns the fd until Import returns).
-type DMABufPlane struct {
-	FD     int
-	Offset uint32
-	Stride uint32
-}
-
-// ImportDMABuf copies a client dma-buf into host BGRA (GPU import + linear readback).
-func (v *VK) ImportDMABuf(width, height, fourcc uint32, modifier uint64, planes []DMABufPlane) ([]byte, int, error) {
-	if v == nil || v.ptr == nil {
-		return nil, 0, fmt.Errorf("vulkan session closed")
-	}
-	if len(planes) == 0 || len(planes) > 4 {
-		return nil, 0, fmt.Errorf("dmabuf plane count %d", len(planes))
-	}
-	fds := make([]C.int, len(planes))
-	offs := make([]C.uint32_t, len(planes))
-	pits := make([]C.uint32_t, len(planes))
-	for i, p := range planes {
-		fds[i] = C.int(p.FD)
-		offs[i] = C.uint32_t(p.Offset)
-		pits[i] = C.uint32_t(p.Stride)
-	}
-	stride := int(width * 4)
-	out := make([]byte, stride*int(height))
-	errb := make([]C.char, errBuf)
-	if C.worldr_vk_dmabuf_import(v.ptr, C.uint32_t(width), C.uint32_t(height), C.uint32_t(fourcc), C.uint64_t(modifier),
-		C.int(len(planes)), &fds[0], &offs[0], &pits[0], (*C.uint8_t)(unsafe.Pointer(&out[0])), C.uint32_t(stride),
-		&errb[0], C.int(len(errb))) != 0 {
-		return nil, 0, cErr(errb)
-	}
-	return out, stride, nil
-}
-
-// RetainDMABuf imports a client dma-buf as a GPU image and returns a 1-based slot.
-func (v *VK) RetainDMABuf(width, height, fourcc uint32, modifier uint64, planes []DMABufPlane) (int, error) {
-	if v == nil || v.ptr == nil {
-		return 0, fmt.Errorf("vulkan session closed")
-	}
-	if len(planes) == 0 || len(planes) > 4 {
-		return 0, fmt.Errorf("dmabuf plane count %d", len(planes))
-	}
-	fds := make([]C.int, len(planes))
-	offs := make([]C.uint32_t, len(planes))
-	pits := make([]C.uint32_t, len(planes))
-	for i, p := range planes {
-		fds[i] = C.int(p.FD)
-		offs[i] = C.uint32_t(p.Offset)
-		pits[i] = C.uint32_t(p.Stride)
-	}
-	errb := make([]C.char, errBuf)
-	var slot C.int
-	if C.worldr_vk_dmabuf_retain(v.ptr, C.uint32_t(width), C.uint32_t(height), C.uint32_t(fourcc), C.uint64_t(modifier),
-		C.int(len(planes)), &fds[0], &offs[0], &pits[0], &slot, &errb[0], C.int(len(errb))) != 0 {
-		return 0, cErr(errb)
-	}
-	return int(slot), nil
-}
-
-// ReleaseDMABuf drops a retained GPU slot (0 is a no-op).
-func (v *VK) ReleaseDMABuf(slot int) {
-	if v == nil || v.ptr == nil || slot <= 0 {
-		return
-	}
-	C.worldr_vk_dmabuf_release(v.ptr, C.int(slot))
-}
-
-// UploadPresentLayers uploads the CPU desktop then blits retained dmabuf layers.
-func (v *VK) UploadPresentLayers(bgra []byte, stride uint32, layers []GPULayer) error {
-	if len(layers) == 0 {
-		return v.UploadPresent(bgra, stride)
-	}
-	if v == nil || v.ptr == nil {
-		return fmt.Errorf("vulkan session closed")
-	}
-	if len(bgra) == 0 {
-		return fmt.Errorf("empty framebuffer")
-	}
-	cl := make([]C.worldr_vk_layer, len(layers))
-	for i, l := range layers {
-		cl[i] = C.worldr_vk_layer{
-			slot: C.int(l.Slot),
-			x:    C.int32_t(l.X),
-			y:    C.int32_t(l.Y),
-			w:    C.int32_t(l.W),
-			h:    C.int32_t(l.H),
-		}
-	}
-	errb := make([]C.char, errBuf)
-	if C.worldr_vk_upload_present_layers(v.ptr, (*C.uint8_t)(unsafe.Pointer(&bgra[0])), C.uint32_t(stride),
-		&cl[0], C.int(len(cl)), &errb[0], C.int(len(errb))) != 0 {
-		return cErr(errb)
-	}
-	return nil
-}
-
-func (v *VK) HeadlessClear(r, g, b, a float32) (pixel uint32, err error) {
-	errb := make([]C.char, errBuf)
-	var p C.uint32_t
-	if C.worldr_vk_headless_clear(v.ptr, C.float(r), C.float(g), C.float(b), C.float(a), &p, &errb[0], C.int(len(errb))) != 0 {
-		return 0, cErr(errb)
-	}
-	return uint32(p), nil
 }
 
 // DRM is a DRM/KMS dumb-buffer session.
@@ -352,114 +217,78 @@ func (d *DRM) PresentBGRA(bgra []byte, stride uint32) error {
 	return nil
 }
 
-// ScanoutDMABuf presents a client dmabuf on the primary plane (atomic, then SetCrtc).
-func (d *DRM) ScanoutDMABuf(fd int, width, height, fourcc uint32, modifier uint64, offset, pitch uint32) error {
-	if d == nil || d.ptr == nil {
-		return fmt.Errorf("drm session closed")
+// OpenVKWayland presents directly into the host surface using Vulkan WSI.
+// The host display and surface must outlive the returned session.
+func OpenVKWayland(display, surface unsafe.Pointer, w, h uint32) (*VK, error) {
+	errb := make([]C.char, errBuf)
+	var ptr *C.worldr_vk
+	if C.worldr_vk_create_wayland(display, surface, C.uint32_t(w), C.uint32_t(h), &ptr, &errb[0], C.int(len(errb))) != 0 {
+		return nil, cErr(errb)
 	}
-	if d.planesOnly {
-		return fmt.Errorf("planes-only DRM (vk-display sidecar); no primary scanout")
-	}
-	if fd < 0 {
-		return fmt.Errorf("dmabuf fd")
+	return &VK{ptr: ptr}, nil
+}
+
+// Resize rebuilds render targets while preserving the device, atlas and geometry.
+func (v *VK) Resize(w, h uint32) error {
+	if v == nil || v.ptr == nil {
+		return fmt.Errorf("Vulkan session closed")
 	}
 	errb := make([]C.char, errBuf)
-	if C.worldr_drm_scanout_dmabuf(d.ptr, C.int(fd), C.uint32_t(width), C.uint32_t(height),
-		C.uint32_t(fourcc), C.uint64_t(modifier), C.uint32_t(offset), C.uint32_t(pitch),
-		&errb[0], C.int(len(errb))) != 0 {
+	result := C.worldr_vk_resize(v.ptr, C.uint32_t(w), C.uint32_t(h), &errb[0], C.int(len(errb)))
+	if result == -3 {
+		return ErrNotReady
+	}
+	if result != 0 {
 		return cErr(errb)
 	}
 	return nil
 }
 
-// RestoreScanout puts the dumb-buffer FB back on the CRTC.
-func (d *DRM) RestoreScanout() error {
-	if d == nil || d.ptr == nil {
-		return fmt.Errorf("drm session closed")
+// SetMemoryBudget caps actual renderer-owned Vulkan allocations. Zero restores
+// the 1GiB default. Lowering below current use fails without changing the budget.
+func (v *VK) SetMemoryBudget(bytes uint64) error {
+	if v == nil || v.ptr == nil {
+		return fmt.Errorf("Vulkan session closed")
 	}
-	errb := make([]C.char, errBuf)
-	if C.worldr_drm_scanout_restore(d.ptr, &errb[0], C.int(len(errb))) != 0 {
-		return cErr(errb)
-	}
-	return nil
-}
-
-// ScanoutActive is true while a client dmabuf is on the primary plane.
-func (d *DRM) ScanoutActive() bool {
-	return d != nil && d.ptr != nil && C.worldr_drm_scanout_active(d.ptr) != 0
-}
-
-// PlaneCaps reports whether the card has an overlay and/or cursor plane.
-func (d *DRM) PlaneCaps() (overlay, cursor bool, cursorW, cursorH uint32) {
-	if d == nil || d.ptr == nil {
-		return false, false, 0, 0
-	}
-	var ov, cu C.int
-	var cw, ch C.uint32_t
-	if C.worldr_drm_plane_caps(d.ptr, &ov, &cu, &cw, &ch) != 0 {
-		return false, false, 0, 0
-	}
-	return ov != 0, cu != 0, uint32(cw), uint32(ch)
-}
-
-// OverlayDMABuf places a windowed client dmabuf on an overlay plane.
-func (d *DRM) OverlayDMABuf(fd int, width, height, fourcc uint32, modifier uint64, offset, pitch uint32, x, y int) error {
-	if d == nil || d.ptr == nil {
-		return fmt.Errorf("drm session closed")
-	}
-	if fd < 0 {
-		return fmt.Errorf("dmabuf fd")
-	}
-	errb := make([]C.char, errBuf)
-	if C.worldr_drm_overlay_dmabuf(d.ptr, C.int(fd), C.uint32_t(width), C.uint32_t(height),
-		C.uint32_t(fourcc), C.uint64_t(modifier), C.uint32_t(offset), C.uint32_t(pitch),
-		C.int32_t(x), C.int32_t(y), &errb[0], C.int(len(errb))) != 0 {
-		return cErr(errb)
+	var errb [errBuf]C.char
+	if C.worldr_vk_memory_budget(v.ptr, C.uint64_t(bytes), &errb[0], C.int(len(errb))) != 0 {
+		return cErr(errb[:])
 	}
 	return nil
 }
-
-// OverlayDisable turns the overlay plane off (compose fallback).
-func (d *DRM) OverlayDisable() error {
-	if d == nil || d.ptr == nil {
-		return fmt.Errorf("drm session closed")
+func (v *VK) MemoryStats() MemoryStats {
+	if v == nil || v.ptr == nil {
+		return MemoryStats{}
 	}
-	errb := make([]C.char, errBuf)
-	if C.worldr_drm_overlay_disable(d.ptr, &errb[0], C.int(len(errb))) != 0 {
-		return cErr(errb)
-	}
-	return nil
+	var stats C.worldr_vk_memory_stats
+	C.worldr_vk_memory_usage(v.ptr, &stats)
+	return MemoryStats{AllocatedBytes: uint64(stats.allocated), PeakBytes: uint64(stats.peak), BudgetBytes: uint64(stats.budget), Images: uint32(stats.images), Buffers: uint32(stats.buffers)}
 }
 
-// CursorARGB commits a software cursor image onto the hardware cursor plane.
-func (d *DRM) CursorARGB(x, y int, width, height uint32, bgra []byte, stride uint32) error {
-	if d == nil || d.ptr == nil {
-		return fmt.Errorf("drm session closed")
+// Recover recreates the logical device and swapchain on the existing physical
+// device/surface, invalidates residency caches, and restores the retained atlas.
+// The next frame re-uploads retained geometry/textures. Call only on the render
+// goroutine; the host must bound retries and keep saving work on failure. This
+// does not reconnect a removed physical monitor or recreate a lost host surface.
+// Vulkan device-idle/destroy calls have no portable timeout; a driver blocked
+// inside them cannot be repaired by an in-process retry.
+func (v *VK) Recover() error {
+	if v == nil || v.ptr == nil {
+		return fmt.Errorf("Vulkan session closed")
 	}
-	if len(bgra) == 0 {
-		return fmt.Errorf("empty cursor")
+	var errb [errBuf]C.char
+	result := C.worldr_vk_recover(v.ptr, &errb[0], C.int(len(errb)))
+	v.frame = nil
+	v.dmabufFormats = nil
+	v.dmabufFormatsReady = false
+	if result == -3 {
+		return ErrNotReady
 	}
-	errb := make([]C.char, errBuf)
-	if C.worldr_drm_cursor_argb(d.ptr, C.int32_t(x), C.int32_t(y), C.uint32_t(width), C.uint32_t(height),
-		(*C.uint8_t)(unsafe.Pointer(&bgra[0])), C.uint32_t(stride), &errb[0], C.int(len(errb))) != 0 {
-		return cErr(errb)
+	if result != 0 {
+		return cErr(errb[:])
+	}
+	if len(v.atlas.Pixels) > 0 {
+		return v.SetSceneAtlas(v.atlas)
 	}
 	return nil
-}
-
-// CursorDisable turns the hardware cursor plane off.
-func (d *DRM) CursorDisable() error {
-	if d == nil || d.ptr == nil {
-		return fmt.Errorf("drm session closed")
-	}
-	errb := make([]C.char, errBuf)
-	if C.worldr_drm_cursor_disable(d.ptr, &errb[0], C.int(len(errb))) != 0 {
-		return cErr(errb)
-	}
-	return nil
-}
-
-// SummarizeDevices is a one-line helper for logs.
-func SummarizeDevices(listing string) string {
-	return strings.TrimSpace(listing)
 }

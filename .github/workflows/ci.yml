@@ -4,55 +4,81 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
-      - name: native deps
+      - name: native dependencies and software Vulkan
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gcc pkg-config libvulkan-dev libdrm-dev librsvg2-dev
-      - name: test
+            gcc pkg-config libvulkan-dev libdrm-dev libwayland-dev libxkbcommon-dev libvterm-dev libfontconfig1-dev libpango1.0-dev libmpv-dev libxcb1-dev libxcb-composite0-dev libxcb-res0-dev libxcb-xfixes0-dev libseat-dev libinput-dev libudev-dev ffmpeg mesa-vulkan-drivers foot xwayland x11-utils fonts-dejavu-core vim-tiny ripgrep
+          pkg-config --exists pangocairo wayland-client xkbcommon xcb xcb-composite xcb-res xcb-xfixes libseat libinput libudev
+      - name: reliability harness contract
+        run: make test-soak-contract
+      - name: test with Vulkan rendering
         env:
           CGO_ENABLED: "1"
-        run: make test
-      - name: build
+          WORLDR_TEST_MEDIA: "1"
+          WORLDR_TEST_XWAYLAND: "1"
+          WORLDR_TEST_SYSTEM_FONTS: "1"
+        run: make test-compat
+      - name: formatting and static analysis
+        run: make test-static
+      - name: race detector
+        run: make test-race
+      - name: compile and test without native dependencies
+        run: CGO_ENABLED=0 go test ./...
+      - name: build and render a workspace
+        run: make preview
+      - name: isolated nested input and renderer recovery
+        run: make test-nested
+      - name: publish nested recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worldr-nested-recovery
+          path: |
+            dist/nested-input-recovery.json
+            dist/nested-input-recovery.png
+          if-no-files-found: warn
+          retention-days: 14
+      - name: short restart and exact-restore trial
         env:
-          CGO_ENABLED: "1"
-        run: make build
-      - name: headless smoke
-        run: ./bin/worldr-shell --backend=headless --duration=1s
-      - name: vk-display refuse / no-DRM path
-        # CI has no DRM master. The binary must still start, refuse or fail
-        # with the TTY hint — not crash. A graphical env is unset here.
+          REPORT_DIR: dist/ci-soak
+        run: make test-ci-soak
+      - name: publish restart and recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worldr-ci-soak
+          path: dist/ci-soak
+          if-no-files-found: warn
+          retention-days: 14
+      - name: publish rendered preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: worldr-workspace
+          path: dist/worldr-preview.png
+      - name: display takeover protection
         run: |
           bash -n scripts/try-tty.sh
-          set +e
-          out=$(./bin/worldr-shell --backend=vk-display --duration=1s 2>&1)
-          ec=$?
-          set -e
-          echo "$out"
-          if [ "$ec" -eq 0 ]; then
-            echo "unexpected vk-display success on CI (no seat)"
+          if CYCLES=0 ./scripts/soak.sh > /tmp/worldr-soak-refusal.txt 2>&1; then
+            echo 'Soak runner unexpectedly accepted an invalid cycle budget'
             exit 1
           fi
-          echo "$out" | grep -E -q "try-tty|no /dev/dri|vk-display|DRM|display" \
-            || (echo "vk-display error missing TTY/DRM hint" && exit 1)
-          set +e
-          out=$(./bin/worldr-shell --backend=drm --card=/dev/dri/renderD128 --duration=1s 2>&1)
-          ec=$?
-          set -e
-          echo "$out"
-          if [ "$ec" -eq 0 ]; then
-            echo "unexpected drm success on render node"
+          rg -F 'CYCLES must be between 1 and 100' /tmp/worldr-soak-refusal.txt
+          if WAYLAND_DISPLAY=wayland-test ./bin/worldr-shell --backend=vk-display --frames=1 > /tmp/worldr-refusal.txt 2>&1; then
+            echo 'Direct display unexpectedly accepted a graphical session'
             exit 1
           fi
-          echo "$out" | grep -E -q "render|cardN|try-tty" \
-            || (echo "render-node --card missing refuse hint" && exit 1)
-      - name: nested not broken
-        run: ./bin/worldr-shell --backend=headless --compositor --duration=1s | grep -F "workspaces:"
+          cat /tmp/worldr-refusal.txt
+          rg -F 'refusing' /tmp/worldr-refusal.txt

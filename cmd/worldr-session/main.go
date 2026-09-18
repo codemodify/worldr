@@ -1,8 +1,4 @@
-// Command worldr-session starts a worldr Wayland session around worldr-shell.
-//
-// It sets XDG session environment, optionally gates on the current username
-// (--login / --user; no PAM), then runs worldr-shell. Display managers should
-// install contrib/wayland-sessions/worldr.desktop.
+// Command worldr-session launches worldr-shell as a display-manager session.
 package main
 
 import (
@@ -14,20 +10,20 @@ import (
 )
 
 func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
+	if len(os.Args) == 2 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
 		session.Usage(os.Stdout)
-		os.Exit(0)
+		return
 	}
-	opt, err := session.ParseFlags(os.Args[1:])
+	options, err := session.Parse(os.Args[1:])
 	if err != nil {
 		if err == flag.ErrHelp {
 			session.Usage(os.Stdout)
-			os.Exit(0)
+			return
 		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	if err := session.Run(os.Stdout, os.Stderr, os.Stdin, os.Args[0], opt); err != nil {
+	if err := session.Run(os.Stdout, os.Stderr, os.Stdin, os.Args[0], options); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

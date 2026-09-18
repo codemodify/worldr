@@ -1,287 +1,379 @@
-// Package session is the worldr-session manager: env, optional login gate,
-// and launching worldr-shell. No PAM / greetd (name must match the uid).
+// Package session prepares a display-manager session and supervises
+// worldr-shell. Authentication and user switching belong to the display
+// manager; this package always runs as the already authenticated user.
 package session
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"os/signal"
-	"os/user"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 const (
-	DefaultDesktop = "worldr"
-	shellName      = "worldr-shell"
+	DefaultDesktop         = "worldr"
+	DefaultShutdownTimeout = 8 * time.Second
+	finalKillWait          = 2 * time.Second
+	shellName              = "worldr-shell"
 )
 
-// Options are worldr-session CLI flags.
 type Options struct {
 	Shell      string
-	User       string
-	Login      bool
 	Desktop    string
 	RuntimeDir string
 	PrintEnv   bool
 	DryRun     bool
-	ShellArgs  []string
+	// ShutdownTimeout bounds graceful shell teardown after the display manager
+	// asks the session to stop. Zero selects DefaultShutdownTimeout.
+	ShutdownTimeout time.Duration
+	ShellArgs       []string
 }
 
-// ParseFlags reads worldr-session args. Remaining args are worldr-shell flags.
-func ParseFlags(args []string) (Options, error) {
-	var o Options
-	fs := newFlagSet()
-	bindFlags(fs, &o)
-	if err := fs.Parse(args); err != nil {
-		return o, err
-	}
-	o.ShellArgs = fs.Args()
-	if o.Desktop == "" {
-		o.Desktop = DefaultDesktop
-	}
-	return o, nil
+// ShutdownTimeoutError reports that the supervised shell ignored the first
+// termination request and had to be killed. The wrapper itself still returns
+// promptly even if the graphics process was blocked during driver teardown.
+type ShutdownTimeoutError struct {
+	Timeout time.Duration
+	Err     error
 }
 
-// CurrentUsername is the process uid name (USER fallback).
-func CurrentUsername() string {
-	if u, err := user.Current(); err == nil && u.Username != "" {
-		return u.Username
+func (e *ShutdownTimeoutError) Error() string {
+	if e.Err == nil {
+		return fmt.Sprintf("worldr shell did not stop within %s and was killed", e.Timeout)
 	}
-	return strings.TrimSpace(os.Getenv("USER"))
+	return fmt.Sprintf("worldr shell did not stop within %s and was killed: %v", e.Timeout, e.Err)
 }
 
-// CheckLogin accepts want when it equals current (case-sensitive).
-func CheckLogin(want, current string) error {
-	want = strings.TrimSpace(want)
-	current = strings.TrimSpace(current)
-	if current == "" {
-		return fmt.Errorf("login: cannot determine current user")
-	}
-	if want == "" {
-		return fmt.Errorf("login: empty username")
-	}
-	if want != current {
-		return fmt.Errorf("login: %q is not the current user %q (no PAM; cannot switch users)", want, current)
-	}
-	return nil
-}
+func (e *ShutdownTimeoutError) Unwrap() error { return e.Err }
 
-// PromptUsername reads a login name from in after writing a prompt.
-func PromptUsername(in io.Reader, out io.Writer) (string, error) {
-	if out != nil {
-		fmt.Fprint(out, "worldr login: ")
-	}
-	sc := bufio.NewScanner(in)
-	if !sc.Scan() {
-		if err := sc.Err(); err != nil {
-			return "", err
-		}
-		return "", fmt.Errorf("login: no username")
-	}
-	return strings.TrimSpace(sc.Text()), nil
-}
-
-// ResolveUser returns the username that passed the gate.
-// --user skips the prompt; --login reads in. Neither → current user.
-func ResolveUser(o Options, current string, in io.Reader, out io.Writer) (string, error) {
-	if current == "" {
-		current = CurrentUsername()
-	}
-	switch {
-	case o.User != "":
-		if err := CheckLogin(o.User, current); err != nil {
-			return "", err
-		}
-		return current, nil
-	case o.Login:
-		name, err := PromptUsername(in, out)
-		if err != nil {
-			return "", err
-		}
-		if err := CheckLogin(name, current); err != nil {
-			return "", err
-		}
-		return current, nil
-	default:
-		if current == "" {
-			return "", fmt.Errorf("login: cannot determine current user")
-		}
-		return current, nil
-	}
-}
-
-// FindShell locates worldr-shell: --shell, sibling of argv0, then PATH.
+// FindShell resolves an explicit executable, a sibling installation, then PATH.
 func FindShell(explicit, argv0 string) (string, error) {
 	if explicit != "" {
-		return resolveExec(explicit)
+		return executable(explicit)
 	}
-	if argv0 != "" {
-		dir := filepath.Dir(argv0)
-		if dir != "" && dir != "." {
-			cand := filepath.Join(dir, shellName)
-			if p, err := resolveExec(cand); err == nil {
-				return p, nil
-			}
+	if dir := filepath.Dir(argv0); argv0 != "" && dir != "" && dir != "." {
+		if path, err := executable(filepath.Join(dir, shellName)); err == nil {
+			return path, nil
 		}
 	}
-	if p, err := exec.LookPath(shellName); err == nil {
-		return p, nil
-	}
-	return "", fmt.Errorf("worldr-shell not found (pass --shell or install next to worldr-session)")
-}
-
-func resolveExec(path string) (string, error) {
-	st, err := os.Stat(path)
+	path, err := exec.LookPath(shellName)
 	if err != nil {
-		return "", err
-	}
-	if st.IsDir() {
-		return "", fmt.Errorf("%s is a directory", path)
-	}
-	if st.Mode()&0o111 == 0 {
-		return "", fmt.Errorf("%s is not executable", path)
+		return "", fmt.Errorf("%s not found; install it beside worldr-session or pass --shell", shellName)
 	}
 	return filepath.Abs(path)
 }
 
-// Env is the session environment overlay (XDG_*).
-type Env struct {
-	RuntimeDir     string
-	SessionType    string
-	Desktop        string
-	SessionClass   string
-	SessionUser    string
-	DesktopSession string
+func executable(path string) (string, error) {
+	resolved, err := exec.LookPath(path)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", err
+	}
+	if info.IsDir() || info.Mode()&0o111 == 0 {
+		return "", fmt.Errorf("%s is not executable", path)
+	}
+	return filepath.Abs(resolved)
 }
 
-// PrepareEnv builds XDG session vars. Does not mutate os.Environ.
-func PrepareEnv(o Options, username string) (Env, error) {
-	dir := strings.TrimSpace(o.RuntimeDir)
+// RuntimeDirectory validates the directory supplied by pam_systemd or an
+// explicit test/session launcher. Refusing foreign or broadly accessible paths
+// prevents another user from replacing the compositor's private sockets.
+func RuntimeDirectory(explicit string) (string, error) {
+	dir := strings.TrimSpace(explicit)
 	if dir == "" {
 		dir = strings.TrimSpace(os.Getenv("XDG_RUNTIME_DIR"))
 	}
 	if dir == "" {
-		uid := os.Getuid()
-		dir = filepath.Join("/run/user", fmt.Sprintf("%d", uid))
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			dir = filepath.Join(os.TempDir(), fmt.Sprintf("worldr-%d", uid))
-			if err := os.MkdirAll(dir, 0o700); err != nil {
-				return Env{}, fmt.Errorf("XDG_RUNTIME_DIR: %w", err)
-			}
-		}
-	} else if err := os.MkdirAll(dir, 0o700); err != nil {
-		return Env{}, fmt.Errorf("XDG_RUNTIME_DIR %s: %w", dir, err)
+		dir = filepath.Join("/run/user", strconv.Itoa(os.Getuid()))
 	}
-	desk := o.Desktop
-	if desk == "" {
-		desk = DefaultDesktop
+	dir = filepath.Clean(dir)
+	info, err := os.Stat(dir)
+	if err != nil {
+		return "", fmt.Errorf("XDG_RUNTIME_DIR %s: %w (a display manager or pam_systemd must create it)", dir, err)
 	}
-	return Env{
-		RuntimeDir:     dir,
-		SessionType:    "wayland",
-		Desktop:        desk,
-		SessionClass:   "user",
-		SessionUser:    username,
-		DesktopSession: desk,
-	}, nil
+	if !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
+		return "", fmt.Errorf("XDG_RUNTIME_DIR %s must be a directory private to its owner", dir)
+	}
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok && int(stat.Uid) != os.Getuid() {
+		return "", fmt.Errorf("XDG_RUNTIME_DIR %s is owned by uid %d, not %d", dir, stat.Uid, os.Getuid())
+	}
+	return dir, nil
 }
 
-// Overlay returns KEY=value lines to merge onto the process environment.
-func (e Env) Overlay() []string {
-	out := []string{
-		"XDG_RUNTIME_DIR=" + e.RuntimeDir,
-		"XDG_SESSION_TYPE=" + e.SessionType,
-		"XDG_CURRENT_DESKTOP=" + e.Desktop,
-		"XDG_SESSION_DESKTOP=" + e.Desktop,
-		"XDG_SESSION_CLASS=" + e.SessionClass,
-		"DESKTOP_SESSION=" + e.DesktopSession,
-	}
-	if e.SessionUser != "" {
-		out = append(out, "USER="+e.SessionUser, "LOGNAME="+e.SessionUser)
-	}
-	return out
-}
-
-// MergeEnviron applies Overlay onto base (os.Environ-style), replacing keys.
-func MergeEnviron(base []string, overlay []string) []string {
-	drop := map[string]bool{}
-	for _, kv := range overlay {
-		if i := strings.IndexByte(kv, '='); i > 0 {
-			drop[kv[:i]] = true
+// ShellArguments chooses direct display for a login session unless the caller
+// made an explicit backend or read-only inventory choice. take-over-display is
+// safe here because invoking worldr-session is itself the display-manager grant.
+func ShellArguments(args []string) []string {
+	result := append([]string(nil), args...)
+	for _, arg := range result {
+		if arg == "--backend" || strings.HasPrefix(arg, "--backend=") || arg == "--list-outputs" || arg == "--list-devices" || arg == "--version" {
+			return result
 		}
 	}
-	out := make([]string, 0, len(base)+len(overlay))
-	for _, kv := range base {
-		i := strings.IndexByte(kv, '=')
-		if i <= 0 || drop[kv[:i]] {
+	return append([]string{"--backend=vk-display", "--take-over-display"}, result...)
+}
+
+func AccessibilityArguments(args []string, runtimeDir string) []string {
+	for _, argument := range args {
+		if argument == "--accessibility-socket" || strings.HasPrefix(argument, "--accessibility-socket=") {
+			return args
+		}
+	}
+	return append(args, "--accessibility-socket="+filepath.Join(runtimeDir, "worldr-accessibility.sock"))
+}
+
+func overlay(base, values []string) []string {
+	replace := make(map[string]bool, len(values))
+	for _, entry := range values {
+		if index := strings.IndexByte(entry, '='); index > 0 {
+			replace[entry[:index]] = true
+		}
+	}
+	result := make([]string, 0, len(base)+len(values))
+	for _, entry := range base {
+		index := strings.IndexByte(entry, '=')
+		if index <= 0 || replace[entry[:index]] {
 			continue
 		}
-		out = append(out, kv)
+		result = append(result, entry)
 	}
-	return append(out, overlay...)
+	return append(result, values...)
 }
 
-// Run prepares the session and starts worldr-shell (or prints env / dry-run).
-func Run(stdout, stderr io.Writer, stdin io.Reader, argv0 string, o Options) error {
-	user, err := ResolveUser(o, "", stdin, stderr)
+func Environment(base []string, runtimeDir, desktop string) []string {
+	if desktop == "" {
+		desktop = DefaultDesktop
+	}
+	return overlay(base, []string{
+		"XDG_RUNTIME_DIR=" + runtimeDir,
+		"XDG_SESSION_TYPE=wayland",
+		"XDG_SESSION_CLASS=user",
+		"XDG_CURRENT_DESKTOP=" + desktop,
+		"XDG_SESSION_DESKTOP=" + desktop,
+		"DESKTOP_SESSION=" + desktop,
+	})
+}
+
+func Run(stdout, stderr io.Writer, stdin io.Reader, argv0 string, options Options) error {
+	runtimeDir, err := RuntimeDirectory(options.RuntimeDir)
 	if err != nil {
 		return err
 	}
-	env, err := PrepareEnv(o, user)
-	if err != nil {
-		return err
+	desktop := options.Desktop
+	if desktop == "" {
+		desktop = DefaultDesktop
 	}
-	if o.PrintEnv || o.DryRun {
-		fmt.Fprintf(stdout, "worldr-session %s user=%s desktop=%s\n", versionString(), user, env.Desktop)
-		for _, kv := range env.Overlay() {
-			fmt.Fprintln(stdout, kv)
-		}
-		if o.DryRun {
-			shell, err := FindShell(o.Shell, argv0)
-			if err != nil {
-				fmt.Fprintf(stdout, "shell: (missing) %v\n", err)
-			} else {
-				fmt.Fprintf(stdout, "shell: %s\n", shell)
-			}
-			if len(o.ShellArgs) > 0 {
-				fmt.Fprintf(stdout, "args: %s\n", strings.Join(o.ShellArgs, " "))
+	environment := Environment(os.Environ(), runtimeDir, desktop)
+	arguments := AccessibilityArguments(ShellArguments(options.ShellArgs), runtimeDir)
+	if options.PrintEnv || options.DryRun {
+		for _, key := range []string{"XDG_RUNTIME_DIR", "XDG_SESSION_TYPE", "XDG_SESSION_CLASS", "XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION"} {
+			prefix := key + "="
+			for _, entry := range environment {
+				if strings.HasPrefix(entry, prefix) {
+					fmt.Fprintln(stdout, entry)
+					break
+				}
 			}
 		}
+	}
+	if options.PrintEnv && !options.DryRun {
 		return nil
 	}
-	shell, err := FindShell(o.Shell, argv0)
+	shell, err := FindShell(options.Shell, argv0)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "worldr-session %s: user=%s desktop=%s shell=%s\n", versionString(), user, env.Desktop, shell)
-	return startShell(shell, o.ShellArgs, MergeEnviron(os.Environ(), env.Overlay()), stdin, stdout, stderr)
+	if options.DryRun {
+		fmt.Fprintf(stdout, "shell=%s\nargs=%s\n", shell, strings.Join(arguments, " "))
+		return nil
+	}
+	cmd := exec.Command(shell, arguments...)
+	cmd.Env, cmd.Stdin, cmd.Stdout, cmd.Stderr = environment, stdin, stdout, stderr
+	// A distinct process group lets escalation include compatibility clients and
+	// native-app helpers still attached to the session. Providers retain their
+	// ordinary graceful-close interval inside worldr-shell.
+	// Kernel-enforced parent death cleanup covers an unexpected supervisor
+	// crash, where no Go defer or signal-forwarding path can run. Normal display
+	// manager shutdown still follows the graceful bounded path below.
+	prepareShellProcess(cmd)
+	signals := make(chan os.Signal, 2)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	defer signal.Stop(signals)
+	// Pdeathsig follows the lifetime of the thread that creates the child, not
+	// merely the Go process. Keep that thread alive until the child is reaped so
+	// the kernel cannot mistake a retired runtime worker for supervisor death.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start worldr shell: %w", err)
+	}
+	timeout := options.ShutdownTimeout
+	if timeout <= 0 {
+		timeout = DefaultShutdownTimeout
+	}
+	err = supervise(cmd, signals, timeout, finalKillWait)
+	var timeoutError *ShutdownTimeoutError
+	if errors.As(err, &timeoutError) {
+		return timeoutError
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return fmt.Errorf("worldr shell exited with status %d", exit.ExitCode())
+	}
+	return err
 }
 
-func startShell(path string, args []string, environ []string, stdin io.Reader, stdout, stderr io.Writer) error {
-	cmd := exec.Command(path, args...)
-	cmd.Env = environ
-	cmd.Stdin = stdin
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start %s: %w", path, err)
+func supervise(cmd *exec.Cmd, signals <-chan os.Signal, timeout, killWait time.Duration) error {
+	if cmd == nil || cmd.Process == nil {
+		return fmt.Errorf("worldr shell process is unavailable")
 	}
-	ch := make(chan os.Signal, 2)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(ch)
-	go func() {
-		sig := <-ch
-		if cmd.Process != nil {
-			_ = cmd.Process.Signal(sig)
+	if timeout <= 0 {
+		timeout = DefaultShutdownTimeout
+	}
+	if killWait <= 0 {
+		killWait = finalKillWait
+	}
+
+	// Observe the leader without reaping it. Its retained PID keeps the process
+	// group number owned until every remaining member has received the final
+	// cleanup signal, closing the PID-reuse race between Wait and kill(-pgid).
+	observed := make(chan error, 1)
+	go func() { observed <- observeShellProcess(cmd) }()
+
+	for {
+		select {
+		case observationErr := <-observed:
+			return finishObservedShell(cmd, observationErr, killWait)
+		case sig, ok := <-signals:
+			if !ok {
+				signals = nil
+				continue
+			}
+			if sig == nil {
+				continue
+			}
+			if err := signalProcessGroup(cmd, sig); err != nil {
+				cleanupErr := killAndReapShell(cmd, observed, killWait)
+				return errors.Join(fmt.Errorf("forward %s to worldr shell: %w", sig, err), cleanupErr)
+			}
+			return awaitGracefulShellShutdown(cmd, observed, signals, timeout, killWait)
 		}
-	}()
-	if err := cmd.Wait(); err != nil {
+	}
+}
+
+func prepareShellProcess(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
+	// A descendant which escaped the process group can otherwise retain an
+	// inherited stdout/stderr pipe and strand os/exec's copy goroutines after
+	// the leader has died. The process-group kill remains the primary cleanup.
+	cmd.WaitDelay = finalKillWait / 2
+}
+
+func observeShellProcess(cmd *exec.Cmd) error {
+	var info unix.Siginfo
+	for {
+		err := unix.Waitid(unix.P_PID, cmd.Process.Pid, &info, unix.WEXITED|unix.WNOWAIT, nil)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
 		return err
 	}
-	return nil
+}
+
+func awaitGracefulShellShutdown(cmd *exec.Cmd, observed <-chan error, signals <-chan os.Signal, timeout, killWait time.Duration) error {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		select {
+		case observationErr := <-observed:
+			return finishObservedShell(cmd, observationErr, killWait)
+		case <-timer.C:
+			err := killAndReapShell(cmd, observed, killWait)
+			return &ShutdownTimeoutError{Timeout: timeout, Err: err}
+		case sig, ok := <-signals:
+			if !ok {
+				signals = nil
+				continue
+			}
+			if sig == nil {
+				continue
+			}
+			// A second request means that the operator wants immediate teardown.
+			return killAndReapShell(cmd, observed, killWait)
+		}
+	}
+}
+
+func finishObservedShell(cmd *exec.Cmd, observationErr error, killWait time.Duration) error {
+	// The shell coordinates graceful provider shutdown before it exits. Any
+	// process still in its private group after that point is a straggler and
+	// must not survive the login session. The unreaped leader still pins PGID.
+	killErr := signalProcessGroup(cmd, syscall.SIGKILL)
+	reapErr := reapShell(cmd, killWait)
+	return errors.Join(observationErr, killErr, reapErr)
+}
+
+func killAndReapShell(cmd *exec.Cmd, observed <-chan error, killWait time.Duration) error {
+	deadline := time.Now().Add(killWait)
+	killErr := signalProcessGroup(cmd, syscall.SIGKILL)
+	observationTimer := time.NewTimer(time.Until(deadline))
+	defer observationTimer.Stop()
+	var observationErr error
+	select {
+	case observationErr = <-observed:
+	case <-observationTimer.C:
+		// Keep ownership of eventual cleanup even though the caller's deadline
+		// has expired. This cannot delay the session manager's return.
+		go func() {
+			<-observed
+			_ = cmd.Wait()
+		}()
+		return errors.Join(killErr, fmt.Errorf("worldr shell leader remained after SIGKILL for %s", killWait))
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		remaining = time.Nanosecond
+	}
+	return errors.Join(killErr, observationErr, reapShell(cmd, remaining))
+}
+
+func reapShell(cmd *exec.Cmd, timeout time.Duration) error {
+	reaped := make(chan error, 1)
+	go func() { reaped <- cmd.Wait() }()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-reaped:
+		return err
+	case <-timer.C:
+		return fmt.Errorf("worldr shell could not be reaped within %s", timeout)
+	}
+}
+
+func signalProcessGroup(cmd *exec.Cmd, signal os.Signal) error {
+	if cmd == nil || cmd.Process == nil {
+		return fmt.Errorf("shell process is unavailable")
+	}
+	value, ok := signal.(syscall.Signal)
+	if !ok {
+		return cmd.Process.Signal(signal)
+	}
+	err := syscall.Kill(-cmd.Process.Pid, value)
+	if errors.Is(err, syscall.ESRCH) {
+		return nil
+	}
+	return err
 }

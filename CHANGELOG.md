@@ -1,7 +1,349 @@
 # Changelog
 
-Human notes for worldr 0.1 → 0.9 (PRs #1–#10) and the 0.9.1+ stubs.
-Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is a spare TTY.
+## 0.10.0-dev — native scene architecture reset
+
+- Raised the private application server to XDG shell v3 and implemented copied
+  explicit popup positioners, parent-size constraints, parent-configure
+  metadata acceptance and reactive
+  reconstraining after committed ancestor resizes. Repositioned geometry takes
+  effect only after its matching configure acknowledgement; an isolated wire
+  test covers event order, positioner lifetime, unchanged-placement suppression
+  and parent shrink, while the gated Chromium workflow verifies v3 negotiation.
+- Added commit-atomic incremental SHM damage. Buffer-space rectangles are
+  clipped, surface-space damage follows the newly committed integer scale, and
+  each partial update produces a fresh immutable snapshot without reading
+  unrelated client pixels. Viewport-mapped surface damage and incompatible
+  attachments keep the conservative full-copy path.
+- Isolated multi-output device recovery by carrying the failed connector ID
+  through renderer errors and rebuilding only that output's Vulkan session.
+  Healthy outputs retain their device resources; failures without connector
+  context still use the conservative all-output recovery path.
+- Bounded display-manager shutdown around the shell process group, pins the
+  unreaped leader until straggling helpers are killed, and lets a second signal
+  bypass the grace interval. A kernel parent-death kill, backed by a pinned
+  creating thread, prevents an unexpectedly lost supervisor from leaving the
+  shell as an orphaned display owner.
+- Bridged the private Xwayland `CLIPBOARD` selection into the shared lazy
+  clipboard broker. XFixes ownership tracking, TARGETS negotiation, stale-offer
+  rejection and bounded descriptor-backed transfers work in both X11-to-Wayland
+  and Wayland-to-X11 directions; an isolated wire-level Xwayland test covers the
+  protocol without relying on the bridge's cached state.
+- Added capability-gated Xwayland glamor. Linux-DMABUF v4 advertises a sealed
+  exact-pair format table plus the renderer's main and tranche DRM device;
+  Xwayland starts glamor only for a common explicit XRGB/ARGB modifier on that
+  accessible device and retries once with SHM when startup disables acceleration.
+  A real xmessage test verifies a nonempty GPU-backed render and forced fallback.
+- Added copy-only XDND versions 3–5 between exact managed X11 windows. MIME
+  discovery is bounded to 64 entries, target acceptance gates the drop, payloads
+  use the standard client-to-client XdndSelection path, and unfinished drops
+  fail after two seconds. Real two-client coverage verifies UTF-8 payload,
+  legacy completion, cancellation, owner/target lifetime and unmap cleanup.
+
+- Replaced desktop-wide empty-space orbiting with a dedicated bottom-right
+  scene rotation pad. The compact gridded reticle shows live yaw and pitch,
+  ordinary background drags leave the workspace still, and AXIAL retains its
+  direct model-orbit gesture.
+- Gave generic, cinematic and open photo-bracket window frames real rearward
+  side depth while keeping all geometry outside client pixels and out of input
+  picking. Window momentum continues independently during camera rotation.
+- Removed the zoom-dependent L-shaped application title cards and their pointer
+  targets from the workspace. Portal navigation remains available through the
+  footer atlas and reserved shortcuts; native app-authored spatial annotations
+  retain their prior behavior.
+
+- Added the public `sdk/nativeapp/v1` process contract, a nonblocking host
+  adapter, repeatable `--native-app` launch option and an external reference
+  instrument. Version 1 has validated retained texture/mesh lifetimes, bounded
+  surface and memory budgets, normalized input/IME events and semantic trees.
+  Repeated app manifests receive distinct stable namespaces, semantic roles
+  survive accessibility export, and surface-independent seat broadcasts are
+  restricted to keyboard metadata so pointer traffic cannot terminate an app.
+- Added a linked native research workbench for bounded CSV, TSV and explicit
+  `.worldr-data.json` datasets. Tables, 2D plots and pickable 3D observations
+  share selection and retain axes, mode, orbit, zoom and live file refresh.
+- Added a native `.worldr-note.md` editor with grapheme-safe multiline input,
+  IME, clipboard, undo/redo, semantics, exact dirty-buffer recovery, durable
+  atomic saves and external-change detection.
+- Added the portal atlas and direct group travel across named spaces. Camera
+  targets persist, travel is undoable and navigation does not grant application
+  keyboard focus.
+- Added a terminal Tasks deck for bounded command recipes captured from OSC 133
+  blocks. Recipes can be inspected, staged and explicitly run; restoration
+  retains definitions without sending anything to the PTY.
+- Expanded the restart/resume trial to Files, PTY, inert tasks, model, research,
+  hosted AXIAL, two notes and the public SDK instrument. The default
+  three-process, one-hour
+  run completed 215,965 frames with stable resource peaks, zero graphics
+  recoveries and all state/artifact checks passing before AXIAL joined the
+  workload; the current expanded path passed its two-cycle CI gate.
+
+- Added a bounded cinematic rendering finish: up to four view-local point fill
+  lights, depth-peeled thin-glass transmission, opt-in opaque-backdrop refraction
+  with an 18-pixel maximum bend and a fixed five-tap frosted footprint of up to
+  six pixels, fixed-cost final-frame highlight bloom, and an optional
+  filmic/exposure/saturation/contrast SDR output transform. Refraction applies
+  only beneath explicit lit native glass, excludes overlays and the host cursor,
+  and uses one shared color target included in the transparency budget. Zero
+  refraction preserves the prior transmission path and exact client/legacy
+  texture pixels. The zero output transform preserves prior linear sRGB output;
+  HDR signaling, ICC profiles and wide-gamut scanout are not claimed.
+- Added an opt-in native hologram material for translucent meshes. It combines
+  true depth-peeling/opaque occlusion with view-dependent coverage, world-space
+  scan bands and a narrow opaque-depth contact cue. The workspace freezes its
+  transient scan phase under Reduced Motion, while application pixels, overlays
+  and the host cursor remain outside the material shader. This is a bounded
+  surface treatment; it does not claim volumetric scattering or physical HDR.
+- Added hosted retained 3D objects, mesh picking and labels, plus file-backed
+  OBJ/STL inspection with component selection, measurements, annotations and
+  atomic tool documents. Multiple inspectors coexist with ordinary windows.
+- Moved AXIAL / 07 onto that hosted spatial-application path with APPS-rail
+  launch, workspace placement and exact inert session restore while retaining
+  the standalone deterministic harness. Closing the hosted study now retires
+  its panel and all four procedural meshes; reopening uses fresh resource IDs.
+- Added named spaces with independent cameras/contents and a searchable
+  Ctrl+Alt+Space launcher, group transfer and Undo.
+- Added shared Pango/HarfBuzz native controls, grapheme editing, semantic focus
+  trees and nested text-input-v3 composition with stale-focus protection.
+- Added linear SDR color, directional shadows and bounded per-pixel transparency,
+  validated with Vulkan synchronization checks. Added allocation accounting,
+  resource budgets, device recovery hooks and transactional target updates.
+- Added terminal Find/bookmarks, optional OSC 133 command blocks/folds and pins;
+  Files search, thumbnails, periodic refresh and recoverable operations; and
+  independent photo/video collections with exact saved slots.
+- Added bounded complete-run performance reports and recovery retry limits.
+- Added transactional synchronized Wayland subsurfaces, fractional scaling,
+  viewports, clipboard and drag-and-drop. A bounded one-plane explicit-modifier
+  8888/2101010 XRGB/ARGB/XBGR/ABGR DMA-BUF path snapshots compatible client
+  buffers directly on the GPU and survives renderer recovery. LINEAR and
+  device-specific non-LINEAR pairs are advertised only after exact per-device
+  import, transfer, LINEAR export/import and sampling checks; retained snapshots
+  stay LINEAR for recovery and cross-renderer ownership.
+- Added a bounded native accessibility export: Files, media, terminal and model
+  semantics are mapped to public window IDs and streamed as versioned JSON on a
+  private Unix socket. An AT-SPI desktop-bus adapter remains separate work.
+- Added a supervised `worldr-session`, display-manager and nested desktop entries,
+  plus staged `make install`. The wrapper validates the runtime directory,
+  authorizes direct display explicitly and forwards session shutdown signals.
+- Added a private Xwayland bridge with authenticated startup, focus, resize,
+  keyboard/pointer input, titles and close/unmap/remap lifecycle. Real foot,
+  Chromium, Konsole and xmessage acceptance tests cover the supported subset.
+- Added libseat-owned direct sessions and libinput/udev device discovery,
+  ordered release/disable acknowledgement/reopen, VT switching, connector and
+  input hotplug, plus an extended desktop across up to eight selected outputs.
+- Added an isolated nested input/recovery test and a 60-second continuously
+  playing mixed-workspace benchmark. Physical spare-TTY, multi-monitor and
+  suspend/resume qualification remains outstanding.
+
+- Added version-2 native session manifests while preserving version-1 layout
+  loading. Files resumes its folder/selection, photos reopen, videos restore
+  playback settings, and native terminal slots start fresh shells in saved
+  working directories. Commands, jobs and process memory are not replayed;
+  legacy apps still require explicit launch arguments or profiles. Missing
+  resources show notices and retain pending references with their placements.
+- Added `--autosave=5s` recovery checkpoints with one background writer and
+  non-disruptive workspace snapshots; `--autosave=0` disables periodic writes.
+  Startup selects a newer valid `.autosave`, with fallback between recovery and
+  primary after validation. Manual saves flush checkpoints and clear recovery.
+  `--fresh` loads the primary layout and explicit CLI apps while skipping saved
+  native content/recovery. A `.lock` prevents concurrent use of one state path.
+
+- Applied the cinematic cyan frame and matching drag grip to Files. Read-mode
+  camera framing includes its outer rails instead of showing the plain outline.
+
+- Added Files → Terminal Here and Ctrl+Shift+Enter. A selected directory starts
+  an independent native PTY there; selecting a regular file uses its current
+  folder. Startup borrows an anchored directory descriptor, preserving directory
+  identity across renames without changing other shells or the parent process.
+  Opening leaves Files, selection and camera focus in place.
+- Unified provider polling, reverse-order shutdown and texture retirement in
+  the application hub. Native and compatibility apps share optional lifecycle
+  contracts, including cleanup after partial startup and idempotent teardown.
+
+- Added an open cyan photo bracket along the left side with partial top and
+  bottom returns. The frame stays outside the image and follows spatial
+  placement; the viewer keeps direct photo dragging and has no image toolbar.
+
+- Removed the armor and sparking-wire backdrop; the rotating DNA remains.
+- Simplified photos to image-first surfaces: no enclosing window, title bar or
+  zoom/pan/rotation controls. An open cyan bracket marks the left edge with
+  partial top and bottom returns. Photos preserve their full aspect ratio and
+  can be moved or thrown by dragging the image itself. Decoding, automatic EXIF
+  orientation, safe replacement and opening without stealing focus remain.
+
+- Restyled the native video player with a layered teal chassis, cyan rails,
+  raised title tabs, segmented transport keys, a separate volume deck and a
+  hexagonal timeline thumb. Paused video has a concentric-ring play overlay;
+  the surrounding hex grid stays outside the picture. Controls remain usable
+  across compact, tall and wide window sizes, without changing playback focus.
+
+- Videos opened from Files now start in place without selecting the player,
+  taking keyboard focus or entering Read mode. Reopening preserves placement.
+- Files opens JPEG, PNG, WebP, BMP and GIF first frames through its anchored
+  descriptor path. Bounded asynchronous decoding applies JPEG orientation,
+  preserves the prior photo on failure, cancels stale loads and leaves workspace
+  focus unchanged.
+
+- Added a native media player with angular cyan chrome, a seek timeline,
+  pause/replay, stop, ten-second skipping, mute and volume. Opening a video in
+  Files (Enter, Open, or double-click) plays it in a native workspace surface.
+  libmpv owns decoding and audio/video timing; RGBA frames use the existing
+  retained texture path. Reopening replaces playback in the same placement.
+  File opening remains asynchronous and anchored to the browser root; only
+  explicit opens transfer a regular-file descriptor to the player. Embedded
+  playback disables libmpv's configuration, user scripts and built-in Lua/UI
+  services so those workers cannot capture input or outlive the native player.
+
+- Fixed window throws stopping when another window was clicked. Windows and
+  groups now coast independently; clicking their own content or grip stops them.
+  Each throw keeps one Undo entry in gesture order, without rewinding unrelated
+  movement or selection. Focused terminal input remains routed to the terminal.
+- Sped up the DNA background rotation to one revolution every 30 seconds.
+
+- Added a slowly rotating cyan DNA double helix as the spatial desktop background.
+  Retained smooth geometry renders in a separate earlier camera pass, keeping
+  application pixels and input untouched at every window depth. Reduced Motion
+  freezes its pose; Adaptive Read fades it out.
+
+- Added terminal-specific cyan frames with chamfered corners, paired rails, edge
+  markings and an integrated drag plate, plus matching native terminal chrome.
+  Decorations use retained scene geometry outside the full client rectangle.
+  Read framing includes the border; dragging, throwing and focus cues remain.
+
+- Made the general spatial workspace the default; AXIAL remains selectable with
+  `--experience=axial`, and `--demo` selects it automatically. The desktop owns
+  no study geometry/instrument and has its own validated saved-state identity.
+- Added a read-only native project browser through `--project=PATH`, with directory
+  navigation, bounded UTF-8 previews, scrolling, resize and Copy Path. Background
+  reads are cancellable and stale results cannot replace a newer selection.
+- Added occlusion-aware window grips and Super+drag, plus inertial throws that
+  coast to a stop. Groups retain their arrangement; a grab or Escape stops motion.
+  A complete drag and coast share one undo record. Reduced Motion disables
+  throws, and persistence records only the settled position.
+
+- Added explicit per-mesh GPU background glow, depth-occluded and clipped to each
+  camera viewport. Active app borders, sparse guides and housing light bands
+  author emission; opaque app content and later overlays retain their normal
+  rendering. Adaptive focus removes halos while keeping its crisp focus border.
+  Effect passes skip zero-emission frames and use bounded retained resources.
+  HDR bloom, tone mapping and light transport remain future work.
+- Added an on-screen shortcut guide through Help or workspace F1. It blocks
+  underlying input, consumes held keys through dismissal and leaves typing focus
+  with the workspace. Focused applications retain their own F1 behavior.
+- Added transparent legacy application cursors with hotspot, integer scale,
+  explicit hiding, focus/serial validation and bounded lifetime-managed images.
+  A retained premultiplied image overlay pass handles cursor alpha without changing
+  opaque scene content. Tests include real foot/Chromium requests and a foot-to-GPU
+  workspace workflow; hovering and keyboard focus remain independent.
+- Added independent, persisted Reduced Motion through the header or Shift+P.
+  Explosion and framing transitions resolve immediately; explicit playback and
+  application content remain under their own controls. Undo preserves unrelated
+  playback, reset preserves the preference, and older documents keep full motion.
+- Added bounded Fontconfig fallback for missing native terminal glyphs on Linux,
+  retaining embedded Go Mono for supported characters and fixed cell metrics.
+  Font caches and file reads have explicit limits; fonts/faces are released with
+  their renderer. Installed coverage is required; shaping/color emoji are still ahead.
+- Replaced collapsed direct-display input with an ordered evdev queue preserving
+  raw keys, event-time modifiers/positions, extra buttons and both wheel axes.
+  High-resolution scrolling avoids duplicate detents; lost reports or device
+  disconnects cancel focus/repeat and pointer capture. Synthetic packet/pipe and
+  app-routing tests cover the path; physical VT/seat operation remains unverified.
+- Replaced ten overlapping ambient-halo discs with one radial-gradient fan,
+  retaining 4× MSAA and interactive presentation without readback. Added
+  depth-read-only guide meshes, deferred after opaque content so faint lines
+  no longer cut holes through it. Intel ARL short-run timings, exact commands
+  and measurement limits are in [performance observations](docs/PERFORMANCE.md).
+- Added per-instance direct-light material highlights, roughness, metal tint and
+  view-dependent colored rims using the existing renderer pass. Zero materials,
+  unlit geometry and opaque application content preserve their previous behavior.
+- Added validated per-vertex normals, smooth AXIAL cylinder walls with hard caps
+  and blades, a cool blue/silver palette, and procedural world-space grid/rings.
+  World-space guides hide in Read/Overview; Adaptive focus calms guides and rim
+  accents. HDR bloom and color-managed glass remain future work.
+- Added 4× MSAA with per-sample overlay coverage and a feature-checked 1×
+  fallback. Resolve writes directly to the existing output target; retained
+  textures survive resize and terminal content interiors stay sharply sampled.
+- Added New Terminal and Close Selected controls, plus Ctrl+Alt+Enter for a new
+  native terminal and Ctrl+Alt+O for overview while applications own the keyboard.
+  Both chords consume repeats and their matching release. Native shells can launch compatible GUI
+  apps back into worldr's private application host. Escape restores the prior
+  space/read view without granting application keyboard focus.
+- Added a native terminal manager with independent PTYs, reusable layout slots,
+  distinct runtime identities and retained output after shell exit. New Terminal
+  remains available without `--terminal` or any existing apps. Close Selected
+  targets only the active window and lets legacy clients confirm unsaved work.
+- Added arrow navigation of live overview thumbnails using their rendered grid,
+  with one move per fresh press and a centered single-window layout. Enter or
+  keypad Enter returns without typing focus; another fresh Enter explicitly
+  opens Read and focuses the selected app. Held commands and their releases
+  remain consumed across view/focus changes; ordinary focused-app Enter is intact.
+- Added transient launch-error notices and visible capacity feedback. The live
+  workspace and saved layout each have a 32-window limit; a newly launched
+  terminal excluded by old saved placements is closed without changing those
+  placements. Launch/close and notices remain outside document undo.
+- Added explicit Forget Closed Placements cleanup, preserving live positions,
+  groups and selection even for currently unrenderable provider surfaces. Undo
+  retains subsequently registered keys and refuses capacity conflicts without
+  partial changes; redo protects reopened windows. The control remains available
+  in an empty workspace and does not overlap launch/error notices.
+- Added multiple application surfaces, free placement, depth controls, grouping,
+  overview retrieval, and persisted stable layout keys. Repeated `--app` launches
+  share arguments; `--apps` profiles provide independent arguments and named IDs.
+- Added lazy clipboard exchange between the nested desktop and application
+  providers, with echo suppression and stale-offer checks. Native text paste is
+  bounded to 1 MiB/two seconds and tied to the original terminal's focus; a later
+  focus change or reopened launch slot cannot receive that pending paste.
+- Added XDG popup composition and input routing. Real Chromium and Konsole tests
+  cover dropdowns, context menus, nested menus, dialog windows and parent cleanup.
+  These use private SHM Wayland clients, with a separate profile and software
+  rendering for Chromium. Popup pixels remain constrained or clipped to the
+  root application image; this is not general desktop compatibility.
+- Added `--terminal`, a worldr-native PTY/libvterm terminal with monospace cell
+  presentation, colors, alternate screens, history, resize, selection, copy/paste
+  and focus-scoped key repeat. It runs alongside legacy applications. Native
+  glyph rows currently rasterize on the CPU into retained GPU content surfaces.
+- Added an opt-in `--app=foot` compatibility path on a private Wayland server.
+  A real terminal shares native scene depth, receives raw input, and supports
+  spatial front/back placement, read/return, client resize, and saved view
+  preferences. Ctrl+Alt+Q exits worldr while application keys stay with the client.
+  This established the initial SHM path later extended by toolkit, DMA-BUF and
+  private Xwayland support above.
+- Added retained RGBA content surfaces sharing the native mesh depth buffer,
+  changed-region uploads, and ray-to-texture pointer mapping. Surfaces are
+  opaque in this milestone. AXIAL's live instrument panel has working playback
+  and scrub controls plus undoable, persisted front/back placement (B).
+- Added selectable Cinematic/Adaptive presentation through header controls or P.
+  Adaptive fades scene guides and mesh accents during focus. The preference is
+  saved with the document, supports undo/redo, and survives study reset. Existing
+  documents default to Cinematic.
+- Replaced the CPU window compositor and shell with a native scene/experience
+  runtime; AXIAL / 07 is its first procedural engineering study.
+- Retained immutable mesh resources on the GPU. Model/camera transforms,
+  directional lighting, and barycentric wire rendering now run in shaders.
+  Ordered overlay and camera passes combine text, controls, and 3D content.
+- Added hierarchical transforms and ray/BVH picking without projecting or
+  shading every mesh triangle on the CPU each frame.
+- Replaced nested CPU readback transport with libwayland/XKB host integration
+  and a Vulkan WSI swapchain. Normal nested presentation has no CPU framebuffer.
+  Generated XDG-shell protocol source is checked in.
+- Separated host display/input/file ownership from the experience contract.
+  AXIAL keys, UI, gestures, and demo invoke semantic actions. Typed versioned
+  documents use stable component IDs; undo/redo groups gestures into one edit
+  and preserves unrelated playback progress.
+- Added opt-in `--state PATH` loading and atomic private-file saves with Ctrl+S
+  or normal exit. Invalid envelopes/documents are rejected transactionally.
+  Undo history and presentation interpolation are not serialized.
+- Snapshot export uses a separate offscreen Vulkan render. Direct display and
+  the diagnostic DRM readback backend remain, with physical TTY validation still
+  outstanding for the redesigned runtime.
+- Build dependencies now include Wayland client/server, Fontconfig, xkbcommon and libvterm
+  0.3+ development libraries. Removed the former application compositor, window
+  actor engine, shell/session wrapper, and unused transport packages.
+- Compatibility currently targets foot, Chromium, Konsole and private Xwayland
+  windows. HDR color management, arbitrary DMA-BUF formats, an AT-SPI adapter
+  and full desktop services remain work ahead. Vulkan presentation
+  teardown waits for device idleness without a guaranteed finite shutdown deadline.
+
+The entries below describe the retired 0.9 compositor prototype.
 
 ## 0.9.36-dev — mesh wobble + burn dissolve
 
@@ -198,7 +540,7 @@ Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is 
 
 ## 0.9.7-dev — TTY / vk-display soak
 
-- Finite 2s GPU waits on `vk-display` acquire/present/teardown so a lost DRM master does not hang the spare VT forever.
+- Added timeout handling to GPU display operations. This historical release does not define current teardown guarantees; the current Vulkan presenter waits for device idleness before destroying resources.
 - DRM session `fd` starts at `-1` (calloc 0 was stdin). `--card` must be `/dev/dri/cardN`, not a render node.
 - `--backend=auto` refuses leftover `XDG_SESSION_TYPE=wayland|x11` without a host socket (would have picked vk-display).
 - `scripts/try-tty.sh` accepts `CARD=`, warns when only render nodes exist. Exact abox soak steps in [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
@@ -307,20 +649,7 @@ Stacked on `dev`. Nested compositor on Plasma is the safe demo; real display is 
 - Go module, Vulkan/DRM C ABI, `worldr-shell` / `worldr-session`, headless + nested + vk-display/drm backends.
 - Minimal Wayland server, SSD, scene/actors. Locked: owned compositor, no wgpu / Smithay / wlroots.
 
-## How to try
+## Current build and run instructions
 
-Nested (safe, current desktop):
-
-```sh
-./bin/worldr-session -- --backend=wayland-client --duration=30s
-# or: ./bin/worldr-shell --backend=wayland-client --duration=30s
-# F1 → foot; F12 overview; pager or Ctrl+Alt+←/→ workspaces
-```
-
-Spare TTY (real display — not on top of Plasma):
-
-```sh
-./scripts/try-tty.sh
-```
-
-See [README.md](README.md) and [docs/RUN-ABOX.md](docs/RUN-ABOX.md).
+Entries for 0.9 and earlier describe retired implementations. Use [README.md](README.md)
+and [docs/RUN-ABOX.md](docs/RUN-ABOX.md) for the current experience and controls.

@@ -4,38 +4,43 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/codemodify/worldr/internal/version"
 )
 
-func versionString() string { return version.String() }
-
-func newFlagSet() *flag.FlagSet {
-	fs := flag.NewFlagSet("worldr-session", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	fs.Usage = func() {}
-	return fs
+func Parse(args []string) (Options, error) {
+	var options Options
+	set := flag.NewFlagSet("worldr-session", flag.ContinueOnError)
+	set.SetOutput(io.Discard)
+	set.StringVar(&options.Shell, "shell", "", "path to worldr-shell")
+	set.StringVar(&options.Desktop, "desktop", DefaultDesktop, "XDG desktop name")
+	set.StringVar(&options.RuntimeDir, "runtime-dir", "", "existing private XDG runtime directory")
+	set.BoolVar(&options.PrintEnv, "print-env", false, "print the session environment and exit")
+	set.BoolVar(&options.DryRun, "dry-run", false, "resolve environment, command and arguments without launching")
+	set.DurationVar(&options.ShutdownTimeout, "shutdown-timeout", DefaultShutdownTimeout, "maximum graceful shell shutdown time")
+	if err := set.Parse(args); err != nil {
+		return Options{}, err
+	}
+	if options.ShutdownTimeout < 250*time.Millisecond || options.ShutdownTimeout > 5*time.Minute {
+		return Options{}, fmt.Errorf("--shutdown-timeout must be between 250ms and 5m")
+	}
+	options.ShellArgs = append([]string(nil), set.Args()...)
+	return options, nil
 }
 
-func bindFlags(fs *flag.FlagSet, o *Options) {
-	fs.StringVar(&o.Shell, "shell", "", "path to worldr-shell (default: sibling of worldr-session, then PATH)")
-	fs.StringVar(&o.User, "user", "", "autologin this name (must be the current uid; no PAM)")
-	fs.BoolVar(&o.Login, "login", false, "prompt for username (must match the current uid; no PAM)")
-	fs.StringVar(&o.Desktop, "desktop", DefaultDesktop, "XDG_CURRENT_DESKTOP / XDG_SESSION_DESKTOP")
-	fs.StringVar(&o.RuntimeDir, "runtime-dir", "", "XDG_RUNTIME_DIR (default: env, then /run/user/UID)")
-	fs.BoolVar(&o.PrintEnv, "print-env", false, "print session environment and exit")
-	fs.BoolVar(&o.DryRun, "dry-run", false, "resolve login/shell/env and exit without starting the shell")
-}
-
-// Usage writes the session help text.
-func Usage(w io.Writer) {
-	fmt.Fprintf(w, "worldr-session %s — start a worldr Wayland session (worldr-shell).\n\n", version.String())
-	fmt.Fprintln(w, "Usage: worldr-session [flags] [--] [worldr-shell flags...]")
-	fs := newFlagSet()
-	var o Options
-	bindFlags(fs, &o)
-	fs.SetOutput(w)
-	fs.PrintDefaults()
-	fmt.Fprintln(w, "\nNo PAM / greetd. --login / --user only accept the current uid.")
-	fmt.Fprintln(w, "Display managers: install contrib/wayland-sessions/worldr.desktop.")
+func Usage(output io.Writer) {
+	fmt.Fprintf(output, "worldr-session %s — start a worldr display-manager session\n\n", version.String())
+	fmt.Fprintln(output, "Usage: worldr-session [session flags] [-- worldr-shell flags]")
+	var options Options
+	set := flag.NewFlagSet("worldr-session", flag.ContinueOnError)
+	set.SetOutput(output)
+	set.StringVar(&options.Shell, "shell", "", "path to worldr-shell")
+	set.StringVar(&options.Desktop, "desktop", DefaultDesktop, "XDG desktop name")
+	set.StringVar(&options.RuntimeDir, "runtime-dir", "", "existing private XDG runtime directory")
+	set.BoolVar(&options.PrintEnv, "print-env", false, "print the session environment and exit")
+	set.BoolVar(&options.DryRun, "dry-run", false, "resolve environment, command and arguments without launching")
+	set.DurationVar(&options.ShutdownTimeout, "shutdown-timeout", DefaultShutdownTimeout, "maximum graceful shell shutdown time")
+	set.PrintDefaults()
+	fmt.Fprintln(output, "\nAuthentication is performed by the display manager; worldr-session never switches users.")
 }

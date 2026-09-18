@@ -1,19 +1,22 @@
-// Command worldr-shell is the compositor / present process.
-//
-// It owns the GPU present path (Vulkan display or DRM/KMS), optionally a
-// minimal Wayland server, and a CPU compositor scene. See docs/RUN-ABOX.md.
+// Command worldr-shell runs the native GPU scene workspace.
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/codemodify/worldr/internal/shell"
+	"github.com/codemodify/worldr/internal/app"
+	"github.com/codemodify/worldr/internal/experience"
+	"github.com/codemodify/worldr/internal/workspace"
 )
 
 func main() {
-	opt, err := shell.ParseFlags(os.Args[1:])
+	opt, err := app.Parse(os.Args[1:], os.Stderr)
 	if err != nil {
 		if err == flag.ErrHelp {
 			os.Exit(0)
@@ -21,7 +24,15 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	if err := shell.Run(os.Stdout, os.Stderr, opt); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	factory := func() (experience.Experience, error) {
+		if opt.Experience == "axial" {
+			return workspace.New()
+		}
+		return workspace.NewDesktop()
+	}
+	if err := app.Run(ctx, os.Stdout, opt, factory); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

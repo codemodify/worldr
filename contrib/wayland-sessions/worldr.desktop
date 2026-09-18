@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=worldr
-Comment=worldr cinematic desktop
+Comment=Spatial engineering and research workspace
 Exec=worldr-session
 TryExec=worldr-session
 Type=Application
