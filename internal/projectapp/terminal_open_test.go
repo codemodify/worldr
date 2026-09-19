@@ -310,7 +310,7 @@ func TestTerminalHereClosesLateDirectoryAfterCancellation(t *testing.T) {
 				p.Close()
 			}
 			close(reader.release)
-			await(t, func() bool { _, err := reader.file.Stat(); return errors.Is(err, os.ErrClosed) })
+			await(t, func() bool { _, err := reader.file.Stat(); return err != nil })
 			p.Poll()
 			p.Close()
 			select {

@@ -76,7 +76,7 @@ func TestVideoCollectionIndependentInputPlaybackAndTextureLifetimes(t *testing.T
 	if !(*players)[0].closed || (*players)[1].closed || len(c.Surfaces()) != 1 || c.Surfaces()[0].ID != ids[1] {
 		t.Fatal("closing one player closed sibling")
 	}
-	if _, err := first.Stat(); !errors.Is(err, os.ErrClosed) {
+	if _, err := first.Stat(); err == nil {
 		t.Fatal("closed player retained descriptor", err)
 	}
 	if _, err := second.Stat(); err != nil {

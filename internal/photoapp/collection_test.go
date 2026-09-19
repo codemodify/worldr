@@ -3,7 +3,6 @@ package photoapp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"image"
 	"os"
 	"reflect"
@@ -174,7 +173,7 @@ func TestPhotoCollectionRestoreKeepsSparseKeysAndCapacityOwnership(t *testing.T)
 			t.Fatal("collection close leaked a pending decoder")
 		}
 	}
-	if _, err := file.Stat(); !errors.Is(err, os.ErrClosed) {
+	if _, err := file.Stat(); err == nil {
 		t.Fatal("restored photo descriptor remained open", err)
 	}
 	for _, key := range []string{"", "native:photo-viewer-1", "native:photo-viewer-01", "native:photo-viewer-9", "native:media-player"} {

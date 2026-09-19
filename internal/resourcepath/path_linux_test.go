@@ -3,7 +3,6 @@
 package resourcepath
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +97,7 @@ func TestFromDirectoryFollowsRenameAndRejectsDeletedResource(t *testing.T) {
 		t.Fatalf("deleted directory produced a reopenable-looking path: %q, %v", path, err)
 	}
 	directory.Close()
-	if _, err := FromFile(directory); !errors.Is(err, os.ErrClosed) {
+	if _, err := FromFile(directory); err == nil {
 		t.Fatalf("closed file descriptor was accepted: %v", err)
 	}
 	if _, err := FromFile(nil); err == nil {

@@ -129,7 +129,12 @@ func Open(parent context.Context, command string, args []string, log io.Writer) 
 		semantics: make(map[uint64]nativeui.SemanticTree), textInput: make(map[uint64]experience.TextInputState), surfaceKeys: make(map[uint64]string),
 		lastTick: time.Now(),
 	}
-	go func() { p.wait <- cmd.Wait() }()
+	// Wait closes the descriptors returned by StdoutPipe. It must not run
+	// while the handshake or transport goroutine can still be reading stdout.
+	go func() {
+		<-p.done
+		p.wait <- cmd.Wait()
+	}()
 	hello := nativeapp.Request{
 		Version: nativeapp.Version, Sequence: p.nextSequence(), Kind: nativeapp.RequestHello,
 		Host: nativeapp.Host{Version: nativeapp.Version, MaxSurfaceWidth: nativeapp.MaxTextureWidth, MaxSurfaceHeight: nativeapp.MaxTextureHeight, MaxSurfaces: nativeapp.MaxSurfaces},
@@ -139,7 +144,9 @@ func Open(parent context.Context, command string, args []string, log io.Writer) 
 		err      error
 	}
 	handshakeDone := make(chan handshake, 1)
+	handshakeExited := make(chan struct{})
 	go func() {
+		defer close(handshakeExited)
 		if err := p.codec.Write(hello); err != nil {
 			handshakeDone <- handshake{err: err}
 			return
@@ -151,38 +158,39 @@ func Open(parent context.Context, command string, args []string, log io.Writer) 
 	select {
 	case result := <-handshakeDone:
 		if result.err != nil {
-			p.abort()
+			p.abort(handshakeExited)
 			return nil, fmt.Errorf("native app handshake: %w", result.err)
 		}
 		if err := p.acceptEnvelope(hello, result.response); err != nil {
-			p.abort()
+			p.abort(handshakeExited)
 			return nil, err
 		}
 		if result.response.Manifest == nil {
-			p.abort()
+			p.abort(handshakeExited)
 			return nil, fmt.Errorf("native app handshake omitted its manifest")
 		}
 		if err := result.response.Manifest.Validate(); err != nil {
-			p.abort()
+			p.abort(handshakeExited)
 			return nil, err
 		}
 		p.manifest = *result.response.Manifest
 		p.keyNamespace = p.manifest.ID
 		if result.response.Snapshot == nil {
-			p.abort()
+			p.abort(handshakeExited)
 			return nil, fmt.Errorf("native app handshake omitted its initial snapshot")
 		}
 		if err := p.apply(*result.response.Snapshot); err != nil {
-			p.abort()
+			p.abort(handshakeExited)
 			return nil, fmt.Errorf("native app initial snapshot: %w", err)
 		}
 	case <-time.After(startupTimeout):
-		p.abort()
+		p.abort(handshakeExited)
 		return nil, fmt.Errorf("native app %q did not negotiate within %s", command, startupTimeout)
 	case <-parent.Done():
-		p.abort()
+		p.abort(handshakeExited)
 		return nil, parent.Err()
 	}
+	<-handshakeExited
 	go p.serveTransport(ctx)
 	return p, nil
 }
@@ -489,10 +497,12 @@ func (p *Provider) Close() error {
 	return p.closeErr
 }
 
-func (p *Provider) abort() {
+func (p *Provider) abort(handshakeExited <-chan struct{}) {
 	p.cancel()
 	_ = p.stdin.Close()
 	_ = p.stdout.Close()
+	<-handshakeExited
+	close(p.done)
 	select {
 	case <-p.wait:
 	case <-time.After(shutdownTimeout):

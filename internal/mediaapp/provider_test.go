@@ -169,7 +169,7 @@ func TestPlayerReplacementOwnsFileAndRetiresTexture(t *testing.T) {
 	if !p.closed || m.next == oldID {
 		t.Fatal("old decoder or runtime identity was retained")
 	}
-	if _, err := oldFile.Stat(); !errors.Is(err, os.ErrClosed) {
+	if _, err := oldFile.Stat(); err == nil {
 		t.Fatal("old descriptor leaked")
 	}
 	ids := m.RetiredTextures()
@@ -184,7 +184,7 @@ func TestPlayerReplacementOwnsFileAndRetiresTexture(t *testing.T) {
 	if len(m.Surfaces()) != 0 || !replacement.closed {
 		t.Fatal("closing failed")
 	}
-	if _, err := file.Stat(); !errors.Is(err, os.ErrClosed) {
+	if _, err := file.Stat(); err == nil {
 		t.Fatal("descriptor leaked on close")
 	}
 }

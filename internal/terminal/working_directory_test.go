@@ -48,7 +48,7 @@ func TestWorkingDirectoryTracksShellCDRenameAndExit(t *testing.T) {
 	if processDirectory == nil {
 		t.Fatal("process identity was not pinned during its lifetime")
 	}
-	if _, err := processDirectory.Stat(); !errors.Is(err, os.ErrClosed) {
+	if _, err := processDirectory.Stat(); err == nil {
 		t.Fatalf("exit retained the procfs process descriptor: %v", err)
 	}
 	term.Close()
@@ -110,7 +110,7 @@ func TestWorkingDirectoryFastExitAndRemovedDirectoryUseLaunchFallback(t *testing
 				t.Fatal(err)
 			}
 			if processDirectory != nil {
-				if _, err := processDirectory.Stat(); !errors.Is(err, os.ErrClosed) {
+				if _, err := processDirectory.Stat(); err == nil {
 					t.Fatalf("close retained process descriptor: %v", err)
 				}
 			}

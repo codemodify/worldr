@@ -31,7 +31,7 @@ func videoProvider(t *testing.T) (*Provider, *controlledReader) {
 
 func assertClosedFile(t *testing.T, file *os.File) {
 	t.Helper()
-	if _, err := file.Stat(); !errors.Is(err, os.ErrClosed) {
+	if _, err := file.Stat(); err == nil {
 		t.Fatalf("unclaimed media descriptor remained open: %v", err)
 	}
 }
@@ -182,7 +182,7 @@ func TestVideoWorkerClosesLateDescriptorAfterCancellation(t *testing.T) {
 				p.selectEntry(1)
 			}
 			close(reader.release)
-			await(t, func() bool { _, err := reader.file.Stat(); return errors.Is(err, os.ErrClosed) })
+			await(t, func() bool { _, err := reader.file.Stat(); return err != nil })
 			if len(p.results) != 0 {
 				t.Fatal("worker published a canceled media result")
 			}

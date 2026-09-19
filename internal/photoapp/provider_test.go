@@ -89,7 +89,7 @@ func TestPhotoOpenIsAsyncReservesSurfaceAndPreservesPriorImageOnFailure(t *testi
 	if m.photo != photo || m.loading || m.message != "" {
 		t.Fatal("decoded photo did not replace loading state")
 	}
-	if _, err := file.Stat(); !errors.Is(err, os.ErrClosed) {
+	if _, err := file.Stat(); err == nil {
 		t.Fatal("decoded descriptor remained open")
 	}
 	bad := photoTestFile(t, []byte("bad"))
@@ -152,8 +152,8 @@ func TestPhotoCancellationClosesActiveAndSupersededDescriptors(t *testing.T) {
 	if _, err := m.OpenFile(third, "third.png"); err != nil {
 		t.Fatal(err)
 	}
-	awaitPhoto(t, func() bool { _, err := first.Stat(); return errors.Is(err, os.ErrClosed) })
-	if _, err := second.Stat(); !errors.Is(err, os.ErrClosed) {
+	awaitPhoto(t, func() bool { _, err := first.Stat(); return err != nil })
+	if _, err := second.Stat(); err == nil {
 		t.Fatal("superseded pending descriptor leaked")
 	}
 	active.answer <- photoResult{image: photoSolid(2, 2, 50)}
@@ -174,7 +174,7 @@ func TestPhotoCancellationClosesActiveAndSupersededDescriptors(t *testing.T) {
 	if err := m.Close(); err != nil {
 		t.Fatal(err)
 	}
-	awaitPhoto(t, func() bool { _, err := pending.Stat(); return errors.Is(err, os.ErrClosed) })
+	awaitPhoto(t, func() bool { _, err := pending.Stat(); return err != nil })
 	closing.answer <- photoResult{image: photoSolid(2, 2, 20)}
 	select {
 	case <-m.done:

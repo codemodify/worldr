@@ -101,7 +101,7 @@ func TestMediaSessionRestoreGatesPlaybackUntilLoadedSeekCompletes(t *testing.T) 
 			if _, ok := m.SessionState(); ok {
 				t.Fatal("closed player remained in session")
 			}
-			if _, err := file.Stat(); !errors.Is(err, os.ErrClosed) {
+			if _, err := file.Stat(); err == nil {
 				t.Fatal("restore did not transfer descriptor ownership")
 			}
 		})

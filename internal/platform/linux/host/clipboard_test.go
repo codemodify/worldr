@@ -69,7 +69,14 @@ func TestClipboardLazyBidirectionalRelayAndFocus(t *testing.T) {
 		t.Fatalf("published clipboard without a focused serial: %v", err)
 	}
 	actions <- func(p *clipboardPeer) { writeMessage(p.conn, p.keyboard, 1, []uint32{102, p.surface, 0}); p.offer() }
-	pollClipboardUntil(t, w, func() bool { return w.ClipboardOffer().Available })
+	// Availability follows keyboard enter, which may arrive before the
+	// compositor's following data-offer messages. Wait for the selected offer
+	// itself before replacing it, otherwise a partially delivered offer can be
+	// destroyed while its remaining events are still in flight.
+	pollClipboardUntil(t, w, func() bool {
+		offer := w.ClipboardOffer()
+		return offer.Available && offer.ID != 0
+	})
 	if err := w.OfferClipboard(77, []string{clipboardTestMIME}); err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +158,10 @@ func TestClipboardBoundsSendQueueAndClosesUndrainedDescriptors(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer w.Close()
-	pollClipboardUntil(t, w, func() bool { return w.ClipboardOffer().Available })
+	pollClipboardUntil(t, w, func() bool {
+		offer := w.ClipboardOffer()
+		return offer.Available && offer.ID != 0
+	})
 	if err := w.OfferClipboard(88, []string{clipboardTestMIME}); err != nil {
 		t.Fatal(err)
 	}
@@ -170,6 +180,9 @@ func TestClipboardBoundsSendQueueAndClosesUndrainedDescriptors(t *testing.T) {
 			p.request(writeFD)
 		}
 		closeWrite()
+		// This marker is ordered after every send request on the Wayland
+		// connection, so observing it proves the client dispatched the burst.
+		writeMessage(p.conn, p.keyboard, 3, []uint32{201, 9876, 30, 1})
 		close(sent)
 	}
 	select {
@@ -177,9 +190,7 @@ func TestClipboardBoundsSendQueueAndClosesUndrainedDescriptors(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("synthetic peer could not enqueue bounded requests")
 	}
-	if _, err := w.Poll(nil); err != nil {
-		t.Fatal(err)
-	}
+	pollClipboardMarker(t, w, 9876)
 	requests := w.PollClipboardRequests()
 	for _, request := range requests {
 		unix.Close(request.FD)
@@ -192,20 +203,41 @@ func TestClipboardBoundsSendQueueAndClosesUndrainedDescriptors(t *testing.T) {
 	}
 	closeRead, closeFD, closeWriter := clipboardPipe(t)
 	sent = make(chan struct{})
-	actions <- func(p *clipboardPeer) { p.request(closeFD); closeWriter(); close(sent) }
+	actions <- func(p *clipboardPeer) {
+		p.request(closeFD)
+		closeWriter()
+		writeMessage(p.conn, p.keyboard, 3, []uint32{202, 9877, 30, 1})
+		close(sent)
+	}
 	select {
 	case <-sent:
 	case <-time.After(time.Second):
 		t.Fatal("synthetic peer could not request final transfer")
 	}
-	if _, err := w.Poll(nil); err != nil {
-		t.Fatal(err)
-	}
+	pollClipboardMarker(t, w, 9877)
 	w.Close()
 	var data [1]byte
 	if n, err := unix.Read(closeRead, data[:]); n != 0 || err != nil {
 		t.Fatalf("closing window left an undrained clipboard descriptor: n=%d err=%v", n, err)
 	}
+}
+
+func pollClipboardMarker(t *testing.T, w *Window, marker uint32) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		events, err := w.Poll(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, event := range events {
+			if event.Kind == Key && event.Time == marker {
+				return
+			}
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("client did not dispatch clipboard marker")
 }
 
 func clipboardPipe(t *testing.T) (int, int, func()) {
