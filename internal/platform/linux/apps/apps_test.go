@@ -104,7 +104,7 @@ func TestFootPixelsKeyboardResizeAndDisconnect(t *testing.T) {
 			t.Log(log.String())
 		}
 	}()
-	pollUntil := func(predicate func([]Surface) bool) []Surface {
+	pollUntil := func(predicate func([]Surface) bool, details ...func() string) []Surface {
 		t.Helper()
 		deadline := time.Now().Add(8 * time.Second)
 		for time.Now().Before(deadline) {
@@ -123,7 +123,11 @@ func TestFootPixelsKeyboardResizeAndDisconnect(t *testing.T) {
 			}
 			time.Sleep(5 * time.Millisecond)
 		}
-		t.Fatalf("timed out waiting for foot\n%s", log.String())
+		detail := ""
+		if len(details) > 0 {
+			detail = ": " + details[0]()
+		}
+		t.Fatalf("timed out waiting for foot%s\n%s", detail, log.String())
 		return nil
 	}
 	first := pollUntil(func(v []Surface) bool {
@@ -191,12 +195,18 @@ func TestFootPixelsKeyboardResizeAndDisconnect(t *testing.T) {
 	}
 	pollUntil(func(v []Surface) bool { b, err := os.ReadFile(answer); return err == nil && string(b) == "worldr" })
 	var rows, columns int
-	b, err := os.ReadFile(size)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fmt.Sscanf(strings.TrimSpace(string(b)), "%d %d", &rows, &columns); err != nil || rows < 10 || columns < 30 {
-		t.Fatalf("terminal PTY size %q: %v", b, err)
+	var sizeBytes []byte
+	var sizeErr error
+	pollUntil(func([]Surface) bool {
+		sizeBytes, sizeErr = os.ReadFile(size)
+		if sizeErr != nil {
+			return false
+		}
+		_, sizeErr = fmt.Sscanf(strings.TrimSpace(string(sizeBytes)), "%d %d", &rows, &columns)
+		return sizeErr == nil
+	}, func() string { return fmt.Sprintf("terminal PTY size %q: %v", sizeBytes, sizeErr) })
+	if rows < 10 || columns < 30 {
+		t.Fatalf("terminal PTY size %q: %v", sizeBytes, sizeErr)
 	}
 	// OSC 52 sets a real selection in foot. Ctrl+Shift+V requests its data via
 	// the Wayland offer's pipe, exercising both sides of clipboard forwarding.
