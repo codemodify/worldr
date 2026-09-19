@@ -10,6 +10,7 @@ func (w *Workspace) handleApplicationDrag(event experience.Event) bool {
 	}
 	switch event.Kind {
 	case experience.PointerCancel, experience.KeyboardCancel:
+		w.resetApplicationReadClick()
 		router.ApplicationDrag(source, 0, event)
 		w.applicationButtons = nil
 		w.applicationCapturedID = 0
@@ -37,7 +38,10 @@ func (w *Workspace) handleApplicationDrag(event experience.Event) bool {
 			}
 		}
 		return true
-	case experience.PointerDown, experience.PointerScroll:
+	case experience.PointerDown:
+		w.resetApplicationReadClick()
+		return true
+	case experience.PointerScroll:
 		return true
 	}
 	return false

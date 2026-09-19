@@ -260,6 +260,7 @@ func (w *Workspace) currentPortal(portals []SpatialPortal) int {
 }
 
 func (w *Workspace) openPortalAtlas() {
+	w.resetApplicationReadClick()
 	w.cancelPointer()
 	w.clearApplicationFocus()
 	w.helpOpen = false
@@ -399,6 +400,7 @@ func (w *Workspace) handlePortalNavigation(event experience.Event) bool {
 		x, y := (event.X-w.ox)/w.scale, (event.Y-w.oy)/w.scale
 		switch event.Kind {
 		case experience.PointerDown:
+			w.resetApplicationReadClick()
 			if applicationButton(event) == 272 {
 				w.portals.pressed = w.portalAt(x, y, portals)
 				if w.portals.pressed >= 0 {
@@ -436,6 +438,7 @@ func (w *Workspace) handlePortalNavigation(event experience.Event) bool {
 	if event.Kind == experience.PointerDown && applicationButton(event) == 272 {
 		x, y := (event.X-w.ox)/w.scale, (event.Y-w.oy)/w.scale
 		if portalButton.contains(x, y) {
+			w.resetApplicationReadClick()
 			w.clearApplicationFocus()
 			w.portals.pressed, w.portals.pressedID = -2, ""
 			return true

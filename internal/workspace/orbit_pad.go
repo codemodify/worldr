@@ -115,6 +115,7 @@ func (w *Workspace) handleOrbitPad(event experience.Event) bool {
 		if !inside {
 			return false
 		}
+		w.resetApplicationReadClick()
 		w.clearApplicationFocus()
 		if applicationButton(event) == 272 {
 			w.pointer = pointerCapture{

@@ -38,6 +38,12 @@ func TestDNABackgroundUsesSeparateEarlierSceneAndFixedCamera(t *testing.T) {
 	if backdrop.Kind != render.SceneCommand || draw.Texture != nil || !w.backgroundScene.Node(w.dnaNode).Unpickable {
 		t.Fatal("DNA did not remain unpickable retained background geometry")
 	}
+	if draw.Model[12] != 0 || draw.Model[13] != 0 || draw.Model[14] != 0 {
+		t.Fatalf("DNA is not centered: translation=(%v, %v, %v)", draw.Model[12], draw.Model[13], draw.Model[14])
+	}
+	if draw.Model[4] != 0 || draw.Model[5] != 1 || draw.Model[6] != 0 {
+		t.Fatalf("DNA long axis is not vertical: y-axis=(%v, %v, %v)", draw.Model[4], draw.Model[5], draw.Model[6])
+	}
 	appIndex := -1
 	for i, command := range frame.Commands {
 		for _, instance := range command.Draws {

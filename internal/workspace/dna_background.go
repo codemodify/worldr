@@ -42,10 +42,10 @@ func (w *Workspace) drawBackground() {
 	strand.Color = scene.ColorHex(0x90d8ed, .57*strength)
 	strand.Glow = [3]float32{.015 * strength, .085 * strength, .12 * strength}
 	angle := float32(2 * math.Pi * float64(w.backgroundPhase) / float64(dnaRotationPeriod))
-	// A gentle diagonal places the motif along the right side of the workspace.
-	// Camera-independent framing keeps this a backdrop as windows move in depth
-	// or enter Read mode; rotating around its own axis never orbits it around UI.
-	strand.Transform = scene.Translate(3.25, 0, 0).Mul(scene.RotateZ(-.30)).Mul(scene.RotateY(angle))
+	// Keep the helix's long axis vertical at the center of the viewport. The
+	// camera-independent framing keeps it a backdrop as windows move in depth or
+	// enter Read mode; rotating around its own axis never orbits it around UI.
+	strand.Transform = scene.RotateY(angle)
 	camera := scene.Camera{Eye: scene.Vec3{Z: 15.5}, Up: scene.Vec3{Y: 1}, FOV: .69, Near: .1, Far: 40}
 	// Ordered camera passes clear depth separately. This pass is always before
 	// workspace content, so even a window placed far back covers the backdrop. The

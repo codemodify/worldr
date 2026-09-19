@@ -313,6 +313,7 @@ func (w *Workspace) handleApplicationDock(event experience.Event) bool {
 			w.applicationDockHover = -1
 			return false
 		}
+		w.resetApplicationReadClick()
 		w.clearApplicationFocus()
 		if applicationButton(event) == 272 && index >= 0 {
 			w.pointer = pointerCapture{

@@ -245,6 +245,7 @@ func (w *Workspace) LoadState(data []byte) error {
 
 func (w *Workspace) installLoadedDocument(d Document) {
 	w.windowThrow = nil
+	w.resetApplicationReadClick()
 	w.pointer = pointerCapture{}
 	w.clearApplicationFocus()
 	w.history = nil

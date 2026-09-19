@@ -236,6 +236,7 @@ func (w *Workspace) Dispatch(action Action) error {
 	if w.desktop && studyAction(action.Kind) {
 		return fmt.Errorf("action %q belongs to the AXIAL study", action.Kind)
 	}
+	w.resetApplicationReadClick()
 	if action.Kind == ForgetClosedPlacements {
 		w.finishWindowThrow()
 		return w.forgetClosedPlacements()
@@ -270,6 +271,8 @@ func (w *Workspace) Dispatch(action Action) error {
 	switch action.Kind {
 	case SelectApplication:
 		w.stopWindowThrowForKey(action.ApplicationKey)
+	case ToggleApplicationReading:
+		w.stopWindowThrows(w.m.applicationState.movementSelectionFor(w.m.applicationState.Active))
 	case MoveApplications, ToggleApplicationDepth, GroupApplications, UngroupApplications, MoveToSpace:
 		w.stopWindowThrows(w.m.applicationState.movementSelection())
 	case MoveApplication, ResizeApplication, ToggleApplicationMinimized, ToggleApplicationMaximized:

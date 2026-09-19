@@ -41,6 +41,7 @@ func (w *Workspace) claimHelpStrokes() {
 }
 
 func (w *Workspace) openHelp() {
+	w.resetApplicationReadClick()
 	w.finishWindowThrow()
 	w.cancelPointer()
 	w.clearApplicationFocus()
@@ -112,6 +113,9 @@ func (w *Workspace) handleHelp(event experience.Event) bool {
 	}
 
 	x, y := (event.X-w.ox)/w.scale, (event.Y-w.oy)/w.scale
+	if w.helpOpen && event.Kind == experience.PointerDown {
+		w.resetApplicationReadClick()
+	}
 	button := applicationButton(event)
 	ownedButton := w.helpButtons[button]
 	draining := false
@@ -160,6 +164,7 @@ func (w *Workspace) handleHelp(event experience.Event) bool {
 			target = helpCloseButton
 		}
 		if target.contains(x, y) {
+			w.resetApplicationReadClick()
 			w.cancelPointer()
 			w.clearApplicationFocus()
 			w.helpButtons[button] = true
@@ -211,7 +216,7 @@ func (w *Workspace) drawHelp() {
 			{"Ctrl+Alt+Enter / New Terminal", "Open an independent native shell."},
 			{"Ctrl+Alt+O / Overview", "Find windows, including those behind objects."},
 			{"Overview: arrows, then Enter", "Select a window and return to its workspace."},
-			{"Fresh Enter / click application", "Start typing; workspace Enter also opens Read."},
+			{"Enter / Super+double-click", "Read the selected / directly pointed-to application."},
 			{"Top grip / Super+drag", "Move or throw windows; grab again to stop. Scroll for depth."},
 			{"Place / Group", "Shift+click selects several; group to move together."},
 			{"Native terminal: Ctrl+Shift+C / V", "Copy selected text / paste from the clipboard."},

@@ -33,6 +33,7 @@ const (
 	captureWorkspacePan
 	captureApplicationResize
 	captureApplicationWindowControl
+	captureApplicationReadClick
 )
 
 type pointerCapture struct {
@@ -60,6 +61,11 @@ type pointerCapture struct {
 	resizeWorldX, resizeWorldY    float32
 	resizeAnchor                  bool
 	resizeButton                  uint32
+	readClick                     bool
+	readDouble                    bool
+	readKey                       string
+	readTime                      uint32
+	readX, readY                  float32
 }
 
 func (p pointerCapture) mask() fields {
@@ -83,6 +89,11 @@ func (w *Workspace) Handle(event experience.Event) bool {
 	}
 
 	w.syncApplications()
+	w.observeApplicationReadInterruption(event)
+	if event.Kind == experience.PointerCancel || event.Kind == experience.KeyboardCancel ||
+		event.Kind == experience.PointerDown && w.commands != nil && w.commands.open {
+		w.resetApplicationReadClick()
+	}
 	if w.handleCommands(event) {
 		return true
 	}
@@ -98,6 +109,12 @@ func (w *Workspace) Handle(event experience.Event) bool {
 	if w.handleApplicationDrag(event) {
 		return true
 	}
+	// A held Read click keeps its grab, while fixed overlays get first refusal
+	// for new presses so an application behind the rail/pad/portal cannot steal
+	// their input through scene picking.
+	if w.pointer.kind == captureApplicationReadClick && w.handleApplicationReadGesture(event) {
+		return true
+	}
 	if w.handleOrbitPad(event) {
 		return true
 	}
@@ -105,6 +122,9 @@ func (w *Workspace) Handle(event experience.Event) bool {
 		return true
 	}
 	if w.handlePortalNavigation(event) {
+		return true
+	}
+	if w.handleApplicationReadGesture(event) {
 		return true
 	}
 	// The Super+wheel window gesture also owns window chrome. Route it before
@@ -310,6 +330,10 @@ func (w *Workspace) commitPointer() {
 	if w.pointer.kind == captureNone {
 		return
 	}
+	if w.pointer.kind == captureApplicationReadClick {
+		w.resetApplicationReadClick()
+		w.windowDragButtons = nil
+	}
 	before, after := w.pointer.start, w.Document()
 	switch w.pointer.kind {
 	case captureApplicationPlacement:
@@ -323,6 +347,10 @@ func (w *Workspace) commitPointer() {
 func (w *Workspace) cancelPointer() bool {
 	if w.pointer.kind == captureNone {
 		return false
+	}
+	if w.pointer.kind == captureApplicationReadClick {
+		w.resetApplicationReadClick()
+		w.windowDragButtons = nil
 	}
 	switch w.pointer.kind {
 	case captureApplicationPlacement:

@@ -28,6 +28,7 @@ var (
 
 func (w *Workspace) SetApplications(applications experience.Applications) {
 	w.finishWindowThrow()
+	w.resetApplicationReadClick()
 	w.clearApplicationFocus()
 	w.cancelPointer()
 	for _, node := range w.applicationNodes {

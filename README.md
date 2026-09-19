@@ -23,7 +23,7 @@ Notes, and AXIAL open directly. Photo, Media, Model, and Research focus Files in
 choose-file mode; folders remain navigable, Escape restores the full listing,
 and opening a supported file hands it to the selected native viewer.
 
-A cyan 3D DNA double helix turns slowly behind the workspace, completing one
+A centered, vertical cyan 3D DNA double helix turns slowly behind the workspace, completing one
 rotation every 30 seconds. It stays behind application content and never captures
 input. Reduced Motion freezes the DNA; Adaptive Read fades it out.
 
@@ -87,7 +87,8 @@ use **Super+primary drag** over its content when the host desktop permits that
 shortcut. Drag the visible bottom-right grip to resize, or use
 **Super+secondary drag** anywhere over the window. Both the spatial frame and
 the client logical size follow the gesture, and the saved layout restores that
-size after reconnecting. **Place / Group** also enables content dragging; Shift+click selects
+size after reconnecting. **Win/Super + double-click** toggles the window's Read
+view. **Place / Group** also enables content dragging; Shift+click selects
 several apps and **Group selected** makes them move together. Scroll during a
 drag or use **Depth −/+** to move the selection through space;
 **Super+wheel** moves the hovered window (and its explicit group) without
@@ -304,6 +305,7 @@ to workspace input; click an app or press Enter to resume typing.
 | Change depth while dragging | Scroll with the drag held |
 | Change a hovered window's depth | Super+wheel; grouped windows stay together |
 | Resize a window | Drag its bottom-right grip, or Super+secondary drag over its content |
+| Toggle a window's Read view | Win/Super + double-click its content |
 | Minimize / maximize / close a window | Use the three controls on its top grip; minimized windows remain as a visible spatial strip and in Overview |
 | Stop a released window's glide | Grab again, or Escape from the workspace |
 | Inspect an AXIAL component | Click it or its tree entry; keys 1–3 |

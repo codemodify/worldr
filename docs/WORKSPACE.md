@@ -36,6 +36,8 @@ An exposed bottom-right grip resizes the window with an ordinary primary drag;
 Super+secondary drag over content provides the same continuous resize where the
 host permits it. The requested logical size, spatial frame and client surface
 change together, persist in the workspace document and restore on reconnect.
+Win/Super + double-click on window content toggles that window's Read view; the
+reserved clicks stay with the workspace rather than entering the application.
 The three perspective-correct controls on the top grip minimize, maximize or
 request closing that individual window. Minimize leaves a visible spatial strip;
 Overview and portals restore minimized windows when selected. Maximize preserves
@@ -85,7 +87,7 @@ output, pinned results, and explicitly dispatched task recipes now extend the PT
 should use the engine directly. Compatibility provides access to existing
 software alongside those new experiences.
 
-The workspace background includes a stylized 3D DNA double helix rotating once
+The workspace background includes a centered, vertical 3D DNA double helix rotating once
 every 30 seconds. It is decorative retained geometry, rendered before application
 content, so windows always cover it at any placement depth. Its pose is transient
 and independent of camera navigation, saved layouts and Undo. Reduced Motion

@@ -49,6 +49,7 @@ func newCommandPalette() (*commandPalette, error) {
 }
 func (p *commandPalette) close() { p.input.Close(); p.painter.Close() }
 func (w *Workspace) openCommands() bool {
+	w.resetApplicationReadClick()
 	if w.commands == nil {
 		p, err := newCommandPalette()
 		if err != nil {

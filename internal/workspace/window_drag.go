@@ -125,9 +125,16 @@ func (w *Workspace) handleWindowDrag(event experience.Event) bool {
 		} else {
 			switch event.Kind {
 			case experience.PointerDown:
+				if w.pointer.readClick {
+					w.pointer.dragged = true
+					w.resetApplicationReadClick()
+				}
 				w.ownWindowDragButton(button)
 				return true
 			case experience.PointerMove:
+				if !w.prepareApplicationReadDrag(event) {
+					return true
+				}
 				if !w.prepareContentWindowDrag(event) {
 					return true
 				}
@@ -135,6 +142,10 @@ func (w *Workspace) handleWindowDrag(event experience.Event) bool {
 				w.sampleWindowDrag(event, false)
 				return true
 			case experience.PointerScroll:
+				if w.pointer.readClick {
+					w.pointer.dragged = true
+					w.resetApplicationReadClick()
+				}
 				if w.pointer.dragFromView {
 					return true
 				}
@@ -150,12 +161,14 @@ func (w *Workspace) handleWindowDrag(event experience.Event) bool {
 				return true
 			case experience.PointerUp:
 				if button == 272 {
-					if w.prepareContentWindowDrag(event) {
+					if w.prepareApplicationReadDrag(event) && w.prepareContentWindowDrag(event) {
 						w.moveApplicationPlacement(event.X, event.Y)
 						w.sampleWindowDrag(event, true)
 					}
 					if w.pointer.kind != captureNone {
+						completed := w.pointer
 						w.releaseWindowDrag()
+						w.finishApplicationReadClick(completed)
 					}
 				}
 				return true
