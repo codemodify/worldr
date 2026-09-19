@@ -11,9 +11,7 @@ import (
 
 func windowThrowWorkspace(t *testing.T, count int) (*Workspace, *fakeApplications) {
 	t.Helper()
-	w, apps := windowDragWorkspace(t, count)
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: false})
-	return w, apps
+	return windowDragWorkspace(t, count)
 }
 
 func timedWindowGesture(t *testing.T, w *Workspace, surface experience.ApplicationSurface, times [4]uint32) {
@@ -152,24 +150,6 @@ func TestWindowThrowRequiresRecentTimedMovement(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestWindowThrowReducedMotionKeepsPlacementAndSettlesMotion(t *testing.T) {
-	w, apps := windowDragWorkspace(t, 1)
-	before := w.Document()
-	timedWindowGesture(t, w, apps.surfaces[0], [4]uint32{1000, 1020, 1040, 1050})
-	if w.windowThrow != nil || w.Document().View.Application.Layouts == before.View.Application.Layouts {
-		t.Fatal("Reduced Motion either threw a window or disabled dragging")
-	}
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: false})
-	startWindowThrow(t, w, apps.surfaces[0])
-	w.Update(100 * time.Millisecond)
-	position := w.Document().View.Application.Layouts
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: true})
-	w.Update(time.Second)
-	if w.windowThrow != nil || w.Document().View.Application.Layouts != position {
-		t.Fatal("enabling Reduced Motion did not stop the current throw immediately")
 	}
 }
 

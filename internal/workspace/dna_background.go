@@ -24,7 +24,7 @@ func (w *Workspace) initializeBackground() error {
 }
 
 func (w *Workspace) updateBackground(dt time.Duration) {
-	if w.backgroundScene == nil || w.m.reducedMotion || dt <= 0 {
+	if dt <= 0 {
 		return
 	}
 	// Integer elapsed time makes the pose independent of frame rate. Reduce
@@ -37,10 +37,9 @@ func (w *Workspace) drawBackground() {
 		return
 	}
 	strand := w.backgroundScene.Node(w.dnaNode)
-	strength := w.presentationBlend
-	strand.Hidden = strength <= 0
-	strand.Color = scene.ColorHex(0x90d8ed, .57*strength)
-	strand.Glow = [3]float32{.015 * strength, .085 * strength, .12 * strength}
+	strand.Hidden = false
+	strand.Color = scene.ColorHex(0x90d8ed, .57)
+	strand.Glow = [3]float32{.015, .085, .12}
 	angle := float32(2 * math.Pi * float64(w.backgroundPhase) / float64(dnaRotationPeriod))
 	// Keep the helix's long axis vertical at the center of the viewport. The
 	// camera-independent framing keeps it a backdrop as windows move in depth or

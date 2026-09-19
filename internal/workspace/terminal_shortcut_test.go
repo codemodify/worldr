@@ -127,20 +127,13 @@ func TestTerminalShortcutCancelAndRepeatWithoutInitialPress(t *testing.T) {
 	if w.terminalShortcutKeys != 0 {
 		t.Fatal("keyboard cancellation retained shortcut suppression")
 	}
-	// A fresh shortcut works even with no existing app. It also cancels a
-	// pending New Terminal pointer click so its later release cannot launch twice.
-	x, y := applicationLaunchButton.x+15, applicationLaunchButton.y+15
-	pointer(w, experience.PointerDown, x, y)
+	// A fresh shortcut works even with no existing app.
 	if !w.Handle(terminalChord(28)) || len(launcher.launched) != 1 || w.pointer.kind != captureNone || w.OwnsKeyboard() {
 		t.Fatal("fresh shortcut did not launch from an empty workspace")
 	}
-	pointer(w, experience.PointerUp, x, y)
-	if len(launcher.launched) != 1 {
-		t.Fatal("cancelled launch-button release started another terminal")
-	}
 	w.Handle(experience.Event{Kind: experience.KeyboardCancel})
 	w.Draw(1440, 900)
-	x, y = visibleApplicationPoint(t, w)
+	x, y := visibleApplicationPoint(t, w)
 	pointer(w, experience.PointerDown, x, y)
 	pointer(w, experience.PointerUp, x, y)
 	count := len(apps.events)

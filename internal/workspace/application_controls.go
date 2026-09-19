@@ -48,14 +48,11 @@ func (w *Workspace) handleTerminalShortcut(event experience.Event) bool {
 	return true
 }
 
-// Launching and closing are live application requests, not undoable document
-// edits. Keep a closing surface until its provider withdraws it: a client may
-// ask about unsaved work or decline to close. Capture the selected ID at press
-// so a changing selection cannot redirect close to a different application.
+// Closed-placement cleanup is a document edit. Live launching and closing use
+// the global keyboard shortcuts, so the workspace has no duplicate buttons for
+// those process actions.
 func (w *Workspace) handleApplicationControl(event experience.Event) bool {
-	closer, supported := w.applications.(experience.ApplicationCloser)
-	launcher, launchSupported := w.applications.(experience.ApplicationLauncher)
-	if w.pointer.kind == captureApplicationClose || w.pointer.kind == captureApplicationLaunch || w.pointer.kind == captureForgetClosedPlacements {
+	if w.pointer.kind == captureForgetClosedPlacements {
 		switch event.Kind {
 		case experience.PointerMove:
 			w.movePointer(event.X, event.Y)
@@ -69,14 +66,7 @@ func (w *Workspace) handleApplicationControl(event experience.Event) bool {
 			w.movePointer(event.X, event.Y)
 			p := w.pointer
 			w.pointer = pointerCapture{}
-			if p.kind == captureApplicationClose && supported && !p.dragged && applicationCloseButton.contains(p.lastX, p.lastY) && w.application.ID == p.applicationID {
-				w.clearApplicationFocus()
-				closer.CloseApplication(p.applicationID)
-			}
-			if p.kind == captureApplicationLaunch && launchSupported && !p.dragged && applicationLaunchButton.contains(p.lastX, p.lastY) {
-				w.launchTerminal(launcher)
-			}
-			if p.kind == captureForgetClosedPlacements && !p.dragged && forgetClosedPlacementsButton.contains(p.lastX, p.lastY) {
+			if !p.dragged && forgetClosedPlacementsButton.contains(p.lastX, p.lastY) {
 				_ = w.Dispatch(Action{Kind: ForgetClosedPlacements})
 			}
 			return true
@@ -88,21 +78,13 @@ func (w *Workspace) handleApplicationControl(event experience.Event) bool {
 		return false
 	}
 	x, y := (event.X-w.ox)/w.scale, (event.Y-w.oy)/w.scale
-	kind := captureNone
-	if launchSupported && applicationLaunchButton.contains(x, y) {
-		kind = captureApplicationLaunch
-	} else if supported && w.application.ID != 0 && applicationCloseButton.contains(x, y) {
-		kind = captureApplicationClose
-	} else if forgetClosedPlacementsButton.contains(x, y) && w.closedPlacementMask() != 0 {
-		kind = captureForgetClosedPlacements
-	}
-	if kind == captureNone {
+	if !forgetClosedPlacementsButton.contains(x, y) || w.closedPlacementMask() == 0 {
 		return false
 	}
 	w.clearApplicationFocus()
 	w.cancelPointer()
 	w.pointer = pointerCapture{
-		kind: kind, start: w.Document(), applicationID: w.application.ID,
+		kind: captureForgetClosedPlacements, start: w.Document(),
 		pressX: x, pressY: y, lastX: x, lastY: y, scale: w.scale, ox: w.ox, oy: w.oy,
 	}
 	return true

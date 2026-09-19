@@ -10,20 +10,14 @@ import (
 )
 
 var (
-	_                         experience.ApplicationAware            = (*Workspace)(nil)
-	_                         experience.KeyboardOwner               = (*Workspace)(nil)
-	_                         experience.ApplicationPlacementChecker = (*Workspace)(nil)
-	applicationOverviewButton                                        = box{32, 214, 208, 38}
-	applicationPlaceButton                                           = box{32, 258, 208, 38}
-	applicationReadButton                                            = box{32, 302, 208, 38}
-	applicationDepthButton                                           = box{32, 346, 208, 38}
-	applicationBackButton                                            = box{32, 390, 100, 38}
-	applicationFrontButton                                           = box{140, 390, 100, 38}
-	applicationSizeButton                                            = box{32, 434, 208, 38}
-	applicationGroupButton                                           = box{32, 478, 208, 38}
-	applicationUngroupButton                                         = box{32, 522, 208, 38}
-	applicationCloseButton                                           = box{32, 744, 208, 32}
-	applicationLaunchButton                                          = box{535, 30, 180, 37}
+	_                        experience.ApplicationAware            = (*Workspace)(nil)
+	_                        experience.KeyboardOwner               = (*Workspace)(nil)
+	_                        experience.ApplicationPlacementChecker = (*Workspace)(nil)
+	applicationDepthButton                                          = box{32, 214, 208, 38}
+	resetViewButton                                                 = box{727, 30, 123, 37}
+	applicationPlaceButton                                          = box{864, 30, 170, 37}
+	applicationGroupButton                                          = box{1048, 30, 168, 37}
+	applicationUngroupButton                                        = box{1230, 30, 168, 37}
 )
 
 func (w *Workspace) SetApplications(applications experience.Applications) {
@@ -754,72 +748,47 @@ func (w *Workspace) drawApplicationControls() {
 	w.text(43, 132, 12, fmt.Sprintf("WORKSPACE / %02d APPS", len(w.visibleApplications())), muted, 1)
 	w.text(43, 165, 15, shortApplicationTitle(w.application.Title), ink, 1)
 	w.text(43, 188, 11, fmt.Sprintf("%d selected / %d move together", bits.OnesCount32(v.Selected), bits.OnesCount32(v.movementSelection())), teal, 1)
-	w.button(applicationOverviewButton, "OVERVIEW", v.Overview)
-	place := "PLACE / GROUP"
-	if v.Placing {
-		place = "DONE PLACING"
-	}
-	w.button(applicationPlaceButton, place, v.Placing)
-	read := "READ SELECTED"
-	if v.Reading && !v.Overview {
-		read = "RETURN TO SPACE"
-	}
-	w.button(applicationReadButton, read, v.Reading && !v.Overview)
 	depth := "SEND SELECTION BACK"
 	if v.Behind {
 		depth = "BRING FORWARD"
 	}
 	w.button(applicationDepthButton, depth, !v.Behind)
-	w.button(applicationBackButton, "DEPTH −", false)
-	w.button(applicationFrontButton, "DEPTH +", false)
-	size := "SIZE: COMPACT"
-	if i := v.index(v.Active); i >= 0 && v.Layouts[i].Width != 0 {
-		size = fmt.Sprintf("SIZE: %d × %d", v.Layouts[i].Width, v.Layouts[i].Height)
-	} else if v.Wide {
-		size = "SIZE: WIDE"
-	}
-	w.button(applicationSizeButton, size, v.Wide)
-	w.button(applicationGroupButton, "GROUP SELECTED", bits.OnesCount32(v.Selected) > 1)
-	w.button(applicationUngroupButton, "UNGROUP", false)
 	if v.Overview {
-		w.text(43, 594, 12, "Arrows select; Enter returns.", teal, 1)
-		w.text(43, 617, 12, "Shift+click selects several.", muted, 1)
+		w.text(43, 286, 12, "Arrows select; Enter returns.", teal, 1)
+		w.text(43, 309, 12, "Shift+click selects several.", muted, 1)
 		if w.application.DragContent {
-			w.text(43, 640, 12, "Drag the photo into Space.", muted, 1)
+			w.text(43, 332, 12, "Drag the photo into Space.", muted, 1)
 		} else {
-			w.text(43, 640, 12, "Esc returns to your view.", muted, 1)
+			w.text(43, 332, 12, "Esc returns to your view.", muted, 1)
 		}
 	} else if v.Placing {
-		w.text(43, 594, 12, "Drag an app to place it.", teal, 1)
-		w.text(43, 617, 12, "Shift+click selects several.", muted, 1)
-		w.text(43, 640, 12, "Scroll changes depth.", muted, 1)
+		w.text(43, 286, 12, "Drag an app to place it.", teal, 1)
+		w.text(43, 309, 12, "Shift+click selects several.", muted, 1)
+		w.text(43, 332, 12, "Scroll changes depth.", muted, 1)
 		if w.application.DragContent {
-			w.text(43, 662, 12, "Enter to view the photo.", muted, 1)
+			w.text(43, 355, 12, "Enter to view the photo.", muted, 1)
 		} else {
-			w.text(43, 662, 12, "Enter to read and type.", muted, 1)
+			w.text(43, 355, 12, "Enter to read and type.", muted, 1)
 		}
 	} else {
 		if w.application.DragContent {
-			w.text(43, 594, 12, "Enter to view the photo.", teal, 1)
+			w.text(43, 286, 12, "Enter to view the photo.", teal, 1)
 		} else if w.applicationKeyboard {
-			w.text(43, 594, 12, "Keyboard sent to application.", teal, 1)
+			w.text(43, 286, 12, "Keyboard sent to application.", teal, 1)
 		} else {
-			w.text(43, 594, 12, "Enter to read and type.", teal, 1)
+			w.text(43, 286, 12, "Enter to read and type.", teal, 1)
 		}
 		if w.application.DragContent {
-			w.text(43, 617, 12, "Drag the photo itself to move.", muted, 1)
+			w.text(43, 309, 12, "Drag the photo itself to move.", muted, 1)
 		} else {
-			w.text(43, 617, 12, "Drag the grip to move a window.", muted, 1)
+			w.text(43, 309, 12, "Drag the grip to move a window.", muted, 1)
 		}
-		w.text(43, 640, 12, "Ctrl+Alt+O opens overview.", muted, 1)
+		w.text(43, 332, 12, "Ctrl+Alt+O opens overview.", muted, 1)
 	}
-	w.text(43, 685, 12, "Grouped apps move together.", muted, 1)
-	w.text(43, 708, 12, "Ctrl+Z undoes placement.", muted, 1)
+	w.text(43, 401, 12, "Grouped apps move together.", muted, 1)
+	w.text(43, 424, 12, "Ctrl+Z undoes placement.", muted, 1)
 	if w.applicationKeyboard {
-		w.text(43, 662, 12, "Keyboard → application", teal, 1)
-	}
-	if _, ok := w.applications.(experience.ApplicationCloser); ok {
-		w.button(applicationCloseButton, "CLOSE SELECTED", false)
+		w.text(43, 378, 12, "Keyboard → application", teal, 1)
 	}
 }
 

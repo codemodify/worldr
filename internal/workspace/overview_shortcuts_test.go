@@ -121,11 +121,16 @@ func TestEscapeFromOverviewPreservesPreviousView(t *testing.T) {
 			if w.OwnsKeyboard() || len(apps.events) != count {
 				t.Fatal("returning from overview sent input or restored application focus")
 			}
-			if !key(w, experience.KeyO, 0) || !w.m.applicationState.Overview {
-				t.Fatal("ordinary O stopped opening overview from workspace focus")
+			if key(w, experience.KeyO, 0) || w.m.applicationState.Overview {
+				t.Fatal("ordinary O retained the removed overview control path")
 			}
-			if !key(w, experience.KeyO, experience.ModControl|experience.ModAlt) || w.Document() != before {
-				t.Fatal("reserved shortcut did not return from overview")
+			w.Handle(experience.Event{Kind: experience.KeyInput, Key: experience.KeyO})
+			if !key(w, experience.KeyO, experience.ModControl|experience.ModAlt) || !w.m.applicationState.Overview {
+				t.Fatal("reserved shortcut did not reopen overview")
+			}
+			w.Handle(experience.Event{Kind: experience.KeyInput, Key: experience.KeyO})
+			if !key(w, experience.KeyEscape, 0) || w.Document() != before {
+				t.Fatal("Escape did not restore the prior view after reopening overview")
 			}
 		})
 	}
@@ -146,35 +151,25 @@ func TestOverviewShortcutFocusLossClearsSuppressedKey(t *testing.T) {
 }
 
 func TestOverviewShortcutsRecoverWhenEveryLiveWindowIsMinimized(t *testing.T) {
-	for _, test := range []struct {
-		name      string
-		modifiers experience.Modifiers
-	}{
-		{name: "workspace O"},
-		{name: "reserved Ctrl Alt O", modifiers: experience.ModControl | experience.ModAlt},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			w, apps := multipleApplications(t, 2)
-			for _, surface := range apps.surfaces {
-				command(t, w, Action{Kind: ToggleApplicationMinimized, ApplicationKey: surface.Key})
-			}
-			w.Update(0)
-			if w.application.ID != 0 || len(w.visibleApplications()) != len(apps.surfaces) {
-				t.Fatal("fixture did not retain only minimized live windows")
-			}
-			before := len(apps.events)
-			if !key(w, experience.KeyO, test.modifiers) || !w.m.applicationState.Overview {
-				t.Fatal("overview shortcut could not recover minimized windows")
-			}
-			if len(apps.events) != before || w.OwnsKeyboard() {
-				t.Fatal("minimized-window recovery leaked input or granted application focus")
-			}
-			w.Draw(1440, 900)
-			for _, surface := range apps.surfaces {
-				if node := w.scene.Node(w.applicationNodes[surface.ID]); node == nil || node.Hidden || node.Surface != surface.Texture {
-					t.Fatalf("overview did not reveal minimized window %q", surface.Key)
-				}
-			}
-		})
+	w, apps := multipleApplications(t, 2)
+	for _, surface := range apps.surfaces {
+		command(t, w, Action{Kind: ToggleApplicationMinimized, ApplicationKey: surface.Key})
+	}
+	w.Update(0)
+	if w.application.ID != 0 || len(w.visibleApplications()) != len(apps.surfaces) {
+		t.Fatal("fixture did not retain only minimized live windows")
+	}
+	before := len(apps.events)
+	if !key(w, experience.KeyO, experience.ModControl|experience.ModAlt) || !w.m.applicationState.Overview {
+		t.Fatal("overview shortcut could not recover minimized windows")
+	}
+	if len(apps.events) != before || w.OwnsKeyboard() {
+		t.Fatal("minimized-window recovery leaked input or granted application focus")
+	}
+	w.Draw(1440, 900)
+	for _, surface := range apps.surfaces {
+		if node := w.scene.Node(w.applicationNodes[surface.ID]); node == nil || node.Hidden || node.Surface != surface.Texture {
+			t.Fatalf("overview did not reveal minimized window %q", surface.Key)
+		}
 	}
 }

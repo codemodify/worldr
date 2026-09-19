@@ -112,9 +112,9 @@ func (w *Workspace) drawApplicationDock() {
 		return
 	}
 
-	// The rail remains crisp in Adaptive focused work. Cinematic presentation
-	// adds a second chassis edge and small circuit ticks without moving content.
-	flare := w.presentationBlend
+	// A second chassis edge and small circuit ticks frame the fixed app rail
+	// without moving content or changing its hit targets.
+	flare := float32(1)
 	w.rect(applicationDockBounds.x, applicationDockBounds.y, applicationDockBounds.w, applicationDockBounds.h, bg, .78)
 	w.line(1350, 143, 1350, 725, 1, muted, .24)
 	w.line(1422, 143, 1422, 725, 1, teal, .22+.22*flare)

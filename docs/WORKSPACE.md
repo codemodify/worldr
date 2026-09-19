@@ -12,6 +12,7 @@ now the general workspace, with native terminals, Files, independently placed
 photo/video viewers, file-backed 3D model inspectors and legacy applications.
 AXIAL is also a hosted native 3D application in this workspace. The standalone
 AXIAL presentation remains a deterministic renderer/interaction demonstration.
+The cinematic presentation and full motion are permanent in both forms.
 
 This document records the intended product and next acceptance milestone.
 Implemented presentation and spatial controls are described below; cinematic
@@ -45,7 +46,8 @@ closing the current active app even while it owns keyboard focus; its provider
 may keep it open to confirm unsaved work. Minimize hides the content and its
 complete frame; Overview and portals reveal and restore minimized windows.
 Place mode also makes content draggable and offers Shift+click selection for
-groups. Scrolling during a held drag moves the selection through depth without
+groups. The streamlined header places Place / Group, Group Selected and Ungroup
+directly after Reset View. Scrolling during a held drag moves the selection through depth without
 introducing a lateral jump. Super+wheel changes the hovered window's depth
 without focusing it; an explicit group moves with that window. The grips follow
 perspective and visible scene occlusion, and hide in Read and Overview.
@@ -58,8 +60,7 @@ glide running. Multiple windows can coast independently. Escape from the
 workspace stops gliding windows, while Escape in a focused terminal stays with
 the terminal. Each held drag and subsequent glide form one undoable move in
 gesture order. Escape during a held drag restores only that gesture's starting
-placement. Reduced Motion disables
-throws while preserving direct placement. Normal client dragging and scrolling
+placement. Normal client dragging and scrolling
 retain their application meaning outside the reserved workspace gestures.
 
 Focusing an object brings it into a comfortable working view. Returning from
@@ -92,8 +93,8 @@ software alongside those new experiences.
 The workspace background includes a centered, vertical 3D DNA double helix rotating once
 every 30 seconds. It is decorative retained geometry, rendered before application
 content, so windows always cover it at any placement depth. Its pose is transient
-and independent of camera navigation, saved layouts and Undo. Reduced Motion
-freezes it in place, and Adaptive Read fades it out.
+and independent of camera navigation, saved layouts and Undo. It keeps rotating
+during Read and other focused work.
 
 Opening a video from native Files starts playback in a new independent window
 without changing keyboard focus, selection, camera or Read mode. A new player
@@ -104,7 +105,7 @@ live timeline; paused video shows a concentric-ring play button. The dark hex gr
 and technical edge details surround the picture, leaving playing frames clear.
 Controls include play/pause, stop, ten-second skips, mute and volume.
 Space toggles playback, Left/Right skip,
-and M mutes. Return to Space preserves playback while the player can be moved,
+and M mutes. Leaving Read preserves playback while the player can be moved,
 grouped or thrown like any other window. Opening a different video creates another player (up to four). With `--state`, its local file,
 playback position, pause, volume and mute settings resume on the next launch.
 
@@ -120,53 +121,38 @@ superseded loads cannot replace newer content. Opening another photo creates ano
 loads show a minimal error message. Neither loading nor completion takes focus
 or moves the workspace camera.
 
-## Selectable presentation
+## Cinematic presentation
 
-Both modes use the same engine, data, tools, and interaction capabilities:
-
-| Mode | Exploration | Focused work |
-| --- | --- | --- |
-| Cinematic (default) | Expressive spatial framing, lighting, and visible instruments | Cinematic framing remains prominent |
-| Adaptive | The same cinematic exploration | Surrounding detail recedes to emphasize the active content |
-
-The header selector or P switches between these modes in both experiences.
-Cinematic retains spatial framing and brighter accents. Adaptive calms those
-accents for application Read mode, and for AXIAL's model focus, then restores
-them when returning to exploration. The preference is persisted with an explicitly configured
-document; the fade is transient presentation state. Reset preserves the choice,
-and mode changes participate in undo/redo without rewinding unrelated playback.
-The independent **Reduced Motion** header control (Shift+P from the workspace)
-completes explosion and framing transitions immediately and disables window
-throws. It is persisted,
-undoable and preserved by reset. Study playback and application content keep
-their own controls; Space pauses the study.
+Both experiences use one permanent Cinematic presentation. Expressive spatial
+framing, lighting, visible instruments, transitions, window throws, and ambient
+animation retain full motion during exploration and focused work. Study playback
+and application content keep their own controls; Space pauses the study.
 
 The current material pass adds camera/light-responsive highlights, metal tint,
 cyan rim accents, two bounded moving fill lights and smooth cylindrical shading
 in a cool blue/silver palette.
 A procedural grid and rings anchor the model in world space; they hide for
-application Read/Overview and fade during Adaptive focus. Selective GPU glow adds
+application Read/Overview. Selective GPU glow adds
 soft background halos to active window borders, sparse guides and housing light
 bands. Occluded fragments do not emit; opaque apps cover the glow so their content
-stays sharp. Adaptive focus removes the halos while preserving its focus border.
+stays sharp. Focus keeps the halos and a crisp focus border.
 The renderer also supplies opt-in bounded final-frame highlight bloom and an SDR
 exposure/saturation/contrast finish. The workspace does not apply that global
 finish to its mixed compositor frame: doing so would recolor legacy app buffers
 and opaque UI, while a cursor appended by the host could bloom outside its input
-bounds. Cinematic still drives its moving fill lights and depth-aware authored
-glow; Adaptive focus fades those effects to neutral. Depth-peeled meshes can opt
+bounds. Cinematic drives its moving fill lights and depth-aware authored glow.
+Depth-peeled meshes can opt
 into a thin-glass material that retains specular/rim response while reducing
 diffuse body color. Lit transmitted glass can also opt into bounded refraction
 of the opaque scene, including a fixed-cost frosted blur. The backdrop excludes
 screen overlays and the host cursor, and zero refraction preserves the prior
 transmission result and exact client/legacy texture pixels. Physical HDR and
-calibrated ICC/wide-gamut output remain design targets. Switching modes does not
-require a different engine or workspace rebuild.
+calibrated ICC/wide-gamut output remain design targets.
 
 Native translucent meshes can also opt into a depth-composited holographic
 projection. World-space scan bands and view-angle transparency retain actual
 scene occlusion, while a narrow opaque-depth contact cue anchors the projection
-to nearby solid objects. Reduced Motion freezes the workspace-owned scan phase.
+to nearby solid objects. The workspace-owned scan phase remains animated.
 The effect is confined to that mesh shader: application/control pixels, legacy
 buffers, shaped overlays and the host cursor remain unchanged. It is a bounded
 surface illusion rather than volumetric scattering or physically emissive light.
@@ -184,8 +170,8 @@ surface illusion rather than volumetric scattering or physically emissive light.
 | Typography | Precise technical hierarchy with readable body text and terminal glyphs |
 | Detail | Information and controls tied to real state; every instrument has a purpose |
 
-Cinematic expression is the default direction. Reading comfort, keyboard access,
-and a reduced-motion setting belong in the product requirements from the start.
+Cinematic expression and full motion define the current direction. Reading
+comfort and keyboard access belong in the product requirements from the start.
 Technical depth must remain discoverable through simple controls. No knowledge
 of 3D software should be required to retrieve a window or resume typing.
 
@@ -264,11 +250,11 @@ Typing, free placement and throws, group movement, depth,
 read/return, overview retrieval, client resize and saved layout are implemented.
 Clipboard exchange connects native terminals, legacy clients and the host desktop
 in a nested session. Native terminals have independent shells and input focus;
-**New Terminal** or Ctrl+Alt+Enter creates one without restarting worldr,
+Ctrl+Alt+Enter creates one without restarting worldr,
 including when no apps are open or another app has input focus.
 Launching selects the window; a click or a fresh Enter from the workspace
 explicitly grants typing focus. Enter also opens Read for the selected window.
-**Close Selected** or the exact Win/Super+C chord requests closing only the active
+The exact Win/Super+C chord requests closing only the active
 window, even within a selected group. The chord remains available while that
 app owns keyboard focus. A provider can keep the window open for an unsaved-work
 confirmation. Shells
@@ -320,12 +306,12 @@ both the cinematic presentation and ordinary work remaining reliable.
 | General workspace (implemented) | Default desktop experience, application controls and an empty state independent of AXIAL; a separate persistence identity | Desktop lifecycle, action isolation and state round-trip tests |
 | Native project browser (implemented) | Real directory navigation, bounded search/thumbnails, refresh, keyboard/pointer controls, new folder, rename, move, duplicate, trash/restore and Undo | Reader/provider/rendering tests, FD anchoring, cancellation and race coverage |
 | Content surface foundation (implemented) | Versioned RGBA images, opaque textured planes sharing depth with native geometry, and local-coordinate pointer mapping | Scene/GPU tests, the live AXIAL instrument panel, hosted native tools and compatibility surfaces |
-| Legacy application host (implemented subset) | Private Wayland/Xwayland hosts, SHM and supported DMA-BUF content, raw input, depth/read/size controls | Real foot/Chromium/Konsole/xmessage output, input, popup, DnD, resize, clipboard and disconnect tests |
-| Native terminal workflow (implemented) | Independent PTY/libvterm shells, native presentation, New Terminal / Close Selected, and text clipboard | Real shell/Vim, job control, resize, GPU display, close/reopen, private GUI launch and clipboard tests |
+| Legacy application host (implemented subset) | Private Wayland/Xwayland hosts, SHM and supported DMA-BUF content, raw input, depth gestures, Read controls and free resize | Real foot/Chromium/Konsole/xmessage output, input, popup, DnD, resize, clipboard and disconnect tests |
+| Native terminal workflow (implemented) | Independent PTY/libvterm shells, Ctrl+Alt+Enter and Win/Super+C lifecycle shortcuts, and text clipboard | Real shell/Vim, job control, resize, GPU display, close/reopen, private GUI launch and clipboard tests |
 | Resume actual work (implemented) | Versioned native session manifest, Files/viewer restoration, fresh shells in saved folders, autosave recovery and one-writer session lock | CPU/GPU/real-media/compatibility suites and race checks; repeated state-only startup and forced-stop recovery without duplicate terminals |
 | Spatial interaction (implemented) | Visible grips, direct dragging and throwing, depth movement, grouping, overview, focus/return, and local-coordinate input mapping | Direct-drag ownership/occlusion/cancellation tests, timed throw deceleration and frame-rate independence, one-edit group undo, real two-foot GPU workflow, saved layout round-trip and sibling exit |
 | Browser compatibility (selected workflows tested) | Chromium/Konsole content, typing, popup menus, DnD, separate dialogs, fractional scaling and teardown | Isolated real-client tests; broader everyday browser workflows still need acceptance |
-| Cinematic finish (bounded SDR slice implemented) | Directional and point-light highlights, metal/rim/thin-glass materials, bounded opaque-backdrop refraction/frost, depth-composited holographic projections with a frozen Reduced Motion phase, smooth normals, world-space guides and authored glow; opt-in renderer bloom/SDR grading stay neutral on mixed compositor frames; physical HDR/ICC and volumetric scattering remain | GPU material/output/scene tests and reviewed captures; the default one-hour, three-process restart trial records sustained frame/resource timing, while physical input-to-photon measurement remains |
+| Cinematic finish (bounded SDR slice implemented) | Directional and point-light highlights, metal/rim/thin-glass materials, bounded opaque-backdrop refraction/frost, continuously animated depth-composited holographic projections, smooth normals, world-space guides and authored glow; opt-in renderer bloom/SDR grading stay neutral on mixed compositor frames; physical HDR/ICC and volumetric scattering remain | GPU material/output/scene tests and reviewed captures; the default one-hour, three-process restart trial records sustained frame/resource timing, while physical input-to-photon measurement remains |
 
 The application host translates protocol buffers and events into generic scene
 content. Linux protocol state stays outside the renderer. The workspace owns
@@ -354,7 +340,7 @@ The standalone AXIAL harness retains separate study actions and persistence;
 the hosted AXIAL application belongs to the normal workspace manifest. Workspace documents use
 the `worldr.workspace` identity, while study documents use `worldr.axial`.
 They require separate state files and reject each other's payloads. Workspace
-state stores camera, presentation/motion preferences, application layouts and a
+state stores camera, application layouts and a
 host-owned native resource manifest;
 study time, component selection and panel depth belong only to AXIAL.
 Manual saving cancels an unfinished held drag, or stops a released throw at its

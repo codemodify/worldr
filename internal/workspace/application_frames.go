@@ -84,12 +84,7 @@ func (w *Workspace) syncApplicationFrame(surface experience.ApplicationSurface) 
 		alpha = .76 + alpha*.20
 		glow *= .18
 	}
-	// Adaptive presentation retains an explicit focus cue without the full
-	// cinematic brightness. No opacity or tint is applied to application pixels.
-	alpha *= .72 + .28*w.presentationBlend
 	frame.Color = scene.ColorHex(color, alpha)
-	// Reading in Adaptive keeps the crisp focus border and removes its halo.
 	// Idle windows never emit, even while a different window has focus.
-	glow *= w.presentationBlend
 	frame.Glow = [3]float32{frame.Color.R * glow, frame.Color.G * glow, frame.Color.B * glow}
 }

@@ -4,7 +4,6 @@ import (
 	"math"
 
 	"github.com/codemodify/worldr/internal/experience"
-	"github.com/codemodify/worldr/internal/presentation"
 	"github.com/codemodify/worldr/internal/scene"
 )
 
@@ -26,8 +25,6 @@ const (
 	captureSurfaceButton
 	captureSurfaceTimeline
 	captureApplicationPlacement
-	captureApplicationClose
-	captureApplicationLaunch
 	captureForgetClosedPlacements
 	captureApplicationDock
 	captureWorkspacePan
@@ -381,34 +378,18 @@ func (w *Workspace) inViewport(x, y float32) bool {
 func (w *Workspace) buttonAction(x, y float32) (Action, bool) {
 	if w.application.ID != 0 {
 		switch {
-		case applicationOverviewButton.contains(x, y):
-			return Action{Kind: ToggleApplicationOverview}, true
 		case applicationPlaceButton.contains(x, y):
 			return Action{Kind: ToggleApplicationPlacement}, true
-		case applicationBackButton.contains(x, y):
-			return Action{Kind: MoveApplications, DeltaDepth: -.5}, true
-		case applicationFrontButton.contains(x, y):
-			return Action{Kind: MoveApplications, DeltaDepth: .5}, true
 		case applicationGroupButton.contains(x, y):
 			return Action{Kind: GroupApplications}, true
 		case applicationUngroupButton.contains(x, y):
 			return Action{Kind: UngroupApplications}, true
 		case applicationDepthButton.contains(x, y):
 			return Action{Kind: ToggleApplicationDepth}, true
-		case applicationReadButton.contains(x, y):
-			return Action{Kind: ToggleApplicationReading}, true
-		case applicationSizeButton.contains(x, y):
-			return Action{Kind: ToggleApplicationSize}, true
 		}
 	}
 	switch {
-	case cinematicButton.contains(x, y):
-		return Action{Kind: SetPresentation, Presentation: presentation.Cinematic}, true
-	case adaptiveButton.contains(x, y):
-		return Action{Kind: SetPresentation, Presentation: presentation.Adaptive}, true
-	case motionButton.contains(x, y):
-		return Action{Kind: ToggleReducedMotion}, true
-	case (box{1110, 30, 123, 37}).contains(x, y):
+	case resetViewButton.contains(x, y):
 		if w.desktop {
 			return Action{Kind: ResetView}, true
 		}
@@ -500,11 +481,6 @@ func (w *Workspace) handleKey(event experience.Event) bool {
 			if w.application.ID != 0 {
 				action.Kind = ToggleApplicationReading
 			}
-		case experience.KeyP:
-			action.Kind = TogglePresentation
-			if event.Modifiers == experience.ModShift {
-				action.Kind = ToggleReducedMotion
-			}
 		case experience.KeyB:
 			action.Kind = TogglePanelDepth
 			if w.application.ID != 0 {
@@ -515,13 +491,6 @@ func (w *Workspace) handleKey(event experience.Event) bool {
 			if w.desktop {
 				action.Kind = ResetView
 			}
-		case experience.KeyO:
-			// A minimized window intentionally leaves no current application,
-			// but Overview is also its recovery path.
-			if w.application.ID == 0 && len(w.visibleApplications()) == 0 {
-				return false
-			}
-			action.Kind = ToggleApplicationOverview
 		case experience.Key1:
 			action = Action{Kind: SelectComponent, Component: Housing}
 		case experience.Key2:

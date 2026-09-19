@@ -9,7 +9,6 @@ import (
 
 	"github.com/codemodify/worldr/internal/experience"
 	"github.com/codemodify/worldr/internal/platform/linux/native"
-	"github.com/codemodify/worldr/internal/presentation"
 	"github.com/codemodify/worldr/internal/render"
 )
 
@@ -126,7 +125,7 @@ func TestDNABackgroundTimingIsFrameIndependentAndBounded(t *testing.T) {
 
 }
 
-func TestDNABackgroundMotionIsTransientAndReducedMotionFreezesPose(t *testing.T) {
+func TestDNABackgroundMotionIsTransientAndAlwaysAdvances(t *testing.T) {
 	w := desktop(t)
 	before := w.Document()
 	state, err := w.SaveState()
@@ -145,16 +144,15 @@ func TestDNABackgroundMotionIsTransientAndReducedMotionFreezesPose(t *testing.T)
 	if w.backgroundPhase != phase || w.Document() != before {
 		t.Fatal("undo rewound ambient time or failed to restore the camera")
 	}
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: true})
 	w.Update(20 * time.Second)
-	_, _, still := dnaBackgroundCommand(t, w, w.Draw(1440, 900))
-	if w.backgroundPhase != phase || still.Model != moving.Model {
-		t.Fatal("Reduced Motion failed to freeze the current background pose")
+	_, _, advanced := dnaBackgroundCommand(t, w, w.Draw(1440, 900))
+	want := (phase + 20*time.Second%dnaRotationPeriod) % dnaRotationPeriod
+	if w.backgroundPhase != want || advanced.Model == moving.Model {
+		t.Fatal("permanent full motion failed to advance the background pose")
 	}
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: false})
 	w.Update(time.Second)
-	if w.backgroundPhase != phase+time.Second {
-		t.Fatal("resuming motion replayed paused time or restarted the rotation")
+	if w.backgroundPhase != (want+time.Second)%dnaRotationPeriod {
+		t.Fatal("background motion restarted or lost elapsed time")
 	}
 	loaded := desktop(t)
 	if err := loaded.LoadState(updatedState); err != nil || loaded.backgroundPhase != 0 || loaded.CanUndo() {
@@ -162,7 +160,7 @@ func TestDNABackgroundMotionIsTransientAndReducedMotionFreezesPose(t *testing.T)
 	}
 }
 
-func TestDNABackgroundPresentationAndApplicationLifecycleRetainGeometry(t *testing.T) {
+func TestDNABackgroundReadAndApplicationLifecycleRetainGeometry(t *testing.T) {
 	w := desktop(t)
 	apps := desktopApplications(t, w)
 	_, _, original := dnaBackgroundCommand(t, w, w.Draw(1440, 900))
@@ -171,18 +169,7 @@ func TestDNABackgroundPresentationAndApplicationLifecycleRetainGeometry(t *testi
 	if cinematic.Geometry != original.Geometry || cinematic.Color[3] <= 0 {
 		t.Fatal("Cinematic Read hid or rebuilt the backdrop")
 	}
-	command(t, w, Action{Kind: SetPresentation, Presentation: presentation.Adaptive})
-	w.Update(time.Second)
-	frame := w.Draw(1440, 900)
-	for _, command := range frame.Commands {
-		for _, draw := range command.Draws {
-			if draw.Geometry == original.Geometry {
-				t.Fatal("Adaptive Read retained the ambient DNA scene after its fade")
-			}
-		}
-	}
 	command(t, w, Action{Kind: ToggleApplicationReading})
-	w.Update(time.Second)
 	_, _, returned := dnaBackgroundCommand(t, w, w.Draw(1440, 900))
 	if returned.Geometry != original.Geometry || returned.Color[3] <= 0 {
 		t.Fatal("returning to space failed to restore retained background geometry")

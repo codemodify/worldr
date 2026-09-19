@@ -18,7 +18,7 @@ func hologramDraw(frame render.Frame, geometry *render.Geometry) (render.View, r
 	return render.View{}, render.Draw{}, false
 }
 
-func TestNativeHologramPhaseIsTransientAndReducedMotionFreezesIt(t *testing.T) {
+func TestNativeHologramPhaseIsTransientAndAlwaysAdvances(t *testing.T) {
 	w := study(t)
 	command(t, w, Action{Kind: SetPlayback, Enabled: false})
 	geometry := w.scene.Node(w.hologramNode).Mesh.Geometry()
@@ -33,18 +33,15 @@ func TestNativeHologramPhaseIsTransientAndReducedMotionFreezesIt(t *testing.T) {
 	if !ok || movingView.EffectPhase != .25 || moving.Geometry != initial.Geometry || w.Document() != before || w.historyPosition != history {
 		t.Fatal("hologram motion rebuilt resources or entered document/history state")
 	}
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: true})
-	phase := w.hologramPhase
-	w.Update(7 * time.Second)
-	frozenView, frozen, ok := hologramDraw(w.Draw(1440, 900), geometry)
-	if !ok || w.hologramPhase != phase || frozenView.EffectPhase != movingView.EffectPhase || frozen.Model != moving.Model {
-		t.Fatal("Reduced Motion failed to freeze the current hologram scan pose")
+	w.Update(2 * time.Second)
+	advancedView, advanced, ok := hologramDraw(w.Draw(1440, 900), geometry)
+	if !ok || w.hologramPhase != 3*time.Second || advancedView.EffectPhase != .75 || advanced.Model != moving.Model {
+		t.Fatal("permanent full motion failed to advance the hologram scan pose")
 	}
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: false})
 	w.Update(time.Second)
-	resumedView, _, _ := hologramDraw(w.Draw(1440, 900), geometry)
-	if resumedView.EffectPhase != .5 {
-		t.Fatal("hologram phase restarted or replayed paused time")
+	loopedView, _, _ := hologramDraw(w.Draw(1440, 900), geometry)
+	if w.hologramPhase != 0 || loopedView.EffectPhase != 0 {
+		t.Fatal("hologram phase failed to wrap at its retained cycle")
 	}
 }
 

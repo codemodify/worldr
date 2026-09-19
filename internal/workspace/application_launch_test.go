@@ -38,7 +38,17 @@ func terminalLauncher(t *testing.T, apps *fakeApplications) *launchingApplicatio
 	}}
 }
 
-func TestNewTerminalControlCreatesAndSelectsWithoutTakingKeyboard(t *testing.T) {
+func launchTerminalShortcut(t *testing.T, w *Workspace) {
+	t.Helper()
+	if !w.Handle(terminalChord(28)) {
+		t.Fatal("Ctrl+Alt+Enter was not consumed")
+	}
+	if !w.Handle(experience.Event{Kind: experience.KeyInput, Keycode: 28}) {
+		t.Fatal("terminal shortcut release was not consumed")
+	}
+}
+
+func TestNewTerminalShortcutCreatesAndSelectsWithoutTakingKeyboard(t *testing.T) {
 	for _, mode := range []string{"no-applications", "space", "reading"} {
 		t.Run(mode, func(t *testing.T) {
 			count := 1
@@ -62,13 +72,9 @@ func TestNewTerminalControlCreatesAndSelectsWithoutTakingKeyboard(t *testing.T) 
 			}
 			historyPosition, historyLen := w.historyPosition, len(w.history)
 			camera := w.Document().View.Camera
-			x := w.ox + (applicationLaunchButton.x+15)*w.scale
-			y := w.oy + (applicationLaunchButton.y+15)*w.scale
-			if !pointer(w, experience.PointerDown, x, y) || len(launcher.launched) != 0 {
-				t.Fatal("terminal started before a completed launch click")
-			}
-			if !pointer(w, experience.PointerUp, x, y) || len(launcher.launched) != 1 || launcher.launched[0] != "terminal" {
-				t.Fatalf("launch button did not request exactly one terminal: %v", launcher.launched)
+			launchTerminalShortcut(t, w)
+			if len(launcher.launched) != 1 || launcher.launched[0] != "terminal" {
+				t.Fatalf("terminal shortcut did not request exactly one terminal: %v", launcher.launched)
 			}
 			w.Draw(2880, 1800)
 			if len(w.applicationSurfaces) != count+1 || w.application.ID != 900 || w.m.applicationState.Active != launcher.surface.Key {
@@ -84,22 +90,7 @@ func TestNewTerminalControlCreatesAndSelectsWithoutTakingKeyboard(t *testing.T) 
 	}
 }
 
-func TestNewTerminalCancelledClickDoesNotLaunch(t *testing.T) {
-	for _, cancel := range []experience.EventKind{experience.PointerMove, experience.PointerCancel, experience.KeyboardCancel} {
-		w, apps := multipleApplications(t, 0)
-		launcher := terminalLauncher(t, apps)
-		w.SetApplications(launcher)
-		x, y := applicationLaunchButton.x+15, applicationLaunchButton.y+15
-		pointer(w, experience.PointerDown, x, y)
-		w.Handle(experience.Event{Kind: cancel, X: x + applicationLaunchButton.w, Y: y})
-		pointer(w, experience.PointerUp, x, y)
-		if len(launcher.launched) != 0 || w.application.ID != 0 {
-			t.Fatalf("cancelled click launched a terminal (cancel kind %d)", cancel)
-		}
-	}
-}
-
-func TestNewTerminalLaunchFailurePreservesView(t *testing.T) {
+func TestNewTerminalShortcutLaunchFailurePreservesView(t *testing.T) {
 	w, apps := multipleApplications(t, 1)
 	launcher := terminalLauncher(t, apps)
 	launcher.err = errors.New("missing-shell: executable file not found")
@@ -110,9 +101,7 @@ func TestNewTerminalLaunchFailurePreservesView(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	x, y := applicationLaunchButton.x+15, applicationLaunchButton.y+15
-	pointer(w, experience.PointerDown, x, y)
-	pointer(w, experience.PointerUp, x, y)
+	launchTerminalShortcut(t, w)
 	if w.Document() != before || w.historyPosition != historyPosition || len(w.applicationSurfaces) != 1 {
 		t.Fatal("failed terminal launch changed the workspace view")
 	}
@@ -145,7 +134,7 @@ func (f *rollbackLaunchingApplications) CloseApplication(id uint64) {
 	}
 }
 
-func TestNewTerminalFullSavedLayoutClosesOnlyNewSurface(t *testing.T) {
+func TestNewTerminalShortcutFullSavedLayoutClosesOnlyNewSurface(t *testing.T) {
 	for _, state := range []string{"all-orphaned", "one-live", "existing-excluded-key"} {
 		t.Run(state, func(t *testing.T) {
 			w, apps := multipleApplications(t, MaxApplicationLayouts)
@@ -165,9 +154,7 @@ func TestNewTerminalFullSavedLayoutClosesOnlyNewSurface(t *testing.T) {
 			w.SetApplications(launcher)
 			before, historyPosition := w.Document(), w.historyPosition
 			existing := append([]experience.ApplicationSurface(nil), apps.surfaces...)
-			x, y := applicationLaunchButton.x+15, applicationLaunchButton.y+15
-			pointer(w, experience.PointerDown, x, y)
-			pointer(w, experience.PointerUp, x, y)
+			launchTerminalShortcut(t, w)
 			if len(launcher.launched) != 1 || len(launcher.closed) != 1 || launcher.closed[0] != launcher.surface.ID {
 				t.Fatalf("excluded terminal was not closed exactly once: launches=%v closed=%v", launcher.launched, launcher.closed)
 			}

@@ -2,6 +2,11 @@
 
 ## 0.10.0-dev — native scene architecture reset
 
+- Made Cinematic presentation and full ambient motion permanent. Removed the
+  Adaptive, Reduced Motion, Size, Depth −/+, New Terminal, Overview, Read
+  Selected and Close Selected controls from the header and application sidebar.
+  Reset View is followed by Place / Group, Group Selected and Ungroup; free
+  resize, window chrome and reserved keyboard shortcuts remain available.
 - Raised the private application server to XDG shell v3 and implemented copied
   explicit popup positioners, parent-size constraints, parent-configure
   metadata acceptance and reactive

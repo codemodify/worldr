@@ -62,8 +62,8 @@ selected; it cannot be combined with `--experience=workspace`.
 
 Drag a window’s top grip to move it; release while moving to throw it. The window
 coasts smoothly to a stop. Grab again or press Escape to stop a coast. Scroll
-while dragging to change depth; Ctrl+Z restores the whole gesture. Reduced Motion
-keeps direct dragging and disables throws. Super+drag also moves content planes
+while dragging to change depth; Ctrl+Z restores the whole gesture. Super+drag
+also moves content planes
 when the host does not reserve that chord. Super+drag on empty workspace pans the
 camera, and Super+wheel changes the hovered window's depth without focusing it.
 Resize with the bottom-right grip or Super+secondary drag over window content;
@@ -88,15 +88,13 @@ Ctrl+Alt+Q or the host window close button exits; Ctrl+Q also exits when the
 workspace owns the keyboard. Ordinary shortcuts reach a focused application;
 Win/Super+C remains reserved for the active-app close request.
 
-Use the Cinematic/Adaptive header controls or P to switch presentation. Cinematic
-keeps spatial framing and stronger wire/rim accents; Adaptive calms them during
-focus (F) and restores them when leaving focus. The model has a blue/silver
-palette, light-responsive highlights and smoothly shaded cylinder walls. Its
-world-space grid and rings hide in Read/Overview and fade during Adaptive focus.
-Both modes retain the same content and controls. Selective depth-aware background
+The Cinematic presentation remains active during exploration and focus, with
+full ambient motion, spatial framing, and wire/rim accents. The model has a
+blue/silver palette, light-responsive highlights and smoothly shaded cylinder
+walls. Its world-space grid and rings hide in Read/Overview. Selective depth-aware background
 glow, directional shadows, moving fill lights, opt-in final-frame highlight
 bloom, thin-glass transmission/refraction and depth-composited holographic mesh
-projections are implemented. Reduced Motion freezes the projection phase. The
+projections are implemented, and their ambient phase continues to move. The
 compositor keeps the global finish neutral to preserve exact client/UI pixels
 and cursor bounds. Output is still SDR sRGB; HDR signaling, ICC/wide-gamut
 transforms and true volumetric scattering remain future work.
@@ -110,9 +108,10 @@ native content surfaces. Add `--app=foot` for an actual terminal process.
 
 In AXIAL, `--app=foot` takes the instrument panel’s place; the default workspace
 has no synthetic study panel. Click
-the terminal to type, use **Read selected** for a readable view and **Return to space**
-to restore its context. The depth control changes its placement; Compact/Wide
-changes the client's configured size so terminal programs reflow. Selection
+the terminal to type, and use Win/Super + double-click or its square top-grip
+control to enter or leave a readable view. Scroll while dragging or use
+Super+wheel to change depth. Resize with the bottom-right grip or
+Super+secondary drag so terminal programs reflow. Selection
 drags retain the target surface even outside the scene viewport. Clicking the
 workspace returns keyboard ownership to its native controls. Ctrl+Alt+Q exits
 worldr regardless of who owns the keyboard; Ctrl+Q and Ctrl+S reach the terminal
@@ -121,7 +120,8 @@ applications and the native workspace running.
 
 **Place / Group** enables dragging and Shift+click multi-selection. Grouped
 windows retain their relative positions when moved or sent deeper into space.
-**Overview** (Ctrl+Alt+O from any app; O with workspace focus) retrieves obscured
+The header places **Place / Group**, **Group selected**, and **Ungroup** after
+**Reset View**. Ctrl+Alt+O from the workspace or any focused app retrieves obscured
 apps. Unmodified arrows select thumbnails one step per fresh press; modified
 arrows are consumed. Enter/keypad Enter or Escape returns to the prior view
 without restoring application keyboard focus. A second fresh Enter opens Read
@@ -132,10 +132,10 @@ window groups across named spaces. Use arrows and Enter to travel, or use
 Ctrl+Alt+Left/Right directly. Portal travel centers the camera and selection
 without moving windows or granting application focus; zooming out leaves the
 windows free of automatic application-name cards.
-**New Terminal** or Ctrl+Alt+Enter creates an independent native shell
+Ctrl+Alt+Enter creates an independent native shell
 and selects it; click its content or press a fresh Enter to read and type. The shortcut works from a focused
 native or legacy app, including with keypad Enter. This control is available even without `--terminal`
-and when no applications remain. **Close Selected** or the exact Win/Super+C chord
+and when no applications remain. The exact Win/Super+C chord
 requests closing only the active window, even within a selected group. The chord
 works while that app owns keyboard focus; a legacy client can show an
 unsaved-work dialog before closing. Neither process action is undoable.
@@ -147,7 +147,8 @@ Ctrl+Shift+C/V for selected text and paste, and Shift to override a TUI's mouse
 tracking for selection/scrollback. Native, legacy and desktop clipboards share
 offers; data transfers happen on explicit paste. Native text transfer is bounded
 to 1 MiB and two seconds, and focus loss cancels a pending native paste. Native
-shell exit keeps the final output visible until Close Selected dismisses it.
+shell exit keeps the final output visible until Win/Super+C or its window close
+control dismisses it.
 Native glyphs use embedded Go Mono with bounded Fontconfig fallback and retained
 RGBA surfaces. Text shaping, color emoji and soft-wrap-aware selection remain ahead.
 
@@ -166,7 +167,7 @@ the launch. It is a temporary directory created for this command. The command
 above deliberately requests software client rendering; supported GPU clients can
 instead use the bounded explicit-modifier DMA-BUF path. Worldr renders its scene with Vulkan
 in both cases. The private server is also available when a terminal was opened
-through New Terminal instead of `--terminal`.
+through Ctrl+Alt+Enter instead of `--terminal`.
 
 X11 support is opt-in and requires the `xorg-xwayland` package on Arch or
 `xwayland` on Debian. Use `--x11-app=xmessage -- 'Hello from X11'` for an explicit
@@ -240,7 +241,8 @@ reach the host desktop.
 
 With `--state`, an existing document loads and Ctrl+S or normal exit saves it.
 A missing file starts fresh and is created on save. Camera, placement, selection,
-presentation and Reduced Motion persist; AXIAL also saves its study timeline.
+and window sizes persist; AXIAL also saves its study timeline. Retired
+presentation and motion fields load as Cinematic with full motion.
 Workspace and AXIAL documents have distinct identities and cannot be interchanged.
 Undo history does not persist. Saving cancels a held pointer gesture and settles
 a released throw at its current position; velocity is never saved. No default document file is

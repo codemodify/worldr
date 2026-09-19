@@ -62,16 +62,20 @@ func TestWorkspaceCreatesAndReopensRealNativeTerminal(t *testing.T) {
 	hub := newApplicationHub(manager)
 	work.SetApplications(hub)
 	defer work.SetApplications(nil)
-	click := func(x, y float32) {
+	shortcut := func(event experience.Event) {
 		t.Helper()
 		work.Draw(1440, 900)
-		for _, kind := range []experience.EventKind{experience.PointerDown, experience.PointerUp} {
-			if !work.Handle(experience.Event{Kind: kind, X: x, Y: y, Button: experience.ButtonPrimary, ButtonCode: 272}) {
-				t.Fatal("workspace control did not handle click")
-			}
+		event.Kind, event.Pressed = experience.KeyInput, true
+		if !work.Handle(event) {
+			t.Fatal("workspace did not handle shortcut press")
+		}
+		event.Pressed, event.Modifiers = false, 0
+		if !work.Handle(event) {
+			t.Fatal("workspace did not handle shortcut release")
 		}
 	}
-	click(550, 45) // New Terminal in the persistent header.
+	launch := experience.Event{Keycode: 28, Modifiers: experience.ModControl | experience.ModAlt}
+	shortcut(launch)
 	if err := manager.Poll(); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +83,7 @@ func TestWorkspaceCreatesAndReopensRealNativeTerminal(t *testing.T) {
 	if len(first) != 1 || work.Document().View.Application.Active != first[0].Key || work.OwnsKeyboard() {
 		t.Fatal("native launch did not select exactly one app with explicit keyboard focus")
 	}
-	click(550, 45)
+	shortcut(launch)
 	if err := manager.Poll(); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +92,7 @@ func TestWorkspaceCreatesAndReopensRealNativeTerminal(t *testing.T) {
 		t.Fatal("second native shell lost independent identity")
 	}
 	key, id := second[1].Key, second[1].ID
-	click(100, 760) // Close the active second terminal, leaving the first alive.
+	shortcut(experience.Event{Key: experience.KeyC, Keycode: 46, Modifiers: experience.ModSuper})
 	if err := manager.Poll(); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +102,7 @@ func TestWorkspaceCreatesAndReopensRealNativeTerminal(t *testing.T) {
 	if retired := manager.Retired(); len(retired) != 1 || retired[0] != second[1].Texture.ID() {
 		t.Fatal("closed native terminal image was not retired")
 	}
-	click(550, 45)
+	shortcut(launch)
 	if err := manager.Poll(); err != nil {
 		t.Fatal(err)
 	}

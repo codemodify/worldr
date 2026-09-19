@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codemodify/worldr/internal/presentation"
 	"github.com/codemodify/worldr/internal/render"
 	"github.com/codemodify/worldr/internal/scene"
 )
@@ -23,7 +22,6 @@ func glowGeometryDraw(frame render.Frame, geometry *render.Geometry) (render.Dra
 func TestHousingGlowAccentRetainsGeometryAndFollowsParentExplosion(t *testing.T) {
 	w := study(t)
 	command(t, w, Action{Kind: SetPlayback, Enabled: false})
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: true})
 	accent, housing := w.scene.Node(w.accentNode), w.scene.Node(w.nodes[0])
 	geometry := accent.Mesh.Geometry()
 	children := w.scene.Children(w.nodes[0])
@@ -35,6 +33,7 @@ func TestHousingGlowAccentRetainsGeometryAndFollowsParentExplosion(t *testing.T)
 		t.Fatal("cinematic housing accent did not draw in its parent's space")
 	}
 	command(t, w, Action{Kind: SetExploded, Enabled: true})
+	w.Update(2 * time.Second)
 	exploded, ok := glowGeometryDraw(w.Draw(1440, 900), geometry)
 	if !ok || exploded.Model == initial.Model || exploded.Model != [16]float32(housing.Transform.Mul(accent.Transform)) || accent.Mesh.Geometry() != geometry {
 		t.Fatal("explosion left the accent behind or rebuilt its geometry")
@@ -44,6 +43,7 @@ func TestHousingGlowAccentRetainsGeometryAndFollowsParentExplosion(t *testing.T)
 		t.Fatal("viewport resize changed the retained world-space accent")
 	}
 	command(t, w, Action{Kind: SetExploded, Enabled: false})
+	w.Update(2 * time.Second)
 	restored, ok := glowGeometryDraw(w.Draw(1440, 900), geometry)
 	if !ok || restored.Model != initial.Model || restored.Glow != initial.Glow {
 		t.Fatal("returning from explosion did not restore the authored accent instance")
@@ -90,7 +90,7 @@ func TestHousingGlowAccentDoesNotInterceptActualSurfacePicks(t *testing.T) {
 	}
 }
 
-func TestWorkspaceGlowGuidesHideInReadingOverviewAndAdaptiveFocus(t *testing.T) {
+func TestWorkspaceGlowGuidesHideInReadingAndOverviewButRemainInFocus(t *testing.T) {
 	w, _ := multipleApplications(t, 1)
 	accentGeometry := w.scene.Node(w.accentNode).Mesh.Geometry()
 	stageGeometry := w.scene.Node(w.stageNode).Mesh.Geometry()
@@ -116,17 +116,14 @@ func TestWorkspaceGlowGuidesHideInReadingOverviewAndAdaptiveFocus(t *testing.T) 
 
 	w.SetApplications(nil)
 	command(t, w, Action{Kind: SetPlayback, Enabled: false})
-	command(t, w, Action{Kind: SetPresentation, Presentation: presentation.Adaptive})
 	command(t, w, Action{Kind: SetFocused, Enabled: true})
-	w.Update(time.Second)
-	check(false)
-	if w.scene.Node(w.accentNode).Glow != [3]float32{} || w.scene.Node(w.stageNode).Glow != [3]float32{} {
-		t.Fatal("focused Adaptive view retained emitter constants")
+	check(true)
+	if w.scene.Node(w.accentNode).Glow == [3]float32{} || w.scene.Node(w.stageNode).Glow == [3]float32{} {
+		t.Fatal("focused work lost permanent cinematic emitter constants")
 	}
 	command(t, w, Action{Kind: SetFocused, Enabled: false})
-	w.Update(time.Second)
 	check(true)
 	if w.scene.Node(w.accentNode).Mesh.Geometry() != accentGeometry || w.scene.Node(w.stageNode).Mesh.Geometry() != stageGeometry {
-		t.Fatal("quiet-mode transitions recreated retained guides")
+		t.Fatal("focus transitions recreated retained guides")
 	}
 }

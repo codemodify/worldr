@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codemodify/worldr/internal/presentation"
 	"github.com/codemodify/worldr/internal/render"
 )
 
@@ -17,7 +16,7 @@ func framePointLights(frame render.Frame) []render.PointLight {
 	return nil
 }
 
-func TestCinematicFillLightsFollowPresentationWithoutGradingCompositorPixels(t *testing.T) {
+func TestCinematicFillLightsRemainActiveWithoutGradingCompositorPixels(t *testing.T) {
 	w := study(t)
 	frame := w.Draw(1440, 900)
 	initial := framePointLights(frame)
@@ -29,16 +28,9 @@ func TestCinematicFillLightsFollowPresentationWithoutGradingCompositorPixels(t *
 	if len(moved) != 2 || moved[0].Position == initial[0].Position {
 		t.Fatal("cinematic fill light did not move with the live study")
 	}
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: true})
-	fixed := framePointLights(w.Draw(1440, 900))
-	w.Update(time.Second)
-	if next := framePointLights(w.Draw(1440, 900)); len(next) != 2 || next[0].Position != fixed[0].Position || next[1].Position != fixed[1].Position {
-		t.Fatal("reduced motion left cinematic fill lights moving")
-	}
-	command(t, w, Action{Kind: SetPresentation, Presentation: presentation.Adaptive})
 	command(t, w, Action{Kind: SetFocused, Enabled: true})
-	quiet := w.Draw(1440, 900)
-	if quiet.Output != (render.OutputTransform{}) || len(framePointLights(quiet)) != 0 {
-		t.Fatalf("focused Adaptive frame retained cinematic finish: output=%+v lights=%v", quiet.Output, framePointLights(quiet))
+	focused := w.Draw(1440, 900)
+	if focused.Output != (render.OutputTransform{}) || len(framePointLights(focused)) != 2 {
+		t.Fatalf("focused work lost the permanent cinematic lighting: output=%+v lights=%v", focused.Output, framePointLights(focused))
 	}
 }

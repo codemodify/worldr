@@ -34,6 +34,8 @@ func (w *Workspace) saveDesktopState() ([]byte, error) {
 }
 
 func marshalDesktopState(d Document) ([]byte, error) {
+	d.View.Presentation = presentation.Cinematic
+	d.View.ReducedMotion = false
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}
@@ -56,8 +58,8 @@ func (w *Workspace) loadDesktopState(data []byte) error {
 	if d.Version != 1 {
 		return fmt.Errorf("unsupported workspace document version %d", d.Version)
 	}
-	base.View.Camera, base.View.Presentation = d.Camera, d.Presentation
-	base.View.ReducedMotion, base.View.Application = d.ReducedMotion, d.Applications
+	base.View.Camera, base.View.Presentation = d.Camera, presentation.Cinematic
+	base.View.ReducedMotion, base.View.Application = false, d.Applications
 	if err := base.Validate(); err != nil {
 		return err
 	}

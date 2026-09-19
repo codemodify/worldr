@@ -208,7 +208,6 @@ func TestPhotoContentDragCancellationAndOcclusion(t *testing.T) {
 
 func TestPhotoContentThrowSharesViewTransitionUndo(t *testing.T) {
 	w, apps, photo := photoDragWorkspace(t, 1)
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: false})
 	command(t, w, Action{Kind: ToggleApplicationReading})
 	w.Draw(1440, 900)
 	x, y := visibleApplication(t, w, photo)

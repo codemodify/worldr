@@ -22,7 +22,6 @@ func windowDragWorkspace(t *testing.T, count int) (*Workspace, *fakeApplications
 		apps.surfaces = append(apps.surfaces, experience.ApplicationSurface{ID: uint64(40 + i), Key: fmt.Sprintf("drag:%d", i), Texture: texture})
 	}
 	w.SetApplications(apps)
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: true})
 	w.Draw(1440, 900)
 	return w, apps
 }

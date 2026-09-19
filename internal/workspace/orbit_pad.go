@@ -22,7 +22,7 @@ func (w *Workspace) drawOrbitPad() {
 		return
 	}
 	b := orbitPadBounds
-	strength := float32(.68 + .22*w.presentationBlend)
+	strength := float32(.9)
 	w.rect(b.x, b.y, b.w, b.h, bg, .78)
 
 	// Open corner rails keep the controller visually light while making its

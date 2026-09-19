@@ -204,7 +204,6 @@ func TestTerminalDecorationDoesNotInterceptScenePicks(t *testing.T) {
 
 func TestTerminalGripSupportsThrowAndForegroundOcclusion(t *testing.T) {
 	w, apps := terminalFrameWorkspace(t, 1)
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: false})
 	x, y := windowGripPoint(t, w, apps.surfaces[0])
 	parent := w.scene.Node(w.applicationNodes[apps.surfaces[0].ID])
 	blocker := w.scene.Add(0, scene.Node{Surface: apps.surfaces[0].Texture, Transform: parent.Transform.Mul(scene.Translate(0, .55, .1))})

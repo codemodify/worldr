@@ -77,7 +77,7 @@ func (w *Workspace) sampleWindowDrag(event experience.Event, release bool) {
 
 func (w *Workspace) releaseWindowDrag() {
 	p := &w.pointer
-	if w.m.reducedMotion || !p.dragged || p.dragSampleCount < 2 {
+	if !p.dragged || p.dragSampleCount < 2 {
 		w.commitPointer()
 		return
 	}
@@ -208,10 +208,6 @@ func windowDragBefore(pointer pointerCapture, current Document) Document {
 
 func (w *Workspace) updateWindowThrow(dt time.Duration) {
 	if dt <= 0 {
-		return
-	}
-	if w.m.reducedMotion {
-		w.finishWindowThrow()
 		return
 	}
 	for motion := w.windowThrow; motion != nil; {

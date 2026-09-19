@@ -78,35 +78,27 @@ func (w *Workspace) fitApplicationShadow() {
 
 // fitCinematicLighting keeps presentation effects in the frame/view contracts:
 // no geometry, texture, picking bound, or app pixel is rebuilt as the lights
-// move. Adaptive focus naturally reaches the exact neutral output at blend 0.
+// move.
 func (w *Workspace) fitCinematicLighting() {
-	strength := w.presentationBlend
 	// The workspace appends host-owned cursors after Draw and mixes exact-color
 	// client/UI pixels with scene geometry. A frame-wide finish would grade those
 	// pixels and make cursor bloom escape its logical bounds. Keep the compositor
 	// output neutral; OutputTransform remains available to experiences that own
 	// the complete frame until the renderer exposes a pre-overlay effect boundary.
 	w.canvas.SetOutputTransform(render.OutputTransform{})
-	if strength <= 0 {
-		w.scene.PointLights = nil
-		return
-	}
-	phase := float64(w.m.clock) * .32
-	if w.m.reducedMotion {
-		phase = .7
-	}
+	phase := 2 * math.Pi * float64(w.backgroundPhase) / float64(dnaRotationPeriod)
 	target := w.camera.Target
 	w.scene.PointLights = []render.PointLight{
 		{
 			Position:  [3]float32{target.X + 4.2*float32(math.Cos(phase)), target.Y + 2.4, target.Z + 4.2*float32(math.Sin(phase))},
 			Color:     [3]float32{.18, .78, 1},
-			Intensity: .72 * strength,
+			Intensity: .72,
 			Radius:    11,
 		},
 		{
 			Position:  [3]float32{target.X - 3.3, target.Y - 1.1 + .5*float32(math.Sin(phase*.7)), target.Z + 2.2},
 			Color:     [3]float32{1, .48, .16},
-			Intensity: .34 * strength,
+			Intensity: .34,
 			Radius:    8,
 		},
 	}

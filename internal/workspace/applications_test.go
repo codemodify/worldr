@@ -184,7 +184,7 @@ func TestKeyboardLossCancelsNativeGesture(t *testing.T) {
 
 func TestOccludedApplicationCannotAcquireFocus(t *testing.T) {
 	w, apps := applicationStudy(t)
-	command(t, w, Action{Kind: ToggleApplicationDepth})
+	clickDesignButton(t, w, applicationDepthButton)
 	w.Draw(1440, 900)
 	for y := float32(30); y < 600; y += 24 {
 		for x := float32(24); x < 960; x += 24 {
@@ -208,12 +208,8 @@ func TestOccludedApplicationCannotAcquireFocus(t *testing.T) {
 func TestApplicationReadReturnResizePersistenceAndClose(t *testing.T) {
 	w, apps := applicationStudy(t)
 	initialCamera, initialTransform := w.camera, w.scene.Node(w.applicationNode).Transform
-	click := func(b box) {
-		pointer(w, experience.PointerDown, b.x+12, b.y+12)
-		pointer(w, experience.PointerUp, b.x+12, b.y+12)
-		w.Draw(1440, 900)
-	}
-	click(applicationReadButton)
+	command(t, w, Action{Kind: ToggleApplicationReading})
+	w.Draw(1440, 900)
 	if !w.m.applicationReading || w.scene.Node(w.applicationNode).Transform != initialTransform || w.camera == initialCamera {
 		t.Fatal("read mode failed to frame app without moving it")
 	}
@@ -222,11 +218,12 @@ func TestApplicationReadReturnResizePersistenceAndClose(t *testing.T) {
 			t.Fatal("read mode did not isolate application")
 		}
 	}
-	click(applicationReadButton)
+	command(t, w, Action{Kind: ToggleApplicationReading})
+	w.Draw(1440, 900)
 	if w.m.applicationReading || w.camera != initialCamera || w.scene.Node(w.applicationNode).Transform != initialTransform {
 		t.Fatal("return did not restore spatial view")
 	}
-	click(applicationSizeButton)
+	command(t, w, Action{Kind: ToggleApplicationSize})
 	if last := apps.resizes[len(apps.resizes)-1]; last.width != 1440 || last.height != 900 || !w.m.applicationWide {
 		t.Fatal("wide preset did not configure the app")
 	}
@@ -235,8 +232,9 @@ func TestApplicationReadReturnResizePersistenceAndClose(t *testing.T) {
 		t.Fatal("resize undo did not configure compact size")
 	}
 	command(t, w, Action{Kind: Redo})
-	click(applicationDepthButton)
-	click(applicationReadButton)
+	command(t, w, Action{Kind: ToggleApplicationDepth})
+	command(t, w, Action{Kind: ToggleApplicationReading})
+	w.Draw(1440, 900)
 	data, err := w.SaveState()
 	if err != nil {
 		t.Fatal(err)

@@ -1,5 +1,6 @@
-// Package presentation defines presentation preferences shared by native
-// experiences. A mode changes visual treatment, not an experience's capabilities.
+// Package presentation defines the persisted visual style identifier. Worldr
+// now runs Cinematic exclusively; the decoder retains its former value only to
+// migrate existing documents.
 package presentation
 
 import (
@@ -10,13 +11,14 @@ import (
 type Mode string
 
 const (
-	// Cinematic keeps expressive spatial framing visible during focused work.
+	// Cinematic is worldr's permanent expressive spatial presentation.
 	Cinematic Mode = "cinematic"
-	// Adaptive quiets surrounding detail while the user focuses on an object.
-	Adaptive Mode = "adaptive"
+	// legacyAdaptive is accepted only while decoding documents written by the
+	// former selectable-presentation prototype.
+	legacyAdaptive Mode = "adaptive"
 )
 
-func (m Mode) Valid() bool { return m == Cinematic || m == Adaptive }
+func (m Mode) Valid() bool { return m == Cinematic }
 
 // UnmarshalJSON rejects explicit null as well as unsupported modes. Missing
 // fields do not call this method, so callers can supply a migration default.
@@ -26,26 +28,17 @@ func (m *Mode) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("decode presentation mode: %w", err)
 	}
 	mode := Mode(value)
-	if !mode.Valid() {
+	if mode != Cinematic && mode != legacyAdaptive {
 		return fmt.Errorf("unknown presentation mode %q", mode)
 	}
-	*m = mode
+	*m = Cinematic
 	return nil
-}
-
-func (m Mode) Next() Mode {
-	if m == Cinematic {
-		return Adaptive
-	}
-	return Cinematic
 }
 
 func (m Mode) Label() string {
 	switch m {
 	case Cinematic:
 		return "Cinematic"
-	case Adaptive:
-		return "Adaptive"
 	default:
 		return "Unknown"
 	}

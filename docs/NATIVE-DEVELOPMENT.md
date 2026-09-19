@@ -65,8 +65,8 @@ The in-process renderer also has `render.Material.Hologram`, a translucent-mesh
 projection treatment with an opaque-depth contact cue and a host-owned animated
 phase. It is intentionally not part of the public `sdk/nativeapp/v1` JSON
 contract. The v1 protocol remains stable; a future SDK revision can expose the
-effect together with an explicit presentation-motion contract rather than making
-an external app infer the user's Reduced Motion preference.
+effect together with an explicit presentation-motion contract. The current
+workspace keeps its host-owned ambient phase moving continuously.
 
 The v1 budgets are deliberately finite: 8 surfaces, 32 textures, 64 MiB of
 retained RGBA pixels, 32 meshes, 250,000 vertices, 750,000 indices, 4,096
@@ -173,8 +173,8 @@ user scripts, built-in Lua/UI services, external reference loading and network
 protocols are disabled for this local-file path. Unknown built-in-service
 options are tolerated for compatibility with older supported libmpv releases.
 Chrome is cached per size; frames and live controls update the image. Player
-content is bounded to 1920×1080. Reduced Motion does not pause user-requested
-media. GPU decode imports and color-managed HDR are not provided.
+content is bounded to 1920×1080. Workspace ambient motion does not control
+user-requested media playback. GPU decode imports and color-managed HDR are not provided.
 
 The [photo provider](../internal/photoapp/provider.go) reserves a loading surface,
 then decodes an anchored descriptor on one worker with bounded request/result

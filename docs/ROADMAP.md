@@ -42,7 +42,7 @@ milestones.
    tested.** Cinematic presentation adds moving point lights and thin-glass
    transmission plus opt-in, bounded refraction and frosted blur of an opaque
    scene prepass, plus depth-composited native holographic projections whose
-   workspace phase freezes under Reduced Motion, while retaining directional
+   workspace phase remains continuously animated, while retaining directional
    shadows, depth-peeled transparency and depth-aware authored glow. Refraction
    and holograms are confined to explicit native mesh materials and exclude
    screen overlays and the host cursor; zero values preserve the
@@ -51,8 +51,8 @@ milestones.
    bounded highlight bloom for an experience that owns every final pixel. The
    mixed compositor workspace keeps that global transform neutral so legacy
    buffers, opaque UI and the host cursor retain exact colors and input bounds.
-   Adaptive presentation fades the authored effects and Reduced Motion freezes
-   ambient light and hologram movement. Physical output remains SDR sRGB; HDR signaling and
+   Cinematic presentation keeps authored effects, ambient light and hologram
+   movement active during focused work. Physical output remains SDR sRGB; HDR signaling and
    ICC/wide-gamut transforms remain separate work. See
    [RENDERING.md](RENDERING.md).
 

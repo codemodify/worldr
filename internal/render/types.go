@@ -124,8 +124,8 @@ type View struct {
 	Shadow     Shadow
 	// EffectPhase is a normalized [0,1] phase for explicitly animated native
 	// materials. It currently drives only Material.Hologram scan bands; ordinary
-	// meshes, content surfaces and overlays ignore it. Hosts can freeze this
-	// value for Reduced Motion without pausing application data or transforms.
+	// meshes, content surfaces and overlays ignore it. Hosts control the phase
+	// without coupling it to application data or transforms.
 	EffectPhase float32
 	// PointLights add at most four view-local fill lights. PointLightCount marks
 	// the active prefix. The fixed array keeps View value-comparable.

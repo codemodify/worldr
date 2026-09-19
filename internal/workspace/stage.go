@@ -8,7 +8,7 @@ import (
 
 // The stage is a sparse coordinate reference beneath the assembly. It shares
 // the camera and depth buffer with real content, and never participates in
-// picking. Geometry is built once; presentation changes only its node alpha.
+// picking. Geometry is built once; view changes only its retained node state.
 func stageMesh() (*scene.Mesh, error) {
 	b := new(meshBuilder)
 	var colors []scene.Color

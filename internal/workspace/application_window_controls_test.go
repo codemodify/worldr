@@ -72,8 +72,8 @@ func TestWindowSquareControlMatchesSuperDoubleClickRead(t *testing.T) {
 	if controlWorkspace.Document() != gestureWorkspace.Document() {
 		t.Fatal("square window control and Super+double-click produced different workspace state")
 	}
-	if _, ok := controlWorkspace.buttonAction(1260, 45); ok {
-		t.Fatal("removed header Read button still has an active hit target")
+	if _, ok := controlWorkspace.buttonAction(136, 321); ok {
+		t.Fatal("removed Read Selected button still has an active hit target")
 	}
 }
 

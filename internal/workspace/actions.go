@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"math"
 	"time"
-
-	"github.com/codemodify/worldr/internal/presentation"
 )
 
 type ActionKind string
@@ -22,10 +20,6 @@ const (
 	SetExploded                ActionKind = "set-exploded"
 	ToggleFocus                ActionKind = "toggle-focus"
 	SetFocused                 ActionKind = "set-focused"
-	TogglePresentation         ActionKind = "toggle-presentation"
-	SetPresentation            ActionKind = "set-presentation"
-	ToggleReducedMotion        ActionKind = "toggle-reduced-motion"
-	SetReducedMotion           ActionKind = "set-reduced-motion"
 	TogglePanelDepth           ActionKind = "toggle-panel-depth"
 	ToggleApplicationDepth     ActionKind = "toggle-application-depth"
 	ToggleApplicationReading   ActionKind = "toggle-application-reading"
@@ -56,7 +50,7 @@ const (
 // Action is the semantic command boundary used by UI hit targets, normalized
 // key bindings, automation, and demonstrations. Only the payload named by Kind
 // is read: a space/name or application key for navigation, Component, Seconds
-// (absolute or step), movement/orbit deltas, Enabled, or Presentation.
+// (absolute or step), movement/orbit deltas, Enabled, or dimensions.
 type Action struct {
 	Space          uint8
 	SpaceName      string
@@ -65,7 +59,6 @@ type Action struct {
 	Seconds        float64
 	DeltaX, DeltaY float32
 	Enabled        bool
-	Presentation   presentation.Mode
 	ApplicationKey string
 	Additive       bool
 	DeltaDepth     float32
@@ -84,14 +77,12 @@ const (
 	fieldExploded
 	fieldFocused
 	fieldCamera
-	fieldPresentation
 	fieldPanelDepth
 	fieldApplicationDepth
 	fieldApplicationReading
 	fieldApplicationSize
 	fieldApplicationLayout
-	fieldReducedMotion
-	allFields = fieldSelection | fieldTime | fieldPlaying | fieldExploded | fieldFocused | fieldCamera | fieldPresentation | fieldPanelDepth | fieldApplicationDepth | fieldApplicationReading | fieldApplicationSize | fieldApplicationLayout | fieldReducedMotion
+	allFields = fieldSelection | fieldTime | fieldPlaying | fieldExploded | fieldFocused | fieldCamera | fieldPanelDepth | fieldApplicationDepth | fieldApplicationReading | fieldApplicationSize | fieldApplicationLayout
 )
 
 type edit struct {
@@ -122,12 +113,6 @@ func difference(a, b Document) fields {
 	}
 	if a.View.Camera != b.View.Camera {
 		f |= fieldCamera
-	}
-	if a.View.Presentation != b.View.Presentation {
-		f |= fieldPresentation
-	}
-	if a.View.ReducedMotion != b.View.ReducedMotion {
-		f |= fieldReducedMotion
 	}
 	if a.View.PanelBehind != b.View.PanelBehind {
 		f |= fieldPanelDepth
@@ -167,12 +152,6 @@ func merge(current, source Document, mask fields) Document {
 	}
 	if mask&fieldCamera != 0 {
 		current.View.Camera = source.View.Camera
-	}
-	if mask&fieldPresentation != 0 {
-		current.View.Presentation = source.View.Presentation
-	}
-	if mask&fieldReducedMotion != 0 {
-		current.View.ReducedMotion = source.View.ReducedMotion
 	}
 	if mask&fieldPanelDepth != 0 {
 		current.View.PanelBehind = source.View.PanelBehind
@@ -231,7 +210,7 @@ func (w *Workspace) CanUndo() bool { return w.windowThrow != nil || w.historyPos
 func (w *Workspace) CanRedo() bool { return w.windowThrow == nil && w.historyPosition < len(w.history) }
 
 // Dispatch validates before mutation, commits one undoable domain edit, and
-// never records playback ticks or presentation interpolation as user edits.
+// never records playback ticks or ambient animation as user edits.
 func (w *Workspace) Dispatch(action Action) error {
 	if w.desktop && studyAction(action.Kind) {
 		return fmt.Errorf("action %q belongs to the AXIAL study", action.Kind)
@@ -279,8 +258,8 @@ func (w *Workspace) Dispatch(action Action) error {
 		w.stopWindowThrows(w.m.applicationState.movementSelectionFor(action.ApplicationKey))
 	case ToggleApplicationSize:
 		w.stopWindowThrowForKey(w.m.applicationState.Active)
-	case OrbitCamera, PanCamera, ZoomCamera, TogglePresentation, SetPresentation, SwitchSpace, CreateSpace, RenameSpace, NavigatePortal:
-		// Navigation and presentation do not own any window's momentum.
+	case OrbitCamera, PanCamera, ZoomCamera, SwitchSpace, CreateSpace, RenameSpace, NavigatePortal:
+		// Navigation does not own any window's momentum.
 	default:
 		w.finishWindowThrow()
 	}
@@ -321,14 +300,6 @@ func reduce(d Document, a Action) (Document, error) {
 		d.View.Focused = !d.View.Focused
 	case SetFocused:
 		d.View.Focused = a.Enabled
-	case TogglePresentation:
-		d.View.Presentation = d.View.Presentation.Next()
-	case SetPresentation:
-		d.View.Presentation = a.Presentation
-	case ToggleReducedMotion:
-		d.View.ReducedMotion = !d.View.ReducedMotion
-	case SetReducedMotion:
-		d.View.ReducedMotion = a.Enabled
 	case TogglePanelDepth:
 		d.View.PanelBehind = !d.View.PanelBehind
 	case ToggleApplicationDepth, ToggleApplicationReading, ToggleApplicationSize, ToggleApplicationMinimized, ToggleApplicationMaximized, SelectApplication, ToggleApplicationOverview, ToggleApplicationPlacement, MoveApplications, MoveApplication, ResizeApplication, GroupApplications, UngroupApplications, ForgetClosedPlacements:
@@ -369,12 +340,8 @@ func reduce(d Document, a Action) (Document, error) {
 		d.View.Camera.TargetY = max(-100, min(100, d.View.Camera.TargetY+a.DeltaY))
 		d.View.Camera.TargetDepth = max(-40, min(40, d.View.Camera.TargetDepth+a.DeltaDepth))
 	case ResetStudy:
-		mode := d.View.Presentation
-		reducedMotion := d.View.ReducedMotion
 		applications := d.View.Application
 		d = initialModel().document()
-		d.View.Presentation = mode
-		d.View.ReducedMotion = reducedMotion
 		d.View.Application = applications
 	case ResetView:
 		d.View.Focused = false

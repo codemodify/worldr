@@ -10,11 +10,10 @@ objects. Existing terminals and browsers must share that space with native
 content. People should be able to push a group of windows into the background,
 work with other objects in front, and retrieve or focus any window easily.
 
-Presentation is selectable. Cinematic keeps its expressive framing during work;
-Adaptive preserves cinematic exploration and quiets the surroundings during
-focus. Both modes share native tools, compatibility, and spatial capabilities.
-The workspace and study implement this preference through guides, focus borders,
-authored background glow and mesh wire/rim accents. Its initial materials add light-responsive highlights and
+The presentation remains cinematic during exploration and focused work. The
+workspace and study keep expressive motion, guides, focus borders, authored
+background glow and mesh wire/rim accents active as one coherent visual system.
+Its initial materials add light-responsive highlights and
 smooth cylindrical shading in a cool blue/silver palette. The complete workspace
 visual treatment remains to be built.
 
@@ -62,9 +61,9 @@ use the same scene principles with their own real data and operations.
 
 The default experience is now the general spatial workspace, with a read-only
 native project browser, native PTY terminals and compatible application surfaces.
-Visible grips support dragging and inertial throws, with groups, one-step Undo
-and a Reduced Motion preference. AXIAL remains explicitly selectable as the
-engineering experience; it is not yet a hosted native 3D application.
+Visible grips support dragging and inertial throws, with groups and one-step
+Undo. AXIAL is available both as a hosted native 3D application and as an
+explicitly selected standalone engineering experience.
 
 Real native PTY terminals and separate foot clients share space and depth
 with native content. Placement, focus/return, grouping, overview, input,

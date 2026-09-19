@@ -130,7 +130,7 @@ func (layouts *ApplicationLayouts) UnmarshalJSON(data []byte) error {
 }
 
 func (m model) document() Document {
-	return Document{Version: DocumentVersion, Selection: componentIDs[m.selected], Timeline: TimelineState{Seconds: m.clock, Playing: m.playing}, View: ViewState{Exploded: m.exploded, Focused: m.focused, Camera: CameraState{Yaw: m.yaw, Pitch: m.pitch, Zoom: m.zoom, TargetX: m.cameraX, TargetY: m.cameraY, TargetDepth: m.cameraDepth}, Presentation: m.presentation, ReducedMotion: m.reducedMotion, PanelBehind: m.panelBehind, Application: m.applicationState}}
+	return Document{Version: DocumentVersion, Selection: componentIDs[m.selected], Timeline: TimelineState{Seconds: m.clock, Playing: m.playing}, View: ViewState{Exploded: m.exploded, Focused: m.focused, Camera: CameraState{Yaw: m.yaw, Pitch: m.pitch, Zoom: m.zoom, TargetX: m.cameraX, TargetY: m.cameraY, TargetDepth: m.cameraDepth}, Presentation: presentation.Cinematic, PanelBehind: m.panelBehind, Application: m.applicationState}}
 }
 
 func (d Document) Validate() error {
@@ -162,10 +162,13 @@ func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 func (w *Workspace) Document() Document { return w.m.document() }
 
 func (w *Workspace) install(d Document, snap bool) {
+	// Presentation and motion were selectable in version 1 documents. Keep the
+	// wire fields readable, but the current workspace always runs Cinematic at
+	// full motion.
+	d.View.Presentation = presentation.Cinematic
+	d.View.ReducedMotion = false
 	w.m.clock, w.m.playing = d.Timeline.Seconds, d.Timeline.Playing
 	w.m.exploded, w.m.focused = d.View.Exploded, d.View.Focused
-	w.m.presentation = d.View.Presentation
-	w.m.reducedMotion = d.View.ReducedMotion
 	w.m.panelBehind = d.View.PanelBehind
 	previousApplications := w.m.applicationState
 	w.m.applicationState = d.View.Application
@@ -175,8 +178,7 @@ func (w *Workspace) install(d Document, snap bool) {
 	w.m.zoom = d.View.Camera.Zoom
 	w.m.cameraX, w.m.cameraY, w.m.cameraDepth = d.View.Camera.TargetX, d.View.Camera.TargetY, d.View.Camera.TargetDepth
 	w.m.selected, _ = componentIndex(d.Selection)
-	if snap || w.m.reducedMotion {
-		w.presentationInitialized = false
+	if snap {
 		w.m.explosion = 0
 		if w.m.exploded {
 			w.m.explosion = 1
@@ -240,6 +242,8 @@ func (w *Workspace) LoadState(data []byte) error {
 	if err := d.Validate(); err != nil {
 		return err
 	}
+	d.View.Presentation = presentation.Cinematic
+	d.View.ReducedMotion = false
 	w.installLoadedDocument(d)
 	return nil
 }

@@ -108,8 +108,8 @@ physically based emission.
 
 `Scene.EffectPhase` (the low-level `View.EffectPhase`) is a normalized `[0,1]`
 scan phase. Changing it updates constants only. The workspace advances the phase
-on its transient presentation clock and freezes the current value under Reduced
-Motion; model, data and media playback continue. Holograms allocate no targets
+continuously on its transient presentation clock; model, data and media playback
+remain independent. Holograms allocate no targets
 beyond those already required by translucent geometry. They cannot be attached
 to an application texture or screen overlay, and the host cursor uses a separate
 path. With `Hologram == 0`, neither coverage nor color changes and the established

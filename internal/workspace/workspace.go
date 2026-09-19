@@ -3,6 +3,7 @@ package workspace
 import (
 	"fmt"
 	"math"
+	"math/bits"
 	"time"
 
 	"github.com/codemodify/worldr/internal/experience"
@@ -80,8 +81,6 @@ type Workspace struct {
 	historyPosition                                                   int
 	nextEditID                                                        uint64
 	demoStep                                                          int
-	presentationBlend                                                 float32
-	presentationInitialized                                           bool
 	helpOpen                                                          bool
 	helpKeys                                                          map[helpKey]bool
 	helpButtons                                                       map[uint32]bool
@@ -184,25 +183,24 @@ func (w *Workspace) Update(dt time.Duration) {
 		}
 	}
 	w.m.update(dt)
-	w.updatePresentation(dt)
 	w.updateBackground(dt)
 	w.updateHologram(dt)
 }
 func (w *Workspace) Info() experience.Info {
 	if w.desktop {
-		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the right app rail to open native tools · Super+drag empty space to pan · drag the bottom-right scene pad to orbit · drag a window grip or Super+primary to move and throw · use the square window control or Super+double-click to enter or leave Read · drag a window's bottom-right grip or Super+secondary to resize · use the other top-grip controls to minimize or close · Super+C closes the active app · Super+wheel changes hovered-window depth · New Terminal or Ctrl+Alt+Enter opens a shell · Ctrl+Alt+G opens spatial portals · Ctrl+Alt+Left/Right jumps groups · Ctrl+Alt+O finds windows · Enter reads the selected app · P changes presentation · F1 opens Help"}
+		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the right app rail to open native tools · Super+drag empty space to pan · drag the bottom-right scene pad to orbit · drag a window grip or Super+primary to move and throw · use the square window control or Super+double-click to enter or leave Read · drag a window's bottom-right grip or Super+secondary to resize · use the other top-grip controls to minimize or close · Super+C closes the active app · Super+wheel changes hovered-window depth · Ctrl+Alt+Enter opens a shell · Ctrl+Alt+G opens spatial portals · Ctrl+Alt+Left/Right jumps groups · Ctrl+Alt+O finds windows · Enter reads the selected app · F1 opens Help"}
 	}
 	if w.applications != nil {
-		return experience.Info{ID: "worldr.axial", Title: "worldr — AXIAL / 07", Controls: "New Terminal or Ctrl+Alt+Enter opens a shell · click app or press Enter from workspace to read and type · Ctrl+Alt+O overview from any app · overview: arrows select, Enter or Esc returns · O overview from workspace · drag scene to orbit, scroll scene to zoom · Place: drag apps, Shift+click to select, scroll for depth · Group moves selected apps together · Close Selected or Super+C requests closing the active window · click workspace to use native shortcuts"}
+		return experience.Info{ID: "worldr.axial", Title: "worldr — AXIAL / 07", Controls: "Ctrl+Alt+Enter opens a shell · click app or press Enter from workspace to read and type · Ctrl+Alt+O overview from any app · overview: arrows select, Enter or Esc returns · drag scene to orbit, scroll scene to zoom · Place: drag apps, Shift+click to select, scroll for depth · Group moves selected apps together · Super+C requests closing the active window · click workspace to use native shortcuts"}
 	}
-	return experience.Info{ID: "worldr.axial", Title: "worldr — AXIAL / 07", Controls: "drag to orbit · scroll scene to zoom · click to inspect · surface chart to scrub · B panel depth · E explode · Space pause · arrows scrub · F focus · P presentation · Shift+P reduced motion · R reset · Ctrl+Z undo · Ctrl+Shift+Z redo"}
+	return experience.Info{ID: "worldr.axial", Title: "worldr — AXIAL / 07", Controls: "drag to orbit · scroll scene to zoom · click to inspect · surface chart to scrub · B panel depth · E explode · Space pause · arrows scrub · F focus · R reset · Ctrl+Z undo · Ctrl+Shift+Z redo"}
 }
 func (w *Workspace) State() State {
-	return State{Time: w.m.clock, Playing: w.m.playing, Exploded: w.m.exploded, Focused: w.m.focused, Selected: w.m.selected, Explosion: w.m.explosion, Zoom: w.m.zoom, Yaw: w.m.yaw, Pitch: w.m.pitch, Presentation: w.m.presentation, ReducedMotion: w.m.reducedMotion, PanelBehind: w.m.panelBehind, ApplicationBehind: w.m.applicationBehind, ApplicationReading: w.m.applicationReading, ApplicationWide: w.m.applicationWide}
+	return State{Time: w.m.clock, Playing: w.m.playing, Exploded: w.m.exploded, Focused: w.m.focused, Selected: w.m.selected, Explosion: w.m.explosion, Zoom: w.m.zoom, Yaw: w.m.yaw, Pitch: w.m.pitch, Presentation: presentation.Cinematic, PanelBehind: w.m.panelBehind, ApplicationBehind: w.m.applicationBehind, ApplicationReading: w.m.applicationReading, ApplicationWide: w.m.applicationWide}
 }
 func (w *Workspace) Summary() string {
 	if w.desktop {
-		return fmt.Sprintf("Spatial workspace · %d applications · %s", len(w.applicationSurfaces), w.m.presentation)
+		return fmt.Sprintf("Spatial workspace · %d applications · Cinematic", len(w.applicationSurfaces))
 	}
 	return fmt.Sprintf("AXIAL / 07 · %s · t=%.2fs · playing=%t · exploded=%t", components[w.m.selected].name, w.m.clock, w.m.playing, w.m.exploded)
 }
@@ -237,21 +235,21 @@ func (w *Workspace) syncScene() {
 	eyeOffset := scene.Vec3{X: radius * float32(math.Cos(float64(w.m.pitch))) * float32(math.Cos(float64(w.m.yaw))), Y: radius * float32(math.Sin(float64(w.m.pitch))), Z: radius * float32(math.Cos(float64(w.m.pitch))) * float32(math.Sin(float64(w.m.yaw)))}
 	w.camera = scene.Camera{Eye: target.Add(eyeOffset), Target: target, Up: scene.Vec3{Y: 1}, FOV: 0.69, Near: 0.1, Far: 100}
 	stage := w.scene.Node(w.stageNode)
-	stage.Color = scene.ColorHex(teal, .3*w.presentationBlend)
-	stage.Hidden = w.desktop || w.presentationBlend == 0 || w.application.ID != 0 && (w.m.applicationReading || w.m.applicationState.Overview)
-	stage.Glow = [3]float32{.08 * w.presentationBlend, .28 * w.presentationBlend, .4 * w.presentationBlend}
+	stage.Color = scene.ColorHex(teal, .3)
+	stage.Hidden = w.desktop || w.application.ID != 0 && (w.m.applicationReading || w.m.applicationState.Overview)
+	stage.Glow = [3]float32{.08, .28, .4}
 	if w.desktop {
 		w.syncApplicationScene()
 		return
 	}
 	accent := w.scene.Node(w.accentNode)
-	accent.Color = scene.ColorHex(0x72dcfa, .85*w.presentationBlend)
+	accent.Color = scene.ColorHex(0x72dcfa, .85)
 	accent.Hidden = stage.Hidden
-	accent.Glow = [3]float32{.3 * w.presentationBlend, .85 * w.presentationBlend, w.presentationBlend}
+	accent.Glow = [3]float32{.3, .85, 1}
 	hologram := w.scene.Node(w.hologramNode)
 	hologram.Hidden = stage.Hidden
-	hologram.Color = scene.ColorHex(0x72dcfa, .28*w.presentationBlend)
-	hologram.Material.Hologram = .68 * w.presentationBlend
+	hologram.Color = scene.ColorHex(0x72dcfa, .28)
+	hologram.Material.Hologram = .68
 	rotation := float32(w.m.clock) * 0.6
 	w.scene.Node(w.nodes[0]).Transform = scene.Translate(-w.m.explosion*1.65, 0, 0)
 	w.scene.Node(w.nodes[1]).Transform = scene.Translate(w.m.explosion*0.2, 0, 0).Mul(scene.RotateX(rotation))
@@ -260,7 +258,6 @@ func (w *Workspace) syncScene() {
 		n := w.scene.Node(id)
 		n.Color = scene.ColorHex(components[i].color, 1)
 		n.Material = components[i].appearance
-		n.Material.RimStrength *= 0.15 + 0.85*w.presentationBlend
 		if i != w.m.selected {
 			n.Color.R *= 0.76
 			n.Color.G *= 0.78
@@ -270,8 +267,8 @@ func (w *Workspace) syncScene() {
 		n.WireColor = scene.Color{}
 		n.WireWidth = 0
 		if i == w.m.selected {
-			n.WireColor = scene.ColorHex(0xb4eaff, 0.025+0.24*w.presentationBlend)
-			n.WireWidth = (0.45 + 0.35*w.presentationBlend) * w.scale
+			n.WireColor = scene.ColorHex(0xb4eaff, .265)
+			n.WireWidth = .8 * w.scale
 		}
 	}
 	w.scene.Node(w.panelNode).Transform = panelTransform(w.m.panelBehind)
@@ -306,7 +303,6 @@ func (w *Workspace) Draw(width, height int) render.Frame {
 	if width != w.width || height != w.height {
 		w.finishWindowThrow()
 	}
-	w.initializePresentation()
 	w.layout(width, height)
 	w.syncScene()
 	if w.panel != nil && w.application.ID == 0 {
@@ -363,13 +359,6 @@ func (w *Workspace) drawHeader() {
 		subtitle = w.m.applicationState.spaceName(w.m.applicationState.Space) + "  /  TOOLS + SPACES"
 	}
 	w.shapedText(w.ox+226*w.scale, w.oy+49*w.scale, 17*w.scale, 300*w.scale, subtitle, w.color(ink, 1))
-	if _, ok := w.applications.(experience.ApplicationLauncher); ok {
-		w.button(applicationLaunchButton, "NEW TERMINAL", false)
-	}
-	w.text(741, 16, 10, "PRESENTATION  /  P", muted, 0.9)
-	w.drawMotionPreference()
-	w.button(cinematicButton, "CINEMATIC", w.m.presentation == presentation.Cinematic)
-	w.button(adaptiveButton, "ADAPTIVE", w.m.presentation == presentation.Adaptive)
 	resetLabel := "RESET  R"
 	if w.desktop {
 		resetLabel = "RESET VIEW"
@@ -377,7 +366,16 @@ func (w *Workspace) drawHeader() {
 	if w.applicationKeyboard && !w.desktop {
 		resetLabel = "RESET"
 	}
-	w.button(box{1110, 30, 123, 37}, resetLabel, false)
+	w.button(resetViewButton, resetLabel, false)
+	if w.application.ID != 0 {
+		place := "PLACE / GROUP"
+		if w.m.applicationState.Placing {
+			place = "DONE PLACING"
+		}
+		w.button(applicationPlaceButton, place, w.m.applicationState.Placing)
+		w.button(applicationGroupButton, "GROUP SELECTED", bits.OnesCount32(w.m.applicationState.Selected) > 1)
+		w.button(applicationUngroupButton, "UNGROUP", false)
+	}
 	if w.application.ID == 0 && !w.desktop {
 		w.button(box{1247, 30, 151, 37}, "FOCUS  F", w.m.focused)
 	}
@@ -493,14 +491,7 @@ func (w *Workspace) drawObjectControls() {
 		label = "EXPLODED VIEW"
 	}
 	w.text(296, 135, 12, label, muted, 1)
-	modeLabel := "CINEMATIC / ORBIT"
-	if w.m.presentation == presentation.Adaptive {
-		modeLabel = "ADAPTIVE / ORBIT"
-		if w.m.focused {
-			modeLabel = "ADAPTIVE / CALM FOCUS"
-		}
-	}
-	w.text(847, 135, 12, modeLabel, muted, 0.8)
+	w.text(847, 135, 12, "CINEMATIC / ORBIT", muted, 0.8)
 	if w.m.focused {
 		return
 	}
@@ -549,56 +540,11 @@ func (w *Workspace) drawTransport() {
 	}
 }
 
-// Presentation changes only decorative framing; camera, content and input share
-// the same scene in both modes. Adaptive calms the frame during focused work.
-func (w *Workspace) presentationTarget() float32 {
-	if w.m.presentation == presentation.Adaptive && (w.m.focused || w.application.ID != 0 && w.m.applicationReading) {
-		return 0
-	}
-	return 1
-}
-func (w *Workspace) initializePresentation() {
-	if !w.presentationInitialized || w.m.reducedMotion {
-		w.presentationBlend = w.presentationTarget()
-		w.presentationInitialized = true
-	}
-}
-func (w *Workspace) updatePresentation(dt time.Duration) {
-	w.initializePresentation()
-	if dt <= 0 {
-		return
-	}
-	target := w.presentationTarget()
-	w.presentationBlend += (target - w.presentationBlend) * float32(1-math.Exp(-dt.Seconds()*12))
-	if abs(target-w.presentationBlend) < 0.001 {
-		w.presentationBlend = target
-	}
-}
-
-var (
-	cinematicButton = box{727, 32, 173, 35}
-	adaptiveButton  = box{912, 32, 173, 35}
-	motionButton    = box{912, 10, 173, 20}
-)
-
-func (w *Workspace) drawMotionPreference() {
-	label, color := "FULL MOTION", muted
-	if w.m.reducedMotion {
-		label, color = "REDUCED MOTION", teal
-		w.rect(motionButton.x, motionButton.y, motionButton.w, motionButton.h, teal, .08)
-	}
-	w.text(motionButton.x+14, motionButton.y+4, 10, label, color, 1)
-	w.line(motionButton.x, motionButton.y+motionButton.h, motionButton.x+motionButton.w, motionButton.y+motionButton.h, 1, muted, .22)
-}
-
 func (w *Workspace) drawSpatialGuides() {
 	if w.desktop {
 		return
 	}
-	strength := w.presentationBlend
-	if strength <= 0 {
-		return
-	}
+	strength := float32(1)
 	centerX, centerY := float32(696), float32(443)
 	if w.m.focused {
 		centerX, centerY = 720, 435

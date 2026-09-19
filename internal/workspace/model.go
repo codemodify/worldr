@@ -47,15 +47,13 @@ type model struct {
 	explosion                                              float32
 	yaw, pitch, zoom                                       float32
 	cameraX, cameraY, cameraDepth                          float32
-	presentation                                           presentation.Mode
-	reducedMotion                                          bool
 	panelBehind                                            bool
 	applicationBehind, applicationReading, applicationWide bool
 	applicationState                                       ApplicationViewState
 }
 
 func initialModel() model {
-	return model{clock: 6, playing: true, selected: 1, yaw: 0.93, pitch: 0.32, presentation: presentation.Cinematic, panelBehind: true}
+	return model{clock: 6, playing: true, selected: 1, yaw: 0.93, pitch: 0.32, panelBehind: true}
 }
 
 func (m *model) update(dt time.Duration) {
@@ -70,11 +68,7 @@ func (m *model) update(dt time.Duration) {
 	if m.exploded {
 		target = 1
 	}
-	if m.reducedMotion {
-		m.explosion = target
-	} else {
-		m.explosion += (target - m.explosion) * float32(1-math.Exp(-seconds*7))
-	}
+	m.explosion += (target - m.explosion) * float32(1-math.Exp(-seconds*7))
 	if abs(m.explosion-target) < 0.0001 {
 		m.explosion = target
 	}

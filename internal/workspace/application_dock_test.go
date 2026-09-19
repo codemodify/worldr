@@ -199,15 +199,13 @@ func TestApplicationDockCancelDragAndUnavailableDoNotLaunch(t *testing.T) {
 	}
 }
 
-func TestApplicationDockCinematicDecorationCalmsWithoutMovingHitTargets(t *testing.T) {
+func TestApplicationDockKeepsCinematicDecorationAndStableHitTargets(t *testing.T) {
 	w, _ := desktopDock(t, "files", "terminal", "photo", "media", "model", "research", "note")
-	w.Draw(1440, 900)
-	w.presentationBlend = 1
 	cinematic := w.Draw(1440, 900)
-	w.presentationBlend = 0
-	adaptive := w.Draw(1440, 900)
-	if len(cinematic.Vertices) <= len(adaptive.Vertices) {
-		t.Fatal("cinematic dock did not add its circuit framing")
+	repeated := w.Draw(1440, 900)
+	plain := desktop(t).Draw(1440, 900)
+	if len(cinematic.Vertices) <= len(plain.Vertices) || len(repeated.Vertices) != len(cinematic.Vertices) {
+		t.Fatal("permanent cinematic dock framing was missing or unstable")
 	}
 	for i := range applicationDockEntries {
 		b := applicationDockButtonBounds(i)

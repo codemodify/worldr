@@ -202,9 +202,8 @@ func (w *Workspace) drawHelp() {
 		title string
 		rows  []helpEntry
 	}{
-		{282, "SPACE AND PRESENTATION", []helpEntry{
+		{282, "SPACE AND MOTION", []helpEntry{
 			{"Drag scene / scroll scene", "Orbit / zoom; app scrolling stays with the app."},
-			{"P / Shift+P", "Switch presentation / pause ambient motion and throws."},
 			{"1–3 / E / F", "Inspect a part / explode assembly / focus view."},
 			{"Space / left and right arrows", "Play or pause / step the study timeline."},
 			{"Ctrl+Z / Ctrl+Shift+Z", "Undo / redo workspace edits."},
@@ -213,8 +212,8 @@ func (w *Workspace) drawHelp() {
 			{"Ctrl+Alt+Q", "Quit worldr, including from a focused app."},
 		}},
 		{742, "APPLICATIONS AND NATIVE TERMINALS", []helpEntry{
-			{"Ctrl+Alt+Enter / New Terminal", "Open an independent native shell."},
-			{"Ctrl+Alt+O / Overview", "Find windows, including those behind objects."},
+			{"Ctrl+Alt+Enter", "Open an independent native shell."},
+			{"Ctrl+Alt+O", "Find windows, including those behind objects."},
 			{"Overview: arrows, then Enter", "Select a window and return to its workspace."},
 			{"Enter / Super+double-click", "Read the selected / directly pointed-to application."},
 			{"Top grip / Super+drag", "Move or throw windows; grab again to stop. Scroll for depth."},
@@ -224,14 +223,25 @@ func (w *Workspace) drawHelp() {
 		}},
 	}
 	if w.desktop {
-		columns[0].rows[0] = helpEntry{"Super+drag space / rotation pad", "Pan the workspace / orbit from the bottom-right pad."}
-		columns[0].rows[2] = helpEntry{"Read Selected / F", "Enlarge the active window, then return to space."}
-		columns[0].rows[3] = helpEntry{"Super+wheel / depth controls", "Move the hovered / selected windows through depth."}
-		columns[0].rows[5] = helpEntry{"Escape / R", "Cancel a gesture / reset the camera view."}
-		columns[1].rows[4] = helpEntry{"Top grip / Super+primary", "Move or throw a window; grab it again to stop."}
-		columns[1].rows[5] = helpEntry{"Corner grip / Super+secondary", "Resize a window freely; Escape cancels the gesture."}
-		columns[1].rows[6] = helpEntry{"Right APPS rail / Ctrl+Alt+Space", "Launch tools directly / search every tool and window."}
-		columns[1].rows = append(columns[1].rows, helpEntry{"Top-grip − □ / × or Super+C", "Hide / Read / close the active window."})
+		columns[0].rows = []helpEntry{
+			{"Super+drag space / rotation pad", "Pan the workspace / orbit from the bottom-right pad."},
+			{"Header Place / Group controls", "Arrange selections and make windows move together."},
+			{"Super+wheel / scroll while dragging", "Move windows through depth."},
+			{"Ctrl+Z / Ctrl+Shift+Z", "Undo / redo workspace edits."},
+			{"Escape / R", "Cancel a gesture / reset the camera view."},
+			{"Ctrl+S", "Save when started with a document path."},
+			{"Ctrl+Alt+Q", "Quit worldr, including from a focused app."},
+		}
+		columns[1].rows = []helpEntry{
+			{"Ctrl+Alt+Enter", "Open an independent native shell."},
+			{"Ctrl+Alt+O", "Find windows, including those behind objects."},
+			{"Overview: arrows, then Enter", "Select a window and return to its workspace."},
+			{"Super+double-click / top square", "Enter or leave Read for the pointed-to window."},
+			{"Top grip / Super+primary", "Move or throw a window; grab it again to stop."},
+			{"Corner grip / Super+secondary", "Resize a window freely; Escape cancels the gesture."},
+			{"Right APPS rail / Ctrl+Alt+Space", "Launch tools directly / search every tool and window."},
+			{"Top − / □ / × or Super+C", "Hide / Read / close the active window."},
+		}
 	}
 	for _, column := range columns {
 		w.text(column.x, 256, 11, column.title, muted, 1)

@@ -25,7 +25,8 @@ and opening a supported file hands it to the selected native viewer.
 
 A centered, vertical cyan 3D DNA double helix turns slowly behind the workspace, completing one
 rotation every 30 seconds. It stays behind application content and never captures
-input. Reduced Motion freezes the DNA; Adaptive Read fades it out.
+input. The cinematic presentation and its ambient motion remain active during
+normal workspace and Read views.
 
 **AXIAL / 07** is a hosted native 3D application in the general workspace; use
 its APPS-rail control or start with `--axial`. It can be moved, grouped, sent
@@ -81,8 +82,9 @@ forwards shutdown signals, and never switches users.
 Install `foot` to use the terminal compatibility path. It is a separate terminal
 process, connected through a private Wayland socket and rendered as a surface
 in the workspace. Click it to type, or press Enter from the workspace to read
-and type in the selected app. **Read selected / Return to space** provides
-a readable working view. Drag the visible grip above a window to move it, or
+and type in the selected app. Use **Win/Super + double-click** or the square
+control on its top grip to enter or leave a readable working view. Drag the
+visible grip above a window to move it, or
 use **Super+primary drag** over its content when the host desktop permits that
 shortcut. Drag the visible bottom-right grip to resize, or use
 **Super+secondary drag** anywhere over the window. Both the spatial frame and
@@ -92,12 +94,12 @@ view. **Win/Super+C** requests that the current active app close, including
 while that app owns keyboard focus. The provider may keep it open to present an
 unsaved-work confirmation. **Place / Group** also enables content dragging;
 Shift+click selects several apps and **Group selected** makes them move together.
-Scroll during a drag or use **Depth −/+** to move the selection through space;
+The header places **Place / Group**, **Group selected**, and **Ungroup** directly
+after **Reset View**. Scroll during a drag to move the selection through space;
 **Super+wheel** moves the hovered window (and its explicit group) without
 focusing it. **Super+primary drag** on empty workspace pans left, right, up or
-down. **Overview**
-retrieves hidden apps. **Size: Compact / Wide** resizes application content
-independently of its spatial placement.
+down. **Ctrl+Alt+O** retrieves hidden apps. Resize freely with the bottom-right
+grip or **Super+secondary drag**.
 
 Native terminals, foot and Konsole use cyan frames with chamfered corners,
 layered rails and an integrated top drag plate. The frame stays outside the
@@ -109,9 +111,8 @@ keep moving independently while you select, type in, drag or throw another one.
 Escape from the workspace stops gliding windows. A grouped selection travels
 together, and each drag plus its glide forms one undoable move. Escape during
 a held drag cancels that gesture.
-**Reduced Motion** disables throws while preserving direct dragging. Ordinary
-content dragging and scrolling remain with the application outside Place mode
-and the exact Super+primary shortcut.
+Full motion remains active: ordinary content dragging and scrolling stay with
+the application outside Place mode and the exact Super+primary shortcut.
 
 `--project=.` opens native Files rooted at the current directory.
 Select a file to preview UTF-8 text with line numbers; Enter, double-click or
@@ -261,11 +262,11 @@ Shared labels and editable fields use Pango/HarfBuzz shaping and nested
 text-input-v3 IME. The terminal keeps a fixed cell grid; available glyph and
 color-emoji coverage depends on installed fonts.
 
-**New Terminal** or **Ctrl+Alt+Enter** opens an independent native shell, even
+**Ctrl+Alt+Enter** opens an independent native shell, even
 while an application has focus or worldr was started without `--terminal`.
 It selects the new window and preserves Read mode. Click its content or press
-a fresh Enter from the workspace to start typing. **Close Selected** or the exact
-**Win/Super+C** chord requests closing only the active window, including when
+a fresh Enter from the workspace to start typing. The exact **Win/Super+C** chord
+requests closing only the active window, including when
 several windows are grouped or selected. The chord works while that app owns
 keyboard focus. Legacy apps can show
 their own unsaved-work confirmation before disappearing. Closing a naturally
@@ -319,40 +320,33 @@ to workspace input; click an app or press Enter to resume typing.
 | Play / pause AXIAL | Space |
 | Scrub AXIAL time | Drag the timeline; left / right arrows outside Overview |
 | Bring AXIAL's instrument panel forward / send it back | B, or the panel depth button |
-| Find all applications | Ctrl+Alt+O from any app, or Overview; O while workspace owns keyboard |
+| Find all applications | Ctrl+Alt+O from the workspace or any focused app |
 | Select an overview window | Unmodified arrow keys; one step per fresh press |
 | Leave overview without changing placement or granting app focus | Enter / keypad Enter, or Escape |
 | Read and type in the selected window | A fresh Enter / keypad Enter outside Overview; focused apps keep normal Enter behavior |
-| Open an independent native shell | Ctrl+Alt+Enter, or New Terminal in the header |
-| Request closing the active window | Win/Super+C from workspace or app focus, or Close Selected; the provider may keep it open for an unsaved-work prompt |
+| Open an independent native shell | Ctrl+Alt+Enter |
+| Request closing the active window | Win/Super+C from workspace or app focus; the provider may keep it open for an unsaved-work prompt |
 | Remove saved positions belonging only to closed windows | Forget Closed Placements; Ctrl+Z to undo |
 | Focus the object / read the selected app | F |
-| Switch presentation mode | Cinematic / Adaptive controls in the header, or P |
-| Reduce transitions, freeze background motion and disable throws | Full Motion / Reduced Motion in the header, or Shift+P |
 | Reset workspace view / reset AXIAL study | R |
 | Undo / redo | Ctrl+Z / Ctrl+Shift+Z or Ctrl+Y |
 | Cancel an active gesture / reset the view | Escape |
 | Save a configured document | Ctrl+S |
 | Quit | Ctrl+Alt+Q; Ctrl+Q with workspace focus; or close the host window |
 
-Presentation is selectable in both experiences. **Cinematic** keeps spatial
-guides and brighter mesh accents visible. **Adaptive** keeps that framing while
-exploring and calms it for Read mode; in AXIAL it also calms the model's cyan rim
-accents during focus (F). Switching modes preserves content, placement, camera,
-and available controls. Cinematic is the default;
-these are the first presentation controls, with the richer concept-art finish
-still ahead. The separate **Reduced Motion** preference completes explosion and
-framing transitions immediately and disables window throws. It preserves study
-playback, direct manipulation and application content; Space still pauses AXIAL.
-The preference is saved, undoable, and retained when resetting the view or study.
+Both experiences use the permanent **Cinematic** presentation. Spatial guides,
+mesh accents, authored glow, moving lights, transitions, and window throws keep
+their full motion during exploration and focused work. Content, placement,
+camera, and application pixels remain independent of those effects. The richer
+concept-art finish is still ahead; Space still pauses AXIAL playback.
 
 AXIAL now uses a cool blue/silver palette, highlights that respond to the camera
 and light, smooth shading on cylindrical walls, and a grid and rings anchored in
 world space. Caps and blade edges retain sharp shading boundaries. The world-space
-guides hide in Read and Overview and fade during Adaptive focus. Selective GPU
+guides hide in Read and Overview. Selective GPU
 glow accents active window borders, guides and two housing light bands. It follows
 scene occlusion and stays behind opaque app content, preserving terminal and
-browser pixels. Adaptive focus removes the glow and retains a crisp focus border.
+browser pixels. Focus retains the cinematic glow and a crisp focus border.
 The material pass now combines the directional key with up to four moving fill
 lights and supports depth-peeled thin-glass transmission. Lit translucent meshes
 can explicitly sample the opaque scene through bounded refraction, with at most
@@ -360,8 +354,8 @@ an 18-pixel normal-directed bend and an optional fixed five-tap frosted
 footprint of up to six pixels. The shared backdrop excludes screen overlays and
 the host cursor. Zero refraction preserves the previous transmission-only result
 and exact client/legacy texture pixels. Translucent native meshes can also use a
-depth-composited holographic projection with world-space scan bands, an
-opaque-depth contact cue and a Reduced Motion-aware phase; it cannot affect app
+depth-composited holographic projection with world-space scan bands and an
+opaque-depth contact cue; its ambient phase keeps moving and cannot affect app
 textures, shaped overlays or the host cursor. The renderer also has an opt-in
 bounded final-frame highlight bloom and SDR
 exposure/saturation/contrast finish. The mixed compositor workspace keeps that
@@ -385,8 +379,8 @@ Persistence is opt-in:
 An existing document loads before the display opens. Missing primary and recovery
 files start a new workspace or study; Ctrl+S and normal exit save to the chosen path. Saves atomically
 replace a private file. Workspace state uses the `worldr.workspace` identity and
-stores the camera, presentation and motion preferences, application positions,
-depths, groups, selection, read/overview mode and size preferences. AXIAL state
+stores the camera, application positions, depths, groups, selection,
+read/overview mode and window sizes. AXIAL state
 uses `worldr.axial` and also stores study selection, time and instrument panel
 depth. Keep separate files: one experience rejects the other's state.
 
@@ -418,8 +412,8 @@ unfinished held drag and stops a released window's glide at its current position
 before writing. Throw velocity is never saved or replayed. Without `--state`,
 worldr does not create document, recovery or lock files.
 
-Older documents without a presentation field load as Cinematic. Resetting the
-study preserves the chosen mode; undo/redo can restore a previous mode selection.
+Older documents with retired presentation or motion settings still load. Those
+fields normalize to permanent Cinematic presentation and full motion.
 
 Render a reproducible preview without opening a window:
 

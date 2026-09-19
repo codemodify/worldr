@@ -106,8 +106,6 @@ func TestDesktopStateRoundTripAndStudyStateRejection(t *testing.T) {
 	apps := desktopApplications(t, w)
 	command(t, w, Action{Kind: MoveApplications, DeltaX: 1.2, DeltaY: -.7, DeltaDepth: -2})
 	command(t, w, Action{Kind: OrbitCamera, DeltaX: 15, DeltaY: -20})
-	command(t, w, Action{Kind: SetPresentation, Presentation: presentation.Adaptive})
-	command(t, w, Action{Kind: SetReducedMotion, Enabled: true})
 	data, err := w.SaveState()
 	if err != nil {
 		t.Fatal(err)
@@ -127,6 +125,17 @@ func TestDesktopStateRoundTripAndStudyStateRejection(t *testing.T) {
 	loaded.Draw(1440, 900)
 	if loaded.Document() != w.Document() || loaded.application.ID != 900 || loaded.OwnsKeyboard() || loaded.CanUndo() {
 		t.Fatal("desktop restore lost stable placement/preferences or restored transient input/history")
+	}
+	legacy := bytes.Replace(data, []byte(`"presentation": "cinematic",`), []byte("\"presentation\": \"adaptive\",\n  \"reduced_motion\": true,"), 1)
+	if bytes.Equal(data, legacy) {
+		t.Fatal("legacy desktop fixture did not add removed preferences")
+	}
+	legacyLoaded := desktop(t)
+	if err := legacyLoaded.LoadState(legacy); err != nil {
+		t.Fatal(err)
+	}
+	if legacyLoaded.Document() != w.Document() || legacyLoaded.State().Presentation != presentation.Cinematic || legacyLoaded.State().ReducedMotion {
+		t.Fatal("legacy desktop preferences were not normalized to cinematic full motion")
 	}
 	studyState, err := study(t).SaveState()
 	if err != nil {
@@ -150,15 +159,14 @@ func TestDesktopResetViewPreservesApplicationPlacementAndPreferences(t *testing.
 	w := desktop(t)
 	desktopApplications(t, w)
 	command(t, w, Action{Kind: MoveApplications, DeltaX: .7, DeltaDepth: 1})
-	command(t, w, Action{Kind: SetPresentation, Presentation: presentation.Adaptive})
 	command(t, w, Action{Kind: OrbitCamera, DeltaX: 25, DeltaY: -10})
 	before := w.Document()
 	if !key(w, experience.KeyR, 0) {
 		t.Fatal("desktop R did not reset the view")
 	}
 	after := w.Document()
-	if after.View.Camera == before.View.Camera || after.View.Application.Layouts != before.View.Application.Layouts || after.View.Presentation != before.View.Presentation || after.Timeline != before.Timeline {
-		t.Fatal("desktop camera reset affected placements, presentation or study state")
+	if after.View.Camera == before.View.Camera || after.View.Application.Layouts != before.View.Application.Layouts || after.View.Presentation != presentation.Cinematic || after.View.ReducedMotion || after.Timeline != before.Timeline {
+		t.Fatal("desktop camera reset affected placements, presentation, motion, or study state")
 	}
 	command(t, w, Action{Kind: Undo})
 	if w.Document() != before {

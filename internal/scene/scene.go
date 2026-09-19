@@ -41,8 +41,8 @@ type Scene struct {
 	// Light is the world-space direction toward the light; zero keeps the
 	// original workspace light. Shadow is an explicit bounded light camera.
 	Light Vec3
-	// EffectPhase is forwarded to explicitly animated native materials. Keep it
-	// fixed when presentation motion is reduced; it never affects picking.
+	// EffectPhase is forwarded to explicitly animated native materials. Hosts
+	// advance it independently from application data; it never affects picking.
 	EffectPhase        float32
 	PointLights        []render.PointLight
 	Shadow             render.Shadow

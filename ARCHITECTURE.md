@@ -37,7 +37,7 @@ flowchart TB
 | `internal/sdkhost` | Launches SDK processes, isolates framed I/O, validates resources and adapts them to application surfaces |
 | `internal/accessibility` | Validates and streams bounded native semantic snapshots over a private Unix socket for external adapters |
 | `internal/experience` | Platform-independent events, metadata, lifecycle, and optional persistence/demo contracts |
-| `internal/presentation` | Shared Cinematic/Adaptive preference independent of content and display protocols |
+| `internal/presentation` | Permanent Cinematic presentation identity and retired document-value normalization |
 | `internal/terminal` | Native PTY process, libvterm cells, XKB/compose, key repeat, terminal input and history |
 | `internal/nativeapps` | Native terminal manager, independent providers, cell selection, retained image updates and application contract |
 | `internal/projectapp` | Read-only native directory/text browser, bounded asynchronous file access and copy-path clipboard |
@@ -128,9 +128,8 @@ and depth attachments at a smaller framebuffer extent, preserving the selected
 sample count. Added images are all half-resolution: one seed, one horizontal blur,
 and one final halo per used camera. At 2880×1800, their nominal RGBA8 storage is
 15.6 MB for one camera and 31.1 MB for four, excluding driver allocation overhead.
-AXIAL authors emission on active application
-borders, sparse guides and housing light bands. Adaptive focus removes their
-glow while retaining a crisp application focus border.
+AXIAL authors emission on active application borders, sparse guides and housing
+light bands. Focus retains the cinematic glow and a crisp application border.
 
 The experience and renderer run on one host goroutine. Frame slices are borrowed
 until the next draw/close; the host submits them before allowing mutation. Atlas
@@ -200,18 +199,14 @@ scene changes this distance; app scrolling and placement-depth scrolling retain
 their own routing. Read/Overview views keep their fitted camera. Zoom is undoable
 without rewinding playback, and resetting the view restores the original distance.
 
-The selected presentation mode is a persistent view preference. Cinematic keeps
-spatial framing visible; Adaptive fades guides and calms wire/rim accents while
-focused. AXIAL's procedural world-space grid and rings share the scene's camera
-and depth and hide in application Read/Overview views. Adaptive focus fades them.
-The fade itself is transient and does not change camera, document content, or
-input semantics. Existing version-1 documents without the optional presentation
-field default to Cinematic; explicit invalid values are rejected. Resetting the
-study preserves the selected mode. The independent Reduced Motion preference
-snaps explosion and framing interpolation to their target, including when enabled
-during a transition. It is persisted and undoable, survives reset, and defaults
-off for older documents. It changes neither the explicit playback clock nor app
-content. Header controls and Shift+P invoke the same action.
+The workspace permanently uses Cinematic presentation and full motion. Spatial
+framing, guides, wire/rim accents, ambient light, hologram phases and transitions
+remain active during focus. AXIAL's procedural world-space grid and rings share
+the scene's camera and depth and hide in application Read/Overview views. Retired
+version-1 presentation and motion values decode successfully, then normalize to
+Cinematic and full motion; other invalid presentation values are rejected.
+These compatibility fields do not change camera, document content, playback or
+input semantics.
 
 AXIAL also persists the instrument panel's front/back placement. B and the depth
 button invoke the same undoable action; older documents default to the rear
@@ -315,8 +310,8 @@ selected application, including a window hidden behind other content.
 Pointer selection retains its target through occlusion and
 beyond the viewport. Clicking workspace controls releases application focus.
 Read/return changes the camera and temporarily hides the model, preserving the
-saved placement and orbit. Compact/wide sends an application configure so the
-terminal grid reflows; it does not change the surface's world width.
+saved placement and orbit. Free resizing sends an application configure so the
+terminal grid reflows while the spatial frame follows the requested size.
 
 Application positions use a fixed world basis. Selected groups move together;
 one placement drag produces one undo entry. Overview temporarily arranges all
@@ -337,7 +332,7 @@ keys stay consumed through dismissal; closing does not restore typing focus.
 Focused applications keep their own F1. Guide visibility and input capture are
 outside saved documents and undo.
 
-Positions, group membership, selection and view/size preferences are saved and
+Positions, group membership, selection, Read/Overview state and window sizes are saved and
 undoable. Live protocol IDs, keyboard focus and processes are not serialized.
 Repeated `--app` options identify launch slots; `--apps` profiles provide named
 IDs and independent argument arrays that survive launch-order changes. Multiple
@@ -346,11 +341,11 @@ document restores native resources through its manifest; legacy applications
 still require matching launch arguments or a profile.
 
 The optional `ApplicationLauncher` and `ApplicationCloser` contracts handle live
-process actions outside document undo. New Terminal is available even with no
-live surfaces; Ctrl+Alt+Enter invokes the same launch while an application has
-focus. Main and keypad Enter work, with repeats and the matching release
-consumed by the workspace. Close Selected targets only the active live ID and leaves its
-surface present until the provider withdraws it. An in-workspace launch error
+process actions outside document undo. Ctrl+Alt+Enter launches a terminal even
+with no live surfaces or while an application has focus. Main and keypad Enter
+work, with repeats and the matching release consumed by the workspace.
+Win/Super+C targets only the active live ID and leaves its surface present until
+the provider withdraws it. The top-grip close control targets its own window. An in-workspace launch error
 produces a bounded ten-second notice, outside the document and undo history.
 The hub rejects launches at 32 live surfaces. Separately, old saved placements
 can occupy all 32 layout slots: if a launched terminal cannot be placed, the
@@ -412,9 +407,8 @@ browser GPU acceleration or general desktop compatibility.
 
 ## Native terminal path
 
-`nativeapps.Manager` starts without a shell. `--terminal`, Ctrl+Alt+Enter or a
-completed New Terminal click creates a provider with its own real PTY and
-libvterm 0.3+ state.
+`nativeapps.Manager` starts without a shell. `--terminal` or Ctrl+Alt+Enter
+creates a provider with its own real PTY and libvterm 0.3+ state.
 The manager supports up to 32 independent native terminals within the workspace
 limits. Reusable launch slots preserve layout keys; monotonically increasing
 runtime IDs prevent a reopened slot from receiving its predecessor's input.
@@ -576,8 +570,8 @@ windows share a displacement and stop together at layout bounds. Independent
 windows and groups can coast at the same time; interacting with another window
 does not stop them. Grabbing a moving window settles its own throw. Focus loss,
 viewport resize, saving and actions that replace the layout settle motion;
-Reduced Motion disables inertia. Each gesture forms one undo record in gesture
-order, and redo restores its resting position without replaying motion.
+inertia remains enabled for ordinary throws. Each gesture forms one undo record
+in gesture order, and redo restores its resting position without replaying motion.
 
 ## Hosted tools, spaces and shared UI
 

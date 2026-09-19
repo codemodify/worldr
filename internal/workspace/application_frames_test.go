@@ -2,10 +2,8 @@ package workspace
 
 import (
 	"testing"
-	"time"
 
 	"github.com/codemodify/worldr/internal/experience"
-	"github.com/codemodify/worldr/internal/presentation"
 	"github.com/codemodify/worldr/internal/render"
 	"github.com/codemodify/worldr/internal/scene"
 )
@@ -221,7 +219,7 @@ func TestApplicationFramesRetainResourcesAcrossViewResizeAndLifecycle(t *testing
 	}
 }
 
-func TestAdaptiveReadingKeepsQuietFocusFrameWithoutChangingContent(t *testing.T) {
+func TestCinematicReadingKeepsFocusFrameWithoutChangingContent(t *testing.T) {
 	w, apps := applicationStudy(t)
 	command(t, w, Action{Kind: ToggleApplicationReading})
 	w.Draw(1440, 900)
@@ -235,18 +233,12 @@ func TestAdaptiveReadingKeepsQuietFocusFrameWithoutChangingContent(t *testing.T)
 		t.Fatal("cinematic focused application did not emit its frame halo")
 	}
 	texture, revision := apps.surfaces[0].Texture, apps.surfaces[0].Texture.Revision()
-	command(t, w, Action{Kind: SetPresentation, Presentation: presentation.Adaptive})
-	w.Update(time.Second)
 	frame := w.Draw(1440, 900)
-	quiet := w.scene.Node(frameID).Color
-	if quiet.A >= bright.A || quiet.A < .5 || !w.OwnsKeyboard() {
-		t.Fatal("Adaptive reading removed its focus cue or did not quiet it")
+	if w.scene.Node(frameID).Color != bright || !w.OwnsKeyboard() {
+		t.Fatal("cinematic reading changed or lost its focus cue")
 	}
 	for _, command := range frame.Commands {
 		for _, draw := range command.Draws {
-			if draw.Glow != [3]float32{} {
-				t.Fatal("Adaptive reading retained a visible authored emitter")
-			}
 			if draw.Texture == texture && draw.Color != [4]float32{1, 1, 1, 1} {
 				t.Fatal("focus frame modified the application's content tint/alpha")
 			}
@@ -257,7 +249,7 @@ func TestAdaptiveReadingKeepsQuietFocusFrameWithoutChangingContent(t *testing.T)
 	}
 	w.Handle(experience.Event{Kind: experience.KeyboardCancel})
 	w.Draw(1440, 900)
-	if w.scene.Node(frameID).Color.A >= quiet.A {
+	if w.scene.Node(frameID).Color.A >= bright.A {
 		t.Fatal("keyboard cancellation retained the focused frame state")
 	}
 }
