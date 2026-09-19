@@ -66,10 +66,11 @@ func newIsolatedNestedHost(t *testing.T, width, height int) *isolatedNestedHost 
 			}
 		}
 		defer func() { server.Close(); retire() }()
-		if len(vk.DMABufFormats()) == 0 {
-			err = fmt.Errorf("private nested compositor needs Vulkan LINEAR DMA-BUF import")
-		} else {
-			err = server.SetDMABufImporter(vk.DMABufFormats(), vk.ImportDMABuf)
+		// Hardware renderers normally present through linux-dmabuf. Software
+		// Vulkan devices without an exportable DRM node use the compositor's
+		// wl_shm path while exercising the same nested input/recovery workflow.
+		if formats := vk.DMABufFormats(); len(formats) != 0 {
+			err = server.SetDMABufImporter(formats, vk.ImportDMABuf)
 		}
 		if err != nil {
 			ready <- err
@@ -288,13 +289,24 @@ while IFS= read -r line; do printf '%s\n' "$line" >> "$1"; done`
 	}
 	renderFrame()
 	var surfaceID uint64
+	var nestedTransport, nestedDevice string
 	compositor.call(t, func(server *apps.Server, surfaces []apps.Surface, vk *native.VK) error {
-		if len(surfaces) != 1 || surfaces[0].Texture == nil {
-			return fmt.Errorf("nested Vulkan frames did not map one GPU surface")
+		if len(surfaces) != 1 {
+			return fmt.Errorf("nested Vulkan frames mapped %d output surfaces, want one", len(surfaces))
 		}
-		surfaceID = surfaces[0].ID
+		surface := surfaces[0]
+		nestedTransport = "linux-dmabuf"
+		if surface.Texture == nil {
+			nestedTransport = "wl_shm"
+			if len(surface.Pixels) != surface.Width*surface.Height*4 {
+				return fmt.Errorf("nested Vulkan SHM output has %d bytes, want %d", len(surface.Pixels), surface.Width*surface.Height*4)
+			}
+		}
+		nestedDevice = vk.DeviceName()
+		surfaceID = surface.ID
 		return server.Focus(surfaceID)
 	})
+	t.Logf("private nested output transport=%s compositor=%q", nestedTransport, nestedDevice)
 	stroke := func(code, mods uint32) {
 		t.Helper()
 		compositor.call(t, func(server *apps.Server, _ []apps.Surface, vk *native.VK) error {
@@ -465,14 +477,27 @@ while IFS= read -r line; do printf '%s\n' "$line" >> "$1"; done`
 					return nil
 				}
 				surface := surfaces[0]
-				if surface.Texture == nil || surface.Width != p.w || surface.Height != p.h {
-					return fmt.Errorf("private output lost resized GPU image")
+				if surface.Width != p.w || surface.Height != p.h {
+					return fmt.Errorf("private output lost resized image")
 				}
 				if err := vk.Resize(uint32(p.w), uint32(p.h)); err != nil {
 					return err
 				}
+				texture := surface.Texture
+				if texture == nil {
+					if len(surface.Pixels) != surface.Width*surface.Height*4 {
+						return fmt.Errorf("private SHM output has %d bytes, want %d", len(surface.Pixels), surface.Width*surface.Height*4)
+					}
+					var err error
+					texture, err = render.NewTexture(surface.Width, surface.Height, surface.Pixels)
+					if err != nil {
+						return err
+					}
+					defer texture.Close()
+					defer vk.ReleaseTexture(texture.ID())
+				}
 				pixels = make([]byte, p.w*p.h*4)
-				frame := render.Frame{Commands: []render.Command{{Kind: render.ImageCommand, Image: render.Image{Texture: surface.Texture, Bounds: [4]float32{0, 0, float32(p.w), float32(p.h)}}}}}
+				frame := render.Frame{Commands: []render.Command{{Kind: render.ImageCommand, Image: render.Image{Texture: texture, Bounds: [4]float32{0, 0, float32(p.w), float32(p.h)}}}}}
 				return vk.RenderFrame(frame, [4]float32{0, 0, 0, 1}, pixels)
 			})
 			if pixels != nil {
