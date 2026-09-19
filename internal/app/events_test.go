@@ -31,12 +31,20 @@ func TestPlatformEventsUseSemanticKeys(t *testing.T) {
 			t.Fatal("host lost portal shortcut")
 		}
 	}
+	for _, code := range []uint32{'c', 'C'} {
+		if hostEvent(host.Event{Kind: host.Key, Code: code}).Key != experience.KeyC {
+			t.Fatal("host lost close shortcut")
+		}
+	}
 	var direct keyState
 	if direct.event(25, true).Key != experience.KeyP {
 		t.Fatal("direct-display input lost presentation shortcut")
 	}
 	if direct.event(34, true).Key != experience.KeyG {
 		t.Fatal("direct-display input lost portal shortcut")
+	}
+	if direct.event(46, true).Key != experience.KeyC {
+		t.Fatal("direct-display input lost close shortcut")
 	}
 }
 

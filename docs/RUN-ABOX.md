@@ -71,7 +71,9 @@ the logical client size and saved spatial frame update together. The three
 controls on a window's top grip hide it completely, toggle its Read view, or
 request that its provider close it. The square control and Win/Super +
 double-click use the same Read action; repeat the gesture there to return to the
-workspace. Overview and portals retrieve minimized windows.
+workspace. The exact Win/Super+C chord asks the provider to close the current
+active app even while that app owns keyboard focus. Overview and portals retrieve
+minimized windows.
 
 `--project=.` opens a native directory list and UTF-8 file preview. Use Up/Refresh,
 arrows/Enter/Backspace, or double-click an entry. Copy Path or Ctrl+Shift+C copies
@@ -83,7 +85,8 @@ assembly, Space pauses time, left/right scrub time, F focuses the model, and R
 resets it. Ctrl+Z undoes an edit; Ctrl+Shift+Z or Ctrl+Y redoes it. A full drag is
 one edit. Escape cancels an active gesture or restores the normal view.
 Ctrl+Alt+Q or the host window close button exits; Ctrl+Q also exits when the
-workspace owns the keyboard. Ordinary shortcuts reach a focused application.
+workspace owns the keyboard. Ordinary shortcuts reach a focused application;
+Win/Super+C remains reserved for the active-app close request.
 
 Use the Cinematic/Adaptive header controls or P to switch presentation. Cinematic
 keeps spatial framing and stronger wire/rim accents; Adaptive calms them during
@@ -132,8 +135,9 @@ windows free of automatic application-name cards.
 **New Terminal** or Ctrl+Alt+Enter creates an independent native shell
 and selects it; click its content or press a fresh Enter to read and type. The shortcut works from a focused
 native or legacy app, including with keypad Enter. This control is available even without `--terminal`
-and when no applications remain. **Close Selected** requests closing only the
-active window, even within a selected group; a legacy client can show an
+and when no applications remain. **Close Selected** or the exact Win/Super+C chord
+requests closing only the active window, even within a selected group. The chord
+works while that app owns keyboard focus; a legacy client can show an
 unsaved-work dialog before closing. Neither process action is undoable.
 Repeated `--app` options share trailing arguments; `--apps=profile.json` gives
 each launch its own stable ID and argument list. See the README profile example.

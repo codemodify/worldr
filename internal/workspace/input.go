@@ -89,6 +89,12 @@ func (w *Workspace) Handle(event experience.Event) bool {
 	}
 
 	w.syncApplications()
+	// A reserved Super+C stroke remains workspace-owned through modifier
+	// changes, modal transitions, repeats and release. Drain it before any
+	// newly opened command/help/portal surface can capture the tail.
+	if w.drainApplicationCloseShortcut(event) {
+		return true
+	}
 	w.observeApplicationReadInterruption(event)
 	if event.Kind == experience.PointerCancel || event.Kind == experience.KeyboardCancel ||
 		event.Kind == experience.PointerDown && w.commands != nil && w.commands.open {
@@ -122,6 +128,9 @@ func (w *Workspace) Handle(event experience.Event) bool {
 		return true
 	}
 	if w.handlePortalNavigation(event) {
+		return true
+	}
+	if w.handleApplicationCloseShortcut(event) {
 		return true
 	}
 	if w.handleApplicationReadGesture(event) {

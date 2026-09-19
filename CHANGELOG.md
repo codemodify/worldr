@@ -54,6 +54,10 @@
   chrome from Space while keeping it recoverable through Overview and portals.
   The square control now performs the same target-aware Read transition as
   Win/Super+double-click, and the duplicate header Read button is gone.
+- Added the exact Win/Super+C global shortcut for requesting that the current
+  active app close, including while it owns keyboard focus. A provider may keep
+  the app open for an unsaved-work confirmation; the shortcut targets only that
+  app and remains outside document undo.
 
 - Added the public `sdk/nativeapp/v1` process contract, a nonblocking host
   adapter, repeatable `--native-app` launch option and an external reference

@@ -125,7 +125,7 @@ func symbolKey(code uint32) experience.Key {
 		code -= 'a' - 'A'
 	}
 	switch code {
-	case 'B', 'E', 'F', 'G', 'O', 'P', 'R', 'S', 'Q', 'Z', 'Y', '1', '2', '3':
+	case 'B', 'C', 'E', 'F', 'G', 'O', 'P', 'R', 'S', 'Q', 'Z', 'Y', '1', '2', '3':
 		return experience.Key(string(rune(code)))
 	case ' ':
 		return experience.KeySpace
@@ -168,7 +168,7 @@ func (s *keyState) event(code uint32, pressed bool) experience.Event {
 	key := map[uint32]experience.Key{
 		1: experience.KeyEscape, 2: experience.Key1, 3: experience.Key2, 4: experience.Key3, 59: experience.KeyF1,
 		16: experience.KeyQ, 18: experience.KeyE, 19: experience.KeyR, 21: experience.KeyY, 24: experience.KeyO, 25: experience.KeyP,
-		34: experience.KeyG,
+		34: experience.KeyG, 46: experience.KeyC,
 		31: experience.KeyS, 33: experience.KeyF, 44: experience.KeyZ, 48: experience.KeyB, 57: experience.KeySpace,
 		105: experience.KeyLeft, 106: experience.KeyRight,
 	}[code]

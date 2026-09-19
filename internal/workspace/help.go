@@ -231,7 +231,7 @@ func (w *Workspace) drawHelp() {
 		columns[1].rows[4] = helpEntry{"Top grip / Super+primary", "Move or throw a window; grab it again to stop."}
 		columns[1].rows[5] = helpEntry{"Corner grip / Super+secondary", "Resize a window freely; Escape cancels the gesture."}
 		columns[1].rows[6] = helpEntry{"Right APPS rail / Ctrl+Alt+Space", "Launch tools directly / search every tool and window."}
-		columns[1].rows = append(columns[1].rows, helpEntry{"Top-grip  −  □  ×", "Hide window / toggle Read / close."})
+		columns[1].rows = append(columns[1].rows, helpEntry{"Top-grip − □ / × or Super+C", "Hide / Read / close the active window."})
 	}
 	for _, column := range columns {
 		w.text(column.x, 256, 11, column.title, muted, 1)

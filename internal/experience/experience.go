@@ -80,6 +80,7 @@ const (
 	KeyLeft    Key = "ArrowLeft"
 	KeyRight   Key = "ArrowRight"
 	KeyB       Key = "B"
+	KeyC       Key = "C"
 	KeyE       Key = "E"
 	KeyF       Key = "F"
 	KeyG       Key = "G"

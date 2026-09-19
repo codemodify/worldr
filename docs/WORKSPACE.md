@@ -40,7 +40,9 @@ Win/Super + double-click on window content toggles that window's Read view; the
 reserved clicks stay with the workspace rather than entering the application.
 The three perspective-correct controls on the top grip minimize, toggle Read or
 request closing that individual window. The square control performs the same
-Read action as Win/Super + double-click. Minimize hides the content and its
+Read action as Win/Super + double-click. The exact Win/Super+C chord requests
+closing the current active app even while it owns keyboard focus; its provider
+may keep it open to confirm unsaved work. Minimize hides the content and its
 complete frame; Overview and portals reveal and restore minimized windows.
 Place mode also makes content draggable and offers Shift+click selection for
 groups. Scrolling during a held drag moves the selection through depth without
@@ -266,7 +268,10 @@ in a nested session. Native terminals have independent shells and input focus;
 including when no apps are open or another app has input focus.
 Launching selects the window; a click or a fresh Enter from the workspace
 explicitly grants typing focus. Enter also opens Read for the selected window.
-**Close Selected** requests closing only the active window. Shells
+**Close Selected** or the exact Win/Super+C chord requests closing only the active
+window, even within a selected group. The chord remains available while that
+app owns keyboard focus. A provider can keep the window open for an unsaved-work
+confirmation. Shells
 that exit naturally keep their final output until explicitly closed.
 
 **Chromium** and **Konsole** have isolated real-client tests for typing, menus,

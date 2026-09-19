@@ -215,12 +215,7 @@ func (w *Workspace) handleApplicationWindowControl(event experience.Event) bool 
 				if !ok {
 					return true
 				}
-				if w.applicationFocusedID == surface.ID || w.applicationCapturedID == surface.ID {
-					w.clearApplicationFocus()
-				} else if w.applicationHoveredID == surface.ID {
-					w.clearApplicationHover()
-				}
-				closer.CloseApplication(surface.ID)
+				w.requestApplicationClose(surface, closer)
 			}
 			return true
 		case experience.PointerCancel, experience.KeyboardCancel:

@@ -88,9 +88,11 @@ shortcut. Drag the visible bottom-right grip to resize, or use
 **Super+secondary drag** anywhere over the window. Both the spatial frame and
 the client logical size follow the gesture, and the saved layout restores that
 size after reconnecting. **Win/Super + double-click** toggles the window's Read
-view. **Place / Group** also enables content dragging; Shift+click selects
-several apps and **Group selected** makes them move together. Scroll during a
-drag or use **Depth −/+** to move the selection through space;
+view. **Win/Super+C** requests that the current active app close, including
+while that app owns keyboard focus. The provider may keep it open to present an
+unsaved-work confirmation. **Place / Group** also enables content dragging;
+Shift+click selects several apps and **Group selected** makes them move together.
+Scroll during a drag or use **Depth −/+** to move the selection through space;
 **Super+wheel** moves the hovered window (and its explicit group) without
 focusing it. **Super+primary drag** on empty workspace pans left, right, up or
 down. **Overview**
@@ -184,8 +186,10 @@ explicit different `--project` chooses a new root; repeating the saved root keep
 its saved navigation.
 
 While an application owns the keyboard, its normal keys and Ctrl shortcuts go to
-that application. Click workspace controls to return keyboard ownership to
-worldr. **Ctrl+Alt+Q always exits worldr**. Application arguments follow `--`:
+that application. The exact **Win/Super+C** chord remains reserved for requesting
+that the current active app close. Click workspace controls to return keyboard
+ownership to worldr. **Ctrl+Alt+Q always exits worldr**. Application arguments
+follow `--`:
 
 ```sh
 ./bin/worldr-shell --backend=nested --app=foot -- --config=/dev/null
@@ -260,8 +264,10 @@ color-emoji coverage depends on installed fonts.
 **New Terminal** or **Ctrl+Alt+Enter** opens an independent native shell, even
 while an application has focus or worldr was started without `--terminal`.
 It selects the new window and preserves Read mode. Click its content or press
-a fresh Enter from the workspace to start typing. **Close Selected** requests closing only the active window,
-including when several windows are grouped or selected. Legacy apps can show
+a fresh Enter from the workspace to start typing. **Close Selected** or the exact
+**Win/Super+C** chord requests closing only the active window, including when
+several windows are grouped or selected. The chord works while that app owns
+keyboard focus. Legacy apps can show
 their own unsaved-work confirmation before disappearing. Closing a naturally
 exited native shell dismisses its retained output. Launch and close are process
 actions and are not undoable.
@@ -318,7 +324,7 @@ to workspace input; click an app or press Enter to resume typing.
 | Leave overview without changing placement or granting app focus | Enter / keypad Enter, or Escape |
 | Read and type in the selected window | A fresh Enter / keypad Enter outside Overview; focused apps keep normal Enter behavior |
 | Open an independent native shell | Ctrl+Alt+Enter, or New Terminal in the header |
-| Request closing the active window | Close Selected |
+| Request closing the active window | Win/Super+C from workspace or app focus, or Close Selected; the provider may keep it open for an unsaved-work prompt |
 | Remove saved positions belonging only to closed windows | Forget Closed Placements; Ctrl+Z to undo |
 | Focus the object / read the selected app | F |
 | Switch presentation mode | Cinematic / Adaptive controls in the header, or P |
