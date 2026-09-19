@@ -32,10 +32,19 @@ Positions should remain understandable when moving between overview and work.
 
 Windows have a visible grip above their content. Drag it to place a window, or
 use Super+primary drag over content where the host desktop permits the shortcut.
+An exposed bottom-right grip resizes the window with an ordinary primary drag;
+Super+secondary drag over content provides the same continuous resize where the
+host permits it. The requested logical size, spatial frame and client surface
+change together, persist in the workspace document and restore on reconnect.
+The three perspective-correct controls on the top grip minimize, maximize or
+request closing that individual window. Minimize leaves a visible spatial strip;
+Overview and portals restore minimized windows when selected. Maximize preserves
+the exact prior dimensions for restore, and both size actions are undoable.
 Place mode also makes content draggable and offers Shift+click selection for
 groups. Scrolling during a held drag moves the selection through depth without
-introducing a lateral jump. The grip follows perspective and visible scene
-occlusion, and hides in Read and Overview.
+introducing a lateral jump. Super+wheel changes the hovered window's depth
+without focusing it; an explicit group moves with that window. The grips follow
+perspective and visible scene occlusion, and hide in Read and Overview.
 
 Releasing a moving window throws it in the direction of the drag. Exponential
 deceleration slows it to a crawl before it stops; grouped windows keep their
@@ -54,7 +63,8 @@ focus restores the previous spatial context. A terminal needs a readable,
 nearly face-on view for typing; exploration can use more dramatic perspective.
 Selection, keyboard focus, and camera focus are separate states with clear cues.
 Camera movement must never silently change where a keystroke goes.
-Dragging empty workspace does not rotate the scene. A fixed rotation pad in the
+Super+primary dragging empty workspace pans the saved camera target horizontally
+and vertically without moving windows. Empty unmodified drags remain inert. A fixed rotation pad in the
 bottom-right corner owns that gesture and shows the current yaw and pitch; the
 former center reticle and floor grid live inside this compact control instead.
 
@@ -100,7 +110,8 @@ image; there is no title bar, drag grip or image toolbar. Click and drag the pho
 the workspace. The surface follows the photo's aspect ratio, showing the whole
 image without a surrounding matte. JPEG, PNG, WebP, BMP and the first GIF frame
 are supported, including automatic JPEG EXIF orientation. There are no manual
-zoom, pan or rotation controls. Images decode on one bounded worker; canceled or
+zoom, pan, rotation, resize or window-chrome controls; this preserves the
+deliberately minimal viewer requested for photos. Images decode on one bounded worker; canceled or
 superseded loads cannot replace newer content. Opening another photo creates another independently placed viewer (up to eight). Failed
 loads show a minimal error message. Neither loading nor completion takes focus
 or moves the workspace camera.

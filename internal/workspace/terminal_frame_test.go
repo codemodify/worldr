@@ -54,7 +54,7 @@ func TestCinematicFrameClassificationTracksMetadataWithoutReplacingNodes(t *test
 		} else if border.Mesh != w.applicationFrameMesh || grip.Mesh != w.applicationDragHandleMesh {
 			t.Fatalf("unrecognized identity %q received terminal decorations", test.appID)
 		}
-		if !border.Unpickable || !border.DepthReadOnly || !border.Unlit || grip.Unpickable || len(w.scene.Children(rootID)) != 2 {
+		if !border.Unpickable || !border.DepthReadOnly || !border.Unlit || grip.Unpickable || len(w.scene.Children(rootID)) != 3 || len(w.scene.Children(gripID)) != 1 {
 			t.Fatal("style switch changed decoration input/depth policy or ownership")
 		}
 		if before != w.Document() || apps.surfaces[0].Texture.Revision() != revision || len(apps.events) != 0 {

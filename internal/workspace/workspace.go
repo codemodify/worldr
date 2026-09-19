@@ -50,6 +50,11 @@ type Workspace struct {
 	terminalDragHandleMesh                                            *scene.Mesh
 	applicationDragHandles                                            map[uint64]scene.NodeID
 	applicationDragHandleMesh                                         *scene.Mesh
+	applicationWindowControls                                         map[uint64]scene.NodeID
+	applicationWindowControlMesh                                      *scene.Mesh
+	applicationMinimizedBarMesh                                       *scene.Mesh
+	applicationResizeHandles                                          map[uint64]scene.NodeID
+	applicationResizeHandleMesh                                       *scene.Mesh
 	windowDragButtons                                                 map[uint32]bool
 	windowThrow                                                       *windowThrow
 	applicationKeys                                                   map[uint64]string
@@ -184,7 +189,7 @@ func (w *Workspace) Update(dt time.Duration) {
 }
 func (w *Workspace) Info() experience.Info {
 	if w.desktop {
-		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the right app rail to open native tools · drag the bottom-right scene rotation pad to orbit · drag a window grip or the photo itself; release moving to throw, grab again to stop · Super+drag also moves windows where the host permits · scroll while dragging for depth · New Terminal or Ctrl+Alt+Enter opens a shell · Ctrl+Alt+G opens spatial portals · Ctrl+Alt+Left/Right jumps groups · Ctrl+Alt+O finds windows · Enter reads the selected app · P changes presentation · F1 opens Help"}
+		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the right app rail to open native tools · Super+drag empty space to pan · drag the bottom-right scene pad to orbit · drag a window grip or Super+primary to move and throw · drag a window's bottom-right grip or Super+secondary to resize · use top-grip controls to minimize, maximize, restore or close · Super+wheel changes hovered-window depth · New Terminal or Ctrl+Alt+Enter opens a shell · Ctrl+Alt+G opens spatial portals · Ctrl+Alt+Left/Right jumps groups · Ctrl+Alt+O finds windows · Enter reads the selected app · P changes presentation · F1 opens Help"}
 	}
 	if w.applications != nil {
 		return experience.Info{ID: "worldr.axial", Title: "worldr — AXIAL / 07", Controls: "New Terminal or Ctrl+Alt+Enter opens a shell · click app or press Enter from workspace to read and type · Ctrl+Alt+O overview from any app · overview: arrows select, Enter or Esc returns · O overview from workspace · drag scene to orbit, scroll scene to zoom · Place: drag apps, Shift+click to select, scroll for depth · Group moves selected apps together · Close Selected requests closing the active window · click workspace to use native shortcuts"}

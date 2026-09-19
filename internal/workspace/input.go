@@ -1,6 +1,8 @@
 package workspace
 
 import (
+	"math"
+
 	"github.com/codemodify/worldr/internal/experience"
 	"github.com/codemodify/worldr/internal/presentation"
 	"github.com/codemodify/worldr/internal/scene"
@@ -28,6 +30,9 @@ const (
 	captureApplicationLaunch
 	captureForgetClosedPlacements
 	captureApplicationDock
+	captureWorkspacePan
+	captureApplicationResize
+	captureApplicationWindowControl
 )
 
 type pointerCapture struct {
@@ -48,15 +53,22 @@ type pointerCapture struct {
 	dragViewport                  scene.Viewport
 	dragSamples                   [32]windowDragSample
 	dragSampleCount               int
+	panHorizontal, panVertical    scene.Vec3
+	resizeKey                     string
+	resizeWidth, resizeHeight     int
+	resizeRatioX, resizeRatioY    float32
+	resizeWorldX, resizeWorldY    float32
+	resizeAnchor                  bool
+	resizeButton                  uint32
 }
 
 func (p pointerCapture) mask() fields {
 	switch p.kind {
-	case captureOrbit, captureOrbitPad:
+	case captureOrbit, captureOrbitPad, captureWorkspacePan:
 		return fieldCamera
 	case captureTimeline, captureSurfaceTimeline:
 		return fieldTime | fieldPlaying
-	case captureApplicationPlacement:
+	case captureApplicationPlacement, captureApplicationResize:
 		return fieldApplicationLayout
 	}
 	return 0
@@ -95,7 +107,19 @@ func (w *Workspace) Handle(event experience.Event) bool {
 	if w.handlePortalNavigation(event) {
 		return true
 	}
-	if w.windowThrow != nil && !w.applicationKeyboard && !w.pointer.windowDrag && event.Kind == experience.KeyInput && event.Pressed && !event.Repeat && event.Modifiers == 0 && (event.Key == experience.KeyEscape || event.Keycode == 1) {
+	// The Super+wheel window gesture also owns window chrome. Route it before
+	// ordinary control hover so scrolling over a minimize/maximize/close plate
+	// still changes the hovered window's depth.
+	if w.handleWindowDepthWheel(event) {
+		return true
+	}
+	if w.handleApplicationWindowControl(event) {
+		return true
+	}
+	// Escape belongs to an active pointer gesture before it can stop an
+	// unrelated coasting window. Otherwise a held resize or workspace pan can
+	// be stranded when another window is still moving under inertia.
+	if w.windowThrow != nil && !w.applicationKeyboard && w.pointer.kind == captureNone && event.Kind == experience.KeyInput && event.Pressed && !event.Repeat && event.Modifiers == 0 && (event.Key == experience.KeyEscape || event.Keycode == 1) {
 		w.finishWindowThrow()
 		w.helpKeys[helpStroke(event)] = true
 		return true
@@ -138,6 +162,9 @@ func (w *Workspace) Handle(event experience.Event) bool {
 		p := pointerCapture{start: w.Document(), pressX: x, pressY: y, lastX: x, lastY: y, scale: w.scale, ox: w.ox, oy: w.oy}
 		if !w.desktop && (box{297, 803, 1095, 63}).contains(x, y) {
 			p.kind = captureTimeline
+		} else if w.desktop && event.Modifiers == experience.ModSuper && w.inViewport(x, y) {
+			p.kind = captureWorkspacePan
+			p.panHorizontal, p.panVertical = w.workspacePanVectors()
 		} else if !w.desktop && w.inViewport(x, y) {
 			p.kind = captureOrbit
 			if hit, ok := w.surfaceHit(event.X, event.Y); ok {
@@ -217,7 +244,8 @@ func (w *Workspace) handleOverviewShortcut(event experience.Event) bool {
 		}
 		return true
 	}
-	if w.application.ID == 0 || event.Key != experience.KeyO || event.Modifiers != experience.ModControl|experience.ModAlt {
+	if event.Key != experience.KeyO || event.Modifiers != experience.ModControl|experience.ModAlt ||
+		w.application.ID == 0 && len(w.visibleApplications()) == 0 {
 		return false
 	}
 	if event.Pressed && !event.Repeat {
@@ -243,7 +271,32 @@ func (w *Workspace) movePointer(px, py float32) {
 	if (p.kind == captureOrbit || p.kind == captureOrbitPad) && p.dragged {
 		w.preview(Action{Kind: OrbitCamera, DeltaX: x - p.lastX, DeltaY: y - p.lastY})
 	}
+	if p.kind == captureWorkspacePan && p.dragged {
+		delta := p.panHorizontal.Mul(x - p.lastX).Add(p.panVertical.Mul(y - p.lastY))
+		w.preview(Action{Kind: PanCamera, DeltaX: delta.X, DeltaY: delta.Y, DeltaDepth: delta.Z})
+	}
 	p.lastX, p.lastY = x, y
+}
+
+// workspacePanVectors map one design-space pointer unit onto the saved fixed
+// application basis. Moving the camera opposite a horizontal drag and along a
+// downward drag's screen-up direction makes scene content follow the pointer,
+// independent of the current orbit and zoom.
+func (w *Workspace) workspacePanVectors() (horizontal, vertical scene.Vec3) {
+	forward := w.camera.Target.Sub(w.camera.Eye).Normalize()
+	right := forward.Cross(w.camera.Up).Normalize()
+	up := right.Cross(forward).Normalize()
+	distance := w.camera.Eye.Sub(w.camera.Target).Length()
+	fov := w.camera.FOV
+	if fov <= 0 || fov >= math.Pi {
+		fov = math.Pi / 4
+	}
+	perDesignUnit := float32(2*math.Tan(float64(fov)/2)) * distance * w.scale / w.viewport.Height
+	worldHorizontal := right.Mul(-perDesignUnit)
+	worldVertical := up.Mul(perDesignUnit)
+	fixedRight, fixedUp, fixedNormal := applicationBasis()
+	return scene.Vec3{X: worldHorizontal.Dot(fixedRight), Y: worldHorizontal.Dot(fixedUp), Z: worldHorizontal.Dot(fixedNormal)},
+		scene.Vec3{X: worldVertical.Dot(fixedRight), Y: worldVertical.Dot(fixedUp), Z: worldVertical.Dot(fixedNormal)}
 }
 
 // A gesture applies live semantic previews, then produces one edit at release.
@@ -258,8 +311,11 @@ func (w *Workspace) commitPointer() {
 		return
 	}
 	before, after := w.pointer.start, w.Document()
-	if w.pointer.kind == captureApplicationPlacement {
+	switch w.pointer.kind {
+	case captureApplicationPlacement:
 		before = windowDragBefore(w.pointer, after)
+	case captureApplicationResize:
+		before = windowResizeBefore(w.pointer, after)
 	}
 	w.record(before, after, w.pointer.mask())
 	w.pointer = pointerCapture{}
@@ -268,9 +324,12 @@ func (w *Workspace) cancelPointer() bool {
 	if w.pointer.kind == captureNone {
 		return false
 	}
-	if w.pointer.kind == captureApplicationPlacement {
+	switch w.pointer.kind {
+	case captureApplicationPlacement:
 		w.install(windowDragBefore(w.pointer, w.Document()), false)
-	} else {
+	case captureApplicationResize:
+		w.install(windowResizeBefore(w.pointer, w.Document()), false)
+	default:
 		w.install(merge(w.Document(), w.pointer.start, w.pointer.mask()), false)
 	}
 	w.pointer = pointerCapture{}
@@ -423,7 +482,9 @@ func (w *Workspace) handleKey(event experience.Event) bool {
 				action.Kind = ResetView
 			}
 		case experience.KeyO:
-			if w.application.ID == 0 {
+			// A minimized window intentionally leaves no current application,
+			// but Overview is also the recovery path for that collapsed window.
+			if w.application.ID == 0 && len(w.visibleApplications()) == 0 {
 				return false
 			}
 			action.Kind = ToggleApplicationOverview

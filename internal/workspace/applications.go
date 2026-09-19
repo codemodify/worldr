@@ -37,6 +37,8 @@ func (w *Workspace) SetApplications(applications experience.Applications) {
 	w.applicationSpatial = make(map[uint64]*spatialMount)
 	w.applicationFrames = make(map[uint64]scene.NodeID)
 	w.applicationDragHandles = make(map[uint64]scene.NodeID)
+	w.applicationWindowControls = make(map[uint64]scene.NodeID)
+	w.applicationResizeHandles = make(map[uint64]scene.NodeID)
 	w.applicationKeys = make(map[uint64]string)
 	w.applicationSurfaces = nil
 	w.applicationNode = 0
@@ -111,6 +113,8 @@ func (w *Workspace) syncApplications() {
 		w.applicationNodes = make(map[uint64]scene.NodeID)
 		w.applicationFrames = make(map[uint64]scene.NodeID)
 		w.applicationDragHandles = make(map[uint64]scene.NodeID)
+		w.applicationWindowControls = make(map[uint64]scene.NodeID)
+		w.applicationResizeHandles = make(map[uint64]scene.NodeID)
 		w.applicationKeys = make(map[uint64]string)
 	}
 	live := make(map[uint64]bool)
@@ -226,6 +230,8 @@ func (w *Workspace) syncApplications() {
 			delete(w.applicationNodes, id)
 			delete(w.applicationFrames, id)
 			delete(w.applicationDragHandles, id)
+			delete(w.applicationWindowControls, id)
+			delete(w.applicationResizeHandles, id)
 			delete(w.applicationSpatial, id)
 		}
 	}
@@ -243,14 +249,19 @@ func (w *Workspace) syncApplications() {
 	visible := w.visibleApplications()
 	activeVisible := false
 	for _, s := range visible {
-		activeVisible = activeVisible || s.Key == w.m.applicationState.Active
+		i := w.m.applicationState.index(s.Key)
+		activeVisible = activeVisible || s.Key == w.m.applicationState.Active && i >= 0 && !w.m.applicationState.Layouts[i].Minimized
 	}
 	if len(visible) > 0 && !activeVisible {
 		w.m.applicationState.Active = ""
 		w.m.applicationState.Selected = 0
-		if len(visible) > 0 {
-			w.m.applicationState.Active = visible[0].Key
-			w.m.applicationState.Selected = 1 << w.m.applicationState.index(visible[0].Key)
+		for _, surface := range visible {
+			i := w.m.applicationState.index(surface.Key)
+			if i >= 0 && !w.m.applicationState.Layouts[i].Minimized {
+				w.m.applicationState.Active = surface.Key
+				w.m.applicationState.Selected = 1 << i
+				break
+			}
 		}
 	}
 	w.selectCurrentApplication()
@@ -260,7 +271,8 @@ func (w *Workspace) selectCurrentApplication() {
 	w.application = experience.ApplicationSurface{}
 	w.applicationNode = 0
 	for _, surface := range w.applicationSurfaces {
-		if surface.Key == w.m.applicationState.Active && w.inCurrentSpace(surface) {
+		i := w.m.applicationState.index(surface.Key)
+		if surface.Key == w.m.applicationState.Active && w.inCurrentSpace(surface) && i >= 0 && !w.m.applicationState.Layouts[i].Minimized {
 			w.application = surface
 			w.applicationNode = w.applicationNodes[surface.ID]
 			break
@@ -278,10 +290,20 @@ func (w *Workspace) installApplicationView(previous ApplicationViewState) {
 	w.selectCurrentApplication()
 	for _, surface := range w.applicationSurfaces {
 		i, j := v.index(surface.Key), previous.index(surface.Key)
-		if i >= 0 && (j < 0 || v.Layouts[i].Wide != previous.Layouts[j].Wide) {
+		if i >= 0 && (j < 0 || v.Layouts[i].Wide != previous.Layouts[j].Wide || v.Layouts[i].Width != previous.Layouts[j].Width || v.Layouts[i].Height != previous.Layouts[j].Height) {
 			w.resizeApplicationSurface(surface)
 		}
 	}
+}
+
+func applicationLogicalSize(placement ApplicationPlacement) (width, height int) {
+	if placement.Width != 0 && placement.Height != 0 {
+		return placement.Width, placement.Height
+	}
+	if placement.Wide {
+		return 1440, 900
+	}
+	return 960, 600
 }
 
 func (w *Workspace) resizeApplicationSurface(surface experience.ApplicationSurface) {
@@ -292,10 +314,7 @@ func (w *Workspace) resizeApplicationSurface(surface experience.ApplicationSurfa
 	if i < 0 {
 		return
 	}
-	width, height := 960, 600
-	if w.m.applicationState.Layouts[i].Wide {
-		width, height = 1440, 900
-	}
+	width, height := applicationLogicalSize(w.m.applicationState.Layouts[i])
 	w.applications.Resize(surface.ID, width, height)
 }
 
@@ -316,10 +335,24 @@ func (w *Workspace) applicationTransformFor(surface experience.ApplicationSurfac
 	placement := w.m.applicationState.Layouts[w.m.applicationState.index(surface.Key)]
 	center := right.Mul(placement.X).Add(up.Mul(placement.Y)).Add(normal.Mul(placement.Depth))
 	width := float32(4.6)
-	tw, th := surface.Texture.Size()
-	height := width * float32(th) / float32(tw)
-	if surface.ContentAspect > 0 && !math.IsInf(float64(surface.ContentAspect), 0) {
-		height = width / surface.ContentAspect
+	var height float32
+	if placement.Width != 0 && placement.Height != 0 {
+		// Compact and Wide are provider-resolution presets, not different
+		// physical sizes. Preserve each preset's world-units-per-logical-pixel
+		// when direct resizing turns it into a custom size. Maximized windows
+		// deliberately use the Compact basis so they fill more of the scene.
+		basis := float32(960)
+		if placement.Wide && !placement.Maximized {
+			basis = 1440
+		}
+		width = 4.6 * float32(placement.Width) / basis
+		height = 4.6 * float32(placement.Height) / basis
+	} else {
+		tw, th := surface.Texture.Size()
+		height = width * float32(th) / float32(tw)
+		if surface.ContentAspect > 0 && !math.IsInf(float64(surface.ContentAspect), 0) {
+			height = width / surface.ContentAspect
+		}
 	}
 	if (surface.Frameless || surface.DragContent) && height > 3 {
 		width *= 3 / height
@@ -361,7 +394,13 @@ func (w *Workspace) syncApplicationScene() {
 			continue
 		}
 		transform, center, width, height := w.applicationTransformFor(surface)
+		placementIndex := view.index(surface.Key)
+		minimized := placementIndex >= 0 && view.Layouts[placementIndex].Minimized
 		node.Hidden = view.Reading && !view.Overview && surface.Key != view.Active
+		node.Surface = surface.Texture
+		if minimized && !view.Overview {
+			node.Surface = nil
+		}
 		if view.Overview {
 			width = 4.3
 			tw, th := surface.Texture.Size()
@@ -378,6 +417,9 @@ func (w *Workspace) syncApplicationScene() {
 		}
 		node.Transform = transform
 		w.placeSpatialApplication(surface, width, height)
+		if mount := w.applicationSpatial[surface.ID]; mount != nil {
+			w.scene.Node(mount.root).Hidden = minimized && !view.Overview
+		}
 		w.syncApplicationFrame(surface)
 		if view.Reading && !view.Overview && surface.Key == view.Active {
 			if cinematicFrameSurface(surface) && !surface.Frameless {
@@ -730,7 +772,9 @@ func (w *Workspace) drawApplicationControls() {
 	w.button(applicationBackButton, "DEPTH −", false)
 	w.button(applicationFrontButton, "DEPTH +", false)
 	size := "SIZE: COMPACT"
-	if v.Wide {
+	if i := v.index(v.Active); i >= 0 && v.Layouts[i].Width != 0 {
+		size = fmt.Sprintf("SIZE: %d × %d", v.Layouts[i].Width, v.Layouts[i].Height)
+	} else if v.Wide {
 		size = "SIZE: WIDE"
 	}
 	w.button(applicationSizeButton, size, v.Wide)
@@ -797,6 +841,9 @@ func (w *Workspace) drawApplicationOverviewLabels() {
 		}
 		label := shortApplicationTitle(surface.Title)
 		i := w.m.applicationState.index(surface.Key)
+		if i >= 0 && w.m.applicationState.Layouts[i].Minimized {
+			label = "[MIN] " + label
+		}
 		color := muted
 		if w.m.applicationState.Selected&(1<<i) != 0 {
 			label = "[+] " + label

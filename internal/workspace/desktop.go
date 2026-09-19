@@ -95,9 +95,9 @@ func (w *Workspace) drawDesktop() {
 		w.text(412, 407, 13, "Choose Files, Terminal, media, models, research or notes to begin.", teal, .9)
 	}
 	w.line(275, 792, 1388, 792, 1, muted, .22)
-	dragHint := "Drag the top grip. Release moving to throw; grab again to stop. Scroll while dragging for depth."
+	dragHint := "Move: top grip / Super+primary · Resize: corner grip / Super+secondary · Depth: Super+wheel"
 	if w.application.DragContent {
-		dragHint = "Drag the photo itself. Release moving to throw; grab again to stop. Scroll while dragging for depth."
+		dragHint = "Move the photo by dragging it · Super+wheel changes depth"
 	}
 	w.text(275, 840, 12, dragHint, muted, 1)
 	w.drawHelpButton()

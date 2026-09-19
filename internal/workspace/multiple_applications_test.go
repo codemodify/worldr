@@ -65,8 +65,9 @@ func TestMultipleApplicationsKeepFocusHoverAndCaptureIndependent(t *testing.T) {
 			}
 		}
 	}
-	// Assembly, world-space guides, housing accent/projection, and a frame and grip per app.
-	if surfaces != 2 || meshes != len(w.nodes)+3+2*len(apps.surfaces) {
+	// Assembly, world-space guides, housing accent/projection, and retained
+	// frame, drag grip, window controls and resize grip per app.
+	if surfaces != 2 || meshes != len(w.nodes)+3+4*len(apps.surfaces) {
 		t.Fatalf("shared spatial scene has %d apps and %d meshes", surfaces, meshes)
 	}
 	ax, ay := visibleApplication(t, w, apps.surfaces[0])

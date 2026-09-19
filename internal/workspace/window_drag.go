@@ -73,7 +73,7 @@ func (w *Workspace) applicationDragTarget(x, y float32) (experience.ApplicationS
 	hit, ok := w.scene.Pick(w.camera, w.viewport, x, y)
 	if ok {
 		for _, surface := range w.applicationSurfaces {
-			if w.applicationDragHandles[surface.ID] == hit.Node || surface.DragContent && w.applicationNodes[surface.ID] == hit.Node {
+			if w.applicationDragHandles[surface.ID] == hit.Node || w.applicationResizeHandles[surface.ID] == hit.Node || surface.DragContent && w.applicationNodes[surface.ID] == hit.Node {
 				return surface, true
 			}
 		}
@@ -100,6 +100,9 @@ func (w *Workspace) ownWindowDragButton(button uint32) {
 }
 
 func (w *Workspace) handleWindowDrag(event experience.Event) bool {
+	if w.handleWindowResize(event) || w.handleWindowDepthWheel(event) {
+		return true
+	}
 	active := w.pointer.kind == captureApplicationPlacement && w.pointer.windowDrag
 	if event.Kind == experience.PointerCancel || event.Kind == experience.KeyboardCancel {
 		owned := len(w.windowDragButtons) != 0

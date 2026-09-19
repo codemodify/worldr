@@ -38,6 +38,27 @@ func restoreApplicationHistory(current, before, after ApplicationViewState, undo
 		if a.Wide != b.Wide {
 			p.Wide = target.Wide
 		}
+		if a.Width != b.Width {
+			p.Width = target.Width
+		}
+		if a.Height != b.Height {
+			p.Height = target.Height
+		}
+		if a.Minimized != b.Minimized {
+			p.Minimized = target.Minimized
+		}
+		if a.Maximized != b.Maximized {
+			p.Maximized = target.Maximized
+		}
+		if a.RestoreWidth != b.RestoreWidth {
+			p.RestoreWidth = target.RestoreWidth
+		}
+		if a.RestoreHeight != b.RestoreHeight {
+			p.RestoreHeight = target.RestoreHeight
+		}
+		if a.RestoreWide != b.RestoreWide {
+			p.RestoreWide = target.RestoreWide
+		}
 		if a.Group != b.Group {
 			p.Group = target.Group
 		}
@@ -45,7 +66,11 @@ func restoreApplicationHistory(current, before, after ApplicationViewState, undo
 			p.Space = target.Space
 		}
 		selectedBefore, selectedAfter := before.Selected&(1<<previous) != 0, after.Selected&(1<<next) != 0
-		if selectedBefore != selectedAfter {
+		// Active-window changes may cause live-surface sync to choose a fallback
+		// selection after the edit. Restore every stable key's selection when
+		// undoing or redoing such an edit so that derived fallback does not survive
+		// alongside the original selection.
+		if selectedBefore != selectedAfter || before.Active != after.Active {
 			selected := selectedAfter
 			if undo {
 				selected = selectedBefore

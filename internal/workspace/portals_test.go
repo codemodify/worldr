@@ -118,6 +118,28 @@ func TestPortalNavigationValidatesTargetsTransactionally(t *testing.T) {
 	}
 }
 
+func TestPortalNavigationRestoresAndActivatesMinimizedTarget(t *testing.T) {
+	w, apps := portalFixture(t, 2)
+	target, sibling := apps.surfaces[0], apps.surfaces[1]
+	command(t, w, Action{Kind: ToggleApplicationMinimized, ApplicationKey: target.Key})
+	w.Update(0)
+	if w.m.applicationState.Active != sibling.Key || w.application.ID != sibling.ID {
+		t.Fatal("fixture did not select the visible sibling after minimizing the target")
+	}
+
+	command(t, w, Action{Kind: NavigatePortal, ApplicationKey: target.Key})
+	w.Update(0)
+	view := w.Document().View.Application
+	i := view.index(target.Key)
+	if i < 0 || view.Layouts[i].Minimized || view.Active != target.Key || view.Selected != 1<<i || w.application.ID != target.ID {
+		t.Fatalf("portal did not restore and retain its requested target: %+v / live=%d", view, w.application.ID)
+	}
+	w.Draw(1440, 900)
+	if node := w.scene.Node(w.applicationNodes[target.ID]); node == nil || node.Hidden || node.Surface != target.Texture {
+		t.Fatal("restored portal target was not visible in the spatial scene")
+	}
+}
+
 func formerInlinePortalBox(w *Workspace, portal SpatialPortal) (box, bool) {
 	right, up, normal := applicationBasis()
 	point := right.Mul(portal.X).Add(up.Mul(portal.Y)).Add(normal.Mul(portal.Depth + .08))

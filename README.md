@@ -84,9 +84,15 @@ in the workspace. Click it to type, or press Enter from the workspace to read
 and type in the selected app. **Read selected / Return to space** provides
 a readable working view. Drag the visible grip above a window to move it, or
 use **Super+primary drag** over its content when the host desktop permits that
-shortcut. **Place / Group** also enables content dragging; Shift+click selects
+shortcut. Drag the visible bottom-right grip to resize, or use
+**Super+secondary drag** anywhere over the window. Both the spatial frame and
+the client logical size follow the gesture, and the saved layout restores that
+size after reconnecting. **Place / Group** also enables content dragging; Shift+click selects
 several apps and **Group selected** makes them move together. Scroll during a
-drag or use **Depth −/+** to move the selection through space. **Overview**
+drag or use **Depth −/+** to move the selection through space;
+**Super+wheel** moves the hovered window (and its explicit group) without
+focusing it. **Super+primary drag** on empty workspace pans left, right, up or
+down. **Overview**
 retrieves hidden apps. **Size: Compact / Wide** resizes application content
 independently of its spatial placement.
 
@@ -289,12 +295,16 @@ to workspace input; click an app or press Enter to resume typing.
 | Action | Control |
 | --- | --- |
 | Open / close the workspace shortcut guide | Help in the footer, or F1 from the workspace; Escape closes |
-| Orbit the spatial scene | Drag the scene rotation pad in the bottom-right corner; empty workspace drags leave the scene still |
+| Pan the spatial workspace | Super+primary drag on empty workspace |
+| Orbit the spatial scene | Drag the scene rotation pad in the bottom-right corner |
 | Zoom the spatial scene | Scroll over the scene; application scrolling keeps its usual behavior |
 | Open the spatial portal atlas | Portals in the footer, or Ctrl+Alt+G from the workspace or a focused app |
 | Travel directly among window groups | Ctrl+Alt+Left / Ctrl+Alt+Right |
 | Move / throw a window | Drag its top grip; Super+primary drag where the host permits; or drag content in Place mode |
 | Change depth while dragging | Scroll with the drag held |
+| Change a hovered window's depth | Super+wheel; grouped windows stay together |
+| Resize a window | Drag its bottom-right grip, or Super+secondary drag over its content |
+| Minimize / maximize / close a window | Use the three controls on its top grip; minimized windows remain as a visible spatial strip and in Overview |
 | Stop a released window's glide | Grab again, or Escape from the workspace |
 | Inspect an AXIAL component | Click it or its tree entry; keys 1–3 |
 | Explode / assemble in AXIAL | E |

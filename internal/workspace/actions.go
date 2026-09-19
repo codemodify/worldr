@@ -30,10 +30,14 @@ const (
 	ToggleApplicationDepth     ActionKind = "toggle-application-depth"
 	ToggleApplicationReading   ActionKind = "toggle-application-reading"
 	ToggleApplicationSize      ActionKind = "toggle-application-size"
+	ToggleApplicationMinimized ActionKind = "toggle-application-minimized"
+	ToggleApplicationMaximized ActionKind = "toggle-application-maximized"
 	SelectApplication          ActionKind = "select-application"
 	ToggleApplicationOverview  ActionKind = "toggle-application-overview"
 	ToggleApplicationPlacement ActionKind = "toggle-application-placement"
 	MoveApplications           ActionKind = "move-applications"
+	MoveApplication            ActionKind = "move-application"
+	ResizeApplication          ActionKind = "resize-application"
 	GroupApplications          ActionKind = "group-applications"
 	UngroupApplications        ActionKind = "ungroup-applications"
 	ForgetClosedPlacements     ActionKind = "forget-closed-placements"
@@ -41,6 +45,7 @@ const (
 	SeekTime                   ActionKind = "seek-time"
 	StepTime                   ActionKind = "step-time"
 	OrbitCamera                ActionKind = "orbit-camera"
+	PanCamera                  ActionKind = "pan-camera"
 	ZoomCamera                 ActionKind = "zoom-camera"
 	ResetStudy                 ActionKind = "reset-study"
 	ResetView                  ActionKind = "reset-view"
@@ -65,6 +70,7 @@ type Action struct {
 	Additive       bool
 	DeltaDepth     float32
 	DeltaZoom      float32
+	Width, Height  int
 	// ClosedPlacements is derived from live providers by Dispatch.
 	ClosedPlacements uint32
 }
@@ -266,15 +272,17 @@ func (w *Workspace) Dispatch(action Action) error {
 		w.stopWindowThrowForKey(action.ApplicationKey)
 	case MoveApplications, ToggleApplicationDepth, GroupApplications, UngroupApplications, MoveToSpace:
 		w.stopWindowThrows(w.m.applicationState.movementSelection())
+	case MoveApplication, ResizeApplication, ToggleApplicationMinimized, ToggleApplicationMaximized:
+		w.stopWindowThrows(w.m.applicationState.movementSelectionFor(action.ApplicationKey))
 	case ToggleApplicationSize:
 		w.stopWindowThrowForKey(w.m.applicationState.Active)
-	case OrbitCamera, ZoomCamera, TogglePresentation, SetPresentation, SwitchSpace, CreateSpace, RenameSpace, NavigatePortal:
+	case OrbitCamera, PanCamera, ZoomCamera, TogglePresentation, SetPresentation, SwitchSpace, CreateSpace, RenameSpace, NavigatePortal:
 		// Navigation and presentation do not own any window's momentum.
 	default:
 		w.finishWindowThrow()
 	}
 	switch action.Kind {
-	case SelectApplication, ToggleApplicationDepth, ToggleApplicationReading, ToggleApplicationSize, ToggleApplicationOverview, ToggleApplicationPlacement, MoveApplications, GroupApplications, UngroupApplications, SwitchSpace, MoveToSpace, NavigatePortal:
+	case SelectApplication, ToggleApplicationDepth, ToggleApplicationReading, ToggleApplicationSize, ToggleApplicationMinimized, ToggleApplicationMaximized, ToggleApplicationOverview, ToggleApplicationPlacement, MoveApplications, MoveApplication, ResizeApplication, GroupApplications, UngroupApplications, SwitchSpace, MoveToSpace, NavigatePortal:
 		w.applicationRestoreKey = ""
 	}
 	w.commitPointer()
@@ -320,7 +328,7 @@ func reduce(d Document, a Action) (Document, error) {
 		d.View.ReducedMotion = a.Enabled
 	case TogglePanelDepth:
 		d.View.PanelBehind = !d.View.PanelBehind
-	case ToggleApplicationDepth, ToggleApplicationReading, ToggleApplicationSize, SelectApplication, ToggleApplicationOverview, ToggleApplicationPlacement, MoveApplications, GroupApplications, UngroupApplications, ForgetClosedPlacements:
+	case ToggleApplicationDepth, ToggleApplicationReading, ToggleApplicationSize, ToggleApplicationMinimized, ToggleApplicationMaximized, SelectApplication, ToggleApplicationOverview, ToggleApplicationPlacement, MoveApplications, MoveApplication, ResizeApplication, GroupApplications, UngroupApplications, ForgetClosedPlacements:
 		if err := reduceApplicationView(&d.View.Application, a); err != nil {
 			return d, err
 		}
@@ -350,6 +358,13 @@ func reduce(d Document, a Action) (Document, error) {
 			return d, fmt.Errorf("zoom command must be finite")
 		}
 		d.View.Camera.Zoom = float32(math.Max(-.8, math.Min(.8, float64(d.View.Camera.Zoom)+float64(a.DeltaZoom))))
+	case PanCamera:
+		if !finite(float64(a.DeltaX)) || !finite(float64(a.DeltaY)) || !finite(float64(a.DeltaDepth)) {
+			return d, fmt.Errorf("camera pan command must be finite")
+		}
+		d.View.Camera.TargetX = max(-100, min(100, d.View.Camera.TargetX+a.DeltaX))
+		d.View.Camera.TargetY = max(-100, min(100, d.View.Camera.TargetY+a.DeltaY))
+		d.View.Camera.TargetDepth = max(-40, min(40, d.View.Camera.TargetDepth+a.DeltaDepth))
 	case ResetStudy:
 		mode := d.View.Presentation
 		reducedMotion := d.View.ReducedMotion

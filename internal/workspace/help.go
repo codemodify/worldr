@@ -219,11 +219,14 @@ func (w *Workspace) drawHelp() {
 		}},
 	}
 	if w.desktop {
-		columns[0].rows[0] = helpEntry{"Scene rotation pad / scroll scene", "Drag the bottom-right pad to orbit; scroll the scene to zoom."}
+		columns[0].rows[0] = helpEntry{"Super+drag space / rotation pad", "Pan the workspace / orbit from the bottom-right pad."}
 		columns[0].rows[2] = helpEntry{"Read Selected / F", "Enlarge the active window, then return to space."}
-		columns[0].rows[3] = helpEntry{"B / depth controls", "Move selected windows forward or backward."}
+		columns[0].rows[3] = helpEntry{"Super+wheel / depth controls", "Move the hovered / selected windows through depth."}
 		columns[0].rows[5] = helpEntry{"Escape / R", "Cancel a gesture / reset the camera view."}
+		columns[1].rows[4] = helpEntry{"Top grip / Super+primary", "Move or throw a window; grab it again to stop."}
+		columns[1].rows[5] = helpEntry{"Corner grip / Super+secondary", "Resize a window freely; Escape cancels the gesture."}
 		columns[1].rows[6] = helpEntry{"Right APPS rail / Ctrl+Alt+Space", "Launch tools directly / search every tool and window."}
+		columns[1].rows = append(columns[1].rows, helpEntry{"Top-grip  −  □  ×", "Minimize to a strip / maximize or restore / close."})
 	}
 	for _, column := range columns {
 		w.text(column.x, 256, 11, column.title, muted, 1)

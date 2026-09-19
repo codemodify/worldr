@@ -80,8 +80,20 @@ type ApplicationPlacement struct {
 	X     float32 `json:"x,omitempty"`
 	Y     float32 `json:"y,omitempty"`
 	Depth float32 `json:"depth,omitempty"`
-	Wide  bool    `json:"wide,omitempty"`
-	Group uint8   `json:"group,omitempty"`
+	// Width and Height are the application's requested logical content size.
+	// Zero keeps the Compact/Wide preset used by documents saved before free
+	// resizing was introduced.
+	Width  int   `json:"width,omitempty"`
+	Height int   `json:"height,omitempty"`
+	Wide   bool  `json:"wide,omitempty"`
+	Group  uint8 `json:"group,omitempty"`
+	// Minimized keeps the live surface as a collapsed spatial strip. Maximized
+	// retains the exact prior custom or preset size for a reversible restore.
+	Minimized     bool `json:"minimized,omitempty"`
+	Maximized     bool `json:"maximized,omitempty"`
+	RestoreWidth  int  `json:"restore_width,omitempty"`
+	RestoreHeight int  `json:"restore_height,omitempty"`
+	RestoreWide   bool `json:"restore_wide,omitempty"`
 }
 type CameraState struct {
 	Yaw   float32 `json:"yaw"`
@@ -188,9 +200,13 @@ func (w *Workspace) SaveState() ([]byte, error) {
 // windows are captured at their current position without stopping their coast.
 func (w *Workspace) CheckpointState() ([]byte, error) {
 	d := w.Document()
-	if w.pointer.kind == captureApplicationPlacement {
+	switch w.pointer.kind {
+	case captureApplicationPlacement:
 		d = windowDragBefore(w.pointer, d)
-	} else if w.pointer.kind != captureNone {
+	case captureApplicationResize:
+		d = windowResizeBefore(w.pointer, d)
+	case captureNone:
+	default:
 		d = merge(d, w.pointer.start, w.pointer.mask())
 	}
 	if w.desktop {

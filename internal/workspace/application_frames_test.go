@@ -58,7 +58,9 @@ func TestApplicationFramesShowIndependentFocusSelectionHoverAndIdle(t *testing.T
 			t.Fatal("application frame lost shared geometry or safe depth/input policy")
 		}
 		children := w.scene.Children(w.applicationNodes[surface.ID])
-		if len(children) != 2 || children[0] != frameID || children[1] != w.applicationDragHandles[surface.ID] {
+		gripID := w.applicationDragHandles[surface.ID]
+		if len(children) != 3 || children[0] != frameID || children[1] != gripID || children[2] != w.applicationResizeHandles[surface.ID] ||
+			len(w.scene.Children(gripID)) != 1 || w.scene.Children(gripID)[0] != w.applicationWindowControls[surface.ID] {
 			t.Fatal("application frame is not owned by its content node")
 		}
 		colors[i] = border.Color

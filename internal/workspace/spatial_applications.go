@@ -102,7 +102,7 @@ func (w *Workspace) spatialApplicationTransform(surface experience.ApplicationSu
 func (w *Workspace) drawSpatialApplicationLabels() {
 	for _, surface := range w.applicationSurfaces {
 		m := w.applicationSpatial[surface.ID]
-		if m == nil || surface.Spatial == nil || w.scene.Node(w.applicationNodes[surface.ID]).Hidden {
+		if m == nil || surface.Spatial == nil || w.scene.Node(w.applicationNodes[surface.ID]).Hidden || w.scene.Node(m.root).Hidden {
 			continue
 		}
 		transform := w.spatialApplicationTransform(surface)

@@ -144,3 +144,37 @@ func TestOverviewShortcutFocusLossClearsSuppressedKey(t *testing.T) {
 		t.Fatal("host focus loss left the reserved key suppressed")
 	}
 }
+
+func TestOverviewShortcutsRecoverWhenEveryLiveWindowIsMinimized(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		modifiers experience.Modifiers
+	}{
+		{name: "workspace O"},
+		{name: "reserved Ctrl Alt O", modifiers: experience.ModControl | experience.ModAlt},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			w, apps := multipleApplications(t, 2)
+			for _, surface := range apps.surfaces {
+				command(t, w, Action{Kind: ToggleApplicationMinimized, ApplicationKey: surface.Key})
+			}
+			w.Update(0)
+			if w.application.ID != 0 || len(w.visibleApplications()) != len(apps.surfaces) {
+				t.Fatal("fixture did not retain only minimized live windows")
+			}
+			before := len(apps.events)
+			if !key(w, experience.KeyO, test.modifiers) || !w.m.applicationState.Overview {
+				t.Fatal("overview shortcut could not recover minimized windows")
+			}
+			if len(apps.events) != before || w.OwnsKeyboard() {
+				t.Fatal("minimized-window recovery leaked input or granted application focus")
+			}
+			w.Draw(1440, 900)
+			for _, surface := range apps.surfaces {
+				if node := w.scene.Node(w.applicationNodes[surface.ID]); node == nil || node.Hidden || node.Surface != surface.Texture {
+					t.Fatalf("overview did not reveal minimized window %q", surface.Key)
+				}
+			}
+		})
+	}
+}

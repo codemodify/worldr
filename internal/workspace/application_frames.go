@@ -35,15 +35,21 @@ func (w *Workspace) attachApplicationFrame(id uint64, parent scene.NodeID) {
 		Unlit: true, Unpickable: true, DepthReadOnly: true,
 	})
 	w.attachApplicationDragHandle(id, parent)
+	w.attachApplicationWindowControls(id, w.applicationDragHandles[id])
+	w.attachApplicationResizeHandle(id, parent)
 }
 
 func (w *Workspace) syncApplicationFrame(surface experience.ApplicationSurface) {
 	w.syncApplicationDragHandle(surface)
+	w.syncApplicationWindowControls(surface)
+	w.syncApplicationResizeHandle(surface)
 	frame := w.scene.Node(w.applicationFrames[surface.ID])
 	if frame == nil {
 		return
 	}
-	frame.Hidden = surface.Frameless
+	i := w.m.applicationState.index(surface.Key)
+	minimized := i >= 0 && w.m.applicationState.Layouts[i].Minimized
+	frame.Hidden = surface.Frameless || minimized && !w.m.applicationState.Overview
 	if frame.Hidden {
 		frame.Glow = [3]float32{}
 		return
@@ -51,7 +57,7 @@ func (w *Workspace) syncApplicationFrame(surface experience.ApplicationSurface) 
 	frame.Mesh = w.frameMeshFor(surface)
 	color, alpha := uint32(0x6a9dab), float32(.10)
 	glow := float32(0)
-	index := w.m.applicationState.index(surface.Key)
+	index := i
 	switch {
 	case w.applicationKeyboard && w.applicationFocusedID == surface.ID:
 		color, alpha = 0x82eaf5, .90
