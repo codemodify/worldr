@@ -46,57 +46,58 @@ func clickApplicationWindowControl(t *testing.T, w *Workspace, surface experienc
 	}
 }
 
-func TestWindowMaximizeRestoresExactCustomSizeAsOneEdit(t *testing.T) {
-	w, apps := multipleApplications(t, 1)
-	key := apps.surfaces[0].Key
-	command(t, w, Action{Kind: ResizeApplication, ApplicationKey: key, Width: 1137, Height: 731})
-	i := w.m.applicationState.index(key)
-	original := w.m.applicationState.Layouts[i]
-	history, events := w.historyPosition, len(apps.events)
+func TestWindowSquareControlMatchesSuperDoubleClickRead(t *testing.T) {
+	controlWorkspace, controlApps := multipleApplications(t, 2)
+	gestureWorkspace, gestureApps := multipleApplications(t, 2)
+	target := controlApps.surfaces[1]
+	before := controlWorkspace.Document().View.Application.Layouts[1]
+	controlHistory, controlEvents, controlResizes := controlWorkspace.historyPosition, len(controlApps.events), len(controlApps.resizes)
 
-	clickApplicationWindowControl(t, w, apps.surfaces[0], windowControlMaximize)
-	p := w.m.applicationState.Layouts[i]
-	if !p.Maximized || p.Minimized || p.Width != maximizedApplicationWidth || p.Height != maximizedApplicationHeight || p.RestoreWidth != original.Width || p.RestoreHeight != original.Height || p.RestoreWide != original.Wide {
-		t.Fatalf("maximize did not retain and apply exact dimensions: %+v", p)
+	clickApplicationWindowControl(t, controlWorkspace, target, windowControlRead)
+	view := controlWorkspace.Document().View.Application
+	if !view.Reading || view.Active != target.Key || view.Overview || view.Placing {
+		t.Fatalf("square window control did not read its target: %+v", view)
 	}
-	if w.historyPosition != history+1 || len(apps.events) != events {
-		t.Fatal("maximize was not one workspace edit or leaked pointer input")
+	if view.Layouts[1] != before || len(controlApps.resizes) != controlResizes {
+		t.Fatal("square window control resized the application instead of entering Read")
 	}
-	if got := apps.resizes[len(apps.resizes)-1]; got.id != apps.surfaces[0].ID || got.width != maximizedApplicationWidth || got.height != maximizedApplicationHeight {
-		t.Fatalf("maximize did not configure the client to maximum size: %+v", got)
-	}
-	command(t, w, Action{Kind: Undo})
-	if got := w.m.applicationState.Layouts[i]; got.Width != original.Width || got.Height != original.Height || got.Maximized {
-		t.Fatalf("undo did not restore the pre-maximize size: %+v", got)
-	}
-	command(t, w, Action{Kind: Redo})
-	if got := w.m.applicationState.Layouts[i]; !got.Maximized || got.Width != maximizedApplicationWidth || got.Height != maximizedApplicationHeight {
-		t.Fatalf("redo did not restore the maximized size: %+v", got)
+	if controlWorkspace.historyPosition != controlHistory+2 || len(controlApps.events) != controlEvents || controlWorkspace.OwnsKeyboard() {
+		t.Fatal("square window control did not preserve the direct-window Read input contract")
 	}
 
-	clickApplicationWindowControl(t, w, apps.surfaces[0], windowControlMaximize)
-	p = w.m.applicationState.Layouts[i]
-	if p.Width != original.Width || p.Height != original.Height || p.Wide != original.Wide || p.Maximized || p.RestoreWidth != 0 || p.RestoreHeight != 0 || p.RestoreWide {
-		t.Fatalf("maximize restore lost the exact custom dimensions: %+v", p)
+	gestureTarget := gestureApps.surfaces[1]
+	x, y := visibleApplication(t, gestureWorkspace, gestureTarget)
+	superApplicationClick(gestureWorkspace, x, y, 1000, 1010)
+	superApplicationClick(gestureWorkspace, x, y, 1200, 1210)
+	if controlWorkspace.Document() != gestureWorkspace.Document() {
+		t.Fatal("square window control and Super+double-click produced different workspace state")
 	}
-	if got := apps.resizes[len(apps.resizes)-1]; got.width != original.Width || got.height != original.Height {
-		t.Fatalf("restore did not configure the client to its prior size: %+v", got)
+	if _, ok := controlWorkspace.buttonAction(1260, 45); ok {
+		t.Fatal("removed header Read button still has an active hit target")
 	}
 }
 
-func TestWindowMinimizeLeavesDiscoverableSpatialStripAndRestores(t *testing.T) {
+func TestWindowMinimizeHidesAllChromeAndOverviewRestores(t *testing.T) {
 	w, apps := multipleApplications(t, 1)
 	surface := apps.surfaces[0]
 	i := w.m.applicationState.index(surface.Key)
 	history, events := w.historyPosition, len(apps.events)
 
-	clickApplicationWindowControl(t, w, surface, windowControlMinimize)
+	formerControlX, formerControlY := applicationWindowControlPoint(t, w, surface, windowControlMinimize)
+	if !pointer(w, experience.PointerDown, formerControlX, formerControlY) || !pointer(w, experience.PointerUp, formerControlX, formerControlY) {
+		t.Fatal("minimize control did not consume its click")
+	}
 	w.Draw(1440, 900)
 	root := w.scene.Node(w.applicationNodes[surface.ID])
 	frame := w.scene.Node(w.applicationFrames[surface.ID])
 	grip := w.scene.Node(w.applicationDragHandles[surface.ID])
-	if !w.m.applicationState.Layouts[i].Minimized || root == nil || root.Surface != nil || frame == nil || !frame.Hidden || grip == nil || grip.Hidden || grip.Mesh != w.applicationMinimizedBarMesh {
-		t.Fatal("minimize did not collapse the live window into its spatial strip")
+	controls := w.scene.Node(w.applicationWindowControls[surface.ID])
+	resize := w.scene.Node(w.applicationResizeHandles[surface.ID])
+	if !w.m.applicationState.Layouts[i].Minimized || root == nil || root.Surface != nil || frame == nil || !frame.Hidden || grip == nil || !grip.Hidden || controls == nil || !controls.Hidden || resize == nil || !resize.Hidden {
+		t.Fatal("minimize did not hide the live window and all of its chrome")
+	}
+	if _, _, _, ok := w.applicationWindowControlAt(formerControlX, formerControlY); ok {
+		t.Fatal("hidden minimized titlebar retained a window-control hit target")
 	}
 	if len(w.applicationSurfaces) != 1 || w.historyPosition != history+1 || len(apps.events) != events {
 		t.Fatal("minimize closed the provider surface, split history, or leaked client input")
@@ -109,14 +110,6 @@ func TestWindowMinimizeLeavesDiscoverableSpatialStripAndRestores(t *testing.T) {
 	if err = restored.LoadState(state); err != nil || !restored.Document().View.Application.Layouts[i].Minimized {
 		t.Fatal("minimized placement did not survive workspace persistence", err)
 	}
-	point := root.Transform.Mul(grip.Transform).TransformPoint(scene.Vec3{X: 0, Y: .543})
-	x, y, _, visible := w.camera.Project(point, w.viewport)
-	if !visible {
-		t.Fatal("minimized strip is not discoverable in the spatial scene")
-	}
-	if hit, ok := w.scene.Pick(w.camera, w.viewport, x, y); !ok || hit.Node != w.applicationDragHandles[surface.ID] {
-		t.Fatalf("minimized strip cannot be picked: %+v %t", hit, ok)
-	}
 	command(t, w, Action{Kind: Undo})
 	w.Draw(1440, 900)
 	if w.m.applicationState.Layouts[i].Minimized || root.Surface != surface.Texture {
@@ -128,10 +121,16 @@ func TestWindowMinimizeLeavesDiscoverableSpatialStripAndRestores(t *testing.T) {
 		t.Fatal("redo did not collapse the live window again")
 	}
 
-	clickApplicationWindowControl(t, w, surface, windowControlMinimize)
+	command(t, w, Action{Kind: ToggleApplicationOverview})
 	w.Draw(1440, 900)
-	if w.m.applicationState.Layouts[i].Minimized || root.Surface != surface.Texture || frame.Hidden || grip.Mesh == w.applicationMinimizedBarMesh {
-		t.Fatal("minimize control did not restore the complete live window")
+	if root.Surface != surface.Texture || root.Hidden || frame.Hidden || !grip.Hidden || !controls.Hidden || !resize.Hidden {
+		t.Fatal("Overview did not reveal the minimized content without exposing window chrome")
+	}
+	command(t, w, Action{Kind: SelectApplication, ApplicationKey: surface.Key})
+	command(t, w, Action{Kind: ToggleApplicationOverview})
+	w.Draw(1440, 900)
+	if w.m.applicationState.Layouts[i].Minimized || root.Surface != surface.Texture || frame.Hidden || grip.Hidden || controls.Hidden || resize.Hidden {
+		t.Fatal("Overview selection did not restore the complete live window")
 	}
 }
 
@@ -193,11 +192,11 @@ func TestWindowCloseCancelsOnlyTargetInputAndWaitsForProviderWithdrawal(t *testi
 }
 
 func TestInactiveWindowControlsPreserveSiblingKeyboardFocus(t *testing.T) {
-	w, apps := multipleApplications(t, 2)
+	w, apps := multipleApplications(t, 3)
 	closer := &closingApplications{fakeApplications: apps}
 	w.SetApplications(closer)
 	w.Draw(1440, 900)
-	target, sibling := apps.surfaces[0], apps.surfaces[1]
+	minimizeTarget, closeTarget, sibling := apps.surfaces[0], apps.surfaces[1], apps.surfaces[2]
 	x, y := visibleApplication(t, w, sibling)
 	pointer(w, experience.PointerDown, x, y)
 	pointer(w, experience.PointerUp, x, y)
@@ -205,12 +204,12 @@ func TestInactiveWindowControlsPreserveSiblingKeyboardFocus(t *testing.T) {
 		t.Fatal("fixture did not focus the sibling window")
 	}
 
-	clickApplicationWindowControl(t, w, target, windowControlMinimize)
+	clickApplicationWindowControl(t, w, minimizeTarget, windowControlMinimize)
 	if w.applicationFocusedID != sibling.ID || !w.OwnsKeyboard() {
 		t.Fatal("minimizing an inactive window stole sibling keyboard focus")
 	}
-	clickApplicationWindowControl(t, w, target, windowControlClose)
-	if len(closer.closed) != 1 || closer.closed[0] != target.ID || w.applicationFocusedID != sibling.ID || !w.OwnsKeyboard() {
+	clickApplicationWindowControl(t, w, closeTarget, windowControlClose)
+	if len(closer.closed) != 1 || closer.closed[0] != closeTarget.ID || w.applicationFocusedID != sibling.ID || !w.OwnsKeyboard() {
 		t.Fatal("closing an inactive window stole sibling focus or targeted the wrong surface")
 	}
 }

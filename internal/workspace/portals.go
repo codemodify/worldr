@@ -149,7 +149,7 @@ func reducePortalNavigation(d *Document, action Action) error {
 		}
 	}
 	// A portal is an explicit request to retrieve its destination. Restore any
-	// collapsed members of that destination so the subsequent live-surface sync
+	// minimized members of that destination so the subsequent live-surface sync
 	// cannot replace the requested active window with a different one.
 	for i := range v.Layouts {
 		if mask&(1<<i) != 0 {

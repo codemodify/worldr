@@ -50,6 +50,10 @@
   targets from the workspace. Portal navigation remains available through the
   footer atlas and reserved shortcuts; native app-authored spatial annotations
   retain their prior behavior.
+- Changed managed window chrome so Minimize removes the window and all of its
+  chrome from Space while keeping it recoverable through Overview and portals.
+  The square control now performs the same target-aware Read transition as
+  Win/Super+double-click, and the duplicate header Read button is gone.
 
 - Added the public `sdk/nativeapp/v1` process contract, a nonblocking host
   adapter, repeatable `--native-app` launch option and an external reference

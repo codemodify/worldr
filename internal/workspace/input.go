@@ -128,7 +128,7 @@ func (w *Workspace) Handle(event experience.Event) bool {
 		return true
 	}
 	// The Super+wheel window gesture also owns window chrome. Route it before
-	// ordinary control hover so scrolling over a minimize/maximize/close plate
+	// ordinary control hover so scrolling over a minimize/read/close plate
 	// still changes the hovered window's depth.
 	if w.handleWindowDepthWheel(event) {
 		return true
@@ -405,10 +405,7 @@ func (w *Workspace) buttonAction(x, y float32) (Action, bool) {
 		}
 		return Action{Kind: ResetStudy}, true
 	case (box{1247, 30, 151, 37}).contains(x, y):
-		if w.application.ID != 0 {
-			return Action{Kind: ToggleApplicationReading}, true
-		}
-		if w.desktop {
+		if w.desktop || w.application.ID != 0 {
 			return Action{}, false
 		}
 		return Action{Kind: ToggleFocus}, true
@@ -511,7 +508,7 @@ func (w *Workspace) handleKey(event experience.Event) bool {
 			}
 		case experience.KeyO:
 			// A minimized window intentionally leaves no current application,
-			// but Overview is also the recovery path for that collapsed window.
+			// but Overview is also its recovery path.
 			if w.application.ID == 0 && len(w.visibleApplications()) == 0 {
 				return false
 			}

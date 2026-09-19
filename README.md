@@ -306,7 +306,7 @@ to workspace input; click an app or press Enter to resume typing.
 | Change a hovered window's depth | Super+wheel; grouped windows stay together |
 | Resize a window | Drag its bottom-right grip, or Super+secondary drag over its content |
 | Toggle a window's Read view | Win/Super + double-click its content |
-| Minimize / maximize / close a window | Use the three controls on its top grip; minimized windows remain as a visible spatial strip and in Overview |
+| Minimize / Read / close a window | Use the three controls on its top grip; minimize hides all window chrome but remains recoverable through Overview and portals, while the square opens the same Read view as Win/Super + double-click |
 | Stop a released window's glide | Grab again, or Escape from the workspace |
 | Inspect an AXIAL component | Click it or its tree entry; keys 1–3 |
 | Explode / assemble in AXIAL | E |

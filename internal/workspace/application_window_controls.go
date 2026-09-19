@@ -10,7 +10,7 @@ type applicationWindowControl uint8
 const (
 	windowControlNone applicationWindowControl = iota
 	windowControlMinimize
-	windowControlMaximize
+	windowControlRead
 	windowControlClose
 )
 
@@ -19,13 +19,13 @@ var applicationWindowControlBoxes = [...]struct {
 	box  box
 }{
 	{windowControlMinimize, box{.246, .521, .068, .045}},
-	{windowControlMaximize, box{.326, .521, .068, .045}},
+	{windowControlRead, box{.326, .521, .068, .045}},
 	{windowControlClose, box{.406, .521, .080, .045}},
 }
 
-// applicationWindowControlMesh keeps the three conventional window actions in
-// world space. It is parented to the drag grip so Read, Overview and frameless
-// surfaces inherit the grip's established visibility policy.
+// applicationWindowControlMesh keeps minimize, Read and close in world space.
+// It is parented to the drag grip so Read, Overview and frameless surfaces
+// inherit the grip's established visibility policy.
 func buildApplicationWindowControlMesh() (*scene.Mesh, error) {
 	var g frameGeometry
 	plate := scene.ColorHex(0x123b48, .96)
@@ -48,7 +48,7 @@ func buildApplicationWindowControlMesh() (*scene.Mesh, error) {
 		switch control.kind {
 		case windowControlMinimize:
 			g.rect(cx-.014, cy-.010, cx+.014, cy-.006, glyph)
-		case windowControlMaximize:
+		case windowControlRead:
 			g.stroke(.003, glyph,
 				framePoint{cx - .013, cy - .011}, framePoint{cx + .013, cy - .011},
 				framePoint{cx + .013, cy + .011}, framePoint{cx - .013, cy + .011},
@@ -58,28 +58,6 @@ func buildApplicationWindowControlMesh() (*scene.Mesh, error) {
 			g.stroke(.003, glyph, framePoint{cx - .012, cy - .012}, framePoint{cx + .012, cy + .012})
 			g.stroke(.003, glyph, framePoint{cx - .012, cy + .012}, framePoint{cx + .012, cy - .012})
 		}
-	}
-	return g.mesh()
-}
-
-func buildApplicationMinimizedBarMesh() (*scene.Mesh, error) {
-	var g frameGeometry
-	plate := scene.ColorHex(0x092d39, .98)
-	edge := scene.ColorHex(0x34c6df, .92)
-	detail := scene.ColorHex(0x7ee9f7, .72)
-	// A collapsed window remains as a perspective-correct spatial strip at its
-	// saved position. The right side is left open for the action controls.
-	g.polygon(plate,
-		framePoint{-.49, .521}, framePoint{.226, .521},
-		framePoint{.226, .566}, framePoint{-.472, .566}, framePoint{-.49, .548},
-	)
-	g.stroke(.0025, edge,
-		framePoint{-.488, .523}, framePoint{.224, .523},
-		framePoint{.224, .564}, framePoint{-.471, .564}, framePoint{-.488, .547},
-	)
-	g.rect(-.445, .541, -.165, .546, detail)
-	for _, x := range []float32{-.13, -.106, -.082} {
-		g.rect(x, .536, x+.011, .551, detail)
 	}
 	return g.mesh()
 }
@@ -139,25 +117,11 @@ func (w *Workspace) syncApplicationWindowControls(surface experience.Application
 	}
 	i := w.m.applicationState.index(surface.Key)
 	minimized := i >= 0 && w.m.applicationState.Layouts[i].Minimized
-	if minimized && !w.m.applicationState.Overview {
-		if w.applicationMinimizedBarMesh == nil {
-			mesh, err := buildApplicationMinimizedBarMesh()
-			if err != nil {
-				panic(err) // Invalid constant geometry is a programming error.
-			}
-			w.applicationMinimizedBarMesh = mesh
-		}
-		if handle := w.scene.Node(w.applicationDragHandles[surface.ID]); handle != nil {
-			handle.Mesh = w.applicationMinimizedBarMesh
-			handle.Hidden = surface.Frameless || surface.DragContent
-			handle.Color = scene.ColorHex(0x78e9f8, .96)
-		}
-	}
 	control.Mesh = w.applicationWindowControlMesh
-	control.Hidden = surface.Frameless || surface.DragContent
+	control.Hidden = surface.Frameless || surface.DragContent || minimized || w.m.applicationState.Overview || w.m.applicationState.Reading
 	control.Color = scene.Color{R: 1, G: 1, B: 1, A: 1}
-	if minimized {
-		control.Glow = [3]float32{.08, .36, .44}
+	if control.Hidden {
+		control.Glow = [3]float32{}
 	} else if surface.Key == w.m.applicationState.Active {
 		control.Glow = [3]float32{.04, .18, .22}
 	} else {
@@ -244,8 +208,8 @@ func (w *Workspace) handleApplicationWindowControl(event experience.Event) bool 
 					w.clearApplicationFocus()
 				}
 				_ = w.Dispatch(Action{Kind: ToggleApplicationMinimized, ApplicationKey: surface.Key})
-			case windowControlMaximize:
-				_ = w.Dispatch(Action{Kind: ToggleApplicationMaximized, ApplicationKey: surface.Key})
+			case windowControlRead:
+				w.toggleApplicationReadingFor(surface)
 			case windowControlClose:
 				closer, ok := w.applications.(experience.ApplicationCloser)
 				if !ok {

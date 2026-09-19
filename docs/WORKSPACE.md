@@ -38,10 +38,10 @@ host permits it. The requested logical size, spatial frame and client surface
 change together, persist in the workspace document and restore on reconnect.
 Win/Super + double-click on window content toggles that window's Read view; the
 reserved clicks stay with the workspace rather than entering the application.
-The three perspective-correct controls on the top grip minimize, maximize or
-request closing that individual window. Minimize leaves a visible spatial strip;
-Overview and portals restore minimized windows when selected. Maximize preserves
-the exact prior dimensions for restore, and both size actions are undoable.
+The three perspective-correct controls on the top grip minimize, toggle Read or
+request closing that individual window. The square control performs the same
+Read action as Win/Super + double-click. Minimize hides the content and its
+complete frame; Overview and portals reveal and restore minimized windows.
 Place mode also makes content draggable and offers Shift+click selection for
 groups. Scrolling during a held drag moves the selection through depth without
 introducing a lateral jump. Super+wheel changes the hovered window's depth

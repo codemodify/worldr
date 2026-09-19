@@ -94,6 +94,23 @@ func (w *Workspace) applicationReadSurface(id uint64, key string) (experience.Ap
 	return experience.ApplicationSurface{}, false
 }
 
+// toggleApplicationReadingFor is the shared direct-window Read operation used
+// by the Super+double-click gesture and the square window control. It selects
+// the pointed-to window first, keeps unrelated window momentum alive, and owns
+// the interaction without handing keyboard focus to the application.
+func (w *Workspace) toggleApplicationReadingFor(surface experience.ApplicationSurface) {
+	w.resetApplicationReadClick()
+	w.stopWindowThrowForKey(surface.Key)
+	w.clearApplicationFocus()
+	w.applicationRestoreKey = ""
+	if w.m.applicationState.Active != surface.Key {
+		if err := w.Dispatch(Action{Kind: SelectApplication, ApplicationKey: surface.Key}); err != nil {
+			return
+		}
+	}
+	_ = w.Dispatch(Action{Kind: ToggleApplicationReading})
+}
+
 func (w *Workspace) finishApplicationReadClick(p pointerCapture) {
 	if !p.readClick || p.dragged {
 		w.resetApplicationReadClick()
@@ -119,12 +136,7 @@ func (w *Workspace) finishApplicationReadClick(p pointerCapture) {
 		return
 	}
 	w.resetApplicationReadClick()
-	if w.m.applicationState.Active != surface.Key {
-		if err := w.Dispatch(Action{Kind: SelectApplication, ApplicationKey: surface.Key}); err != nil {
-			return
-		}
-	}
-	_ = w.Dispatch(Action{Kind: ToggleApplicationReading})
+	w.toggleApplicationReadingFor(surface)
 }
 
 func (w *Workspace) beginApplicationReadClick(surface experience.ApplicationSurface, event experience.Event, double bool) {

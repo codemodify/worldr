@@ -58,7 +58,9 @@ func (w *Workspace) syncApplicationDragHandle(surface experience.ApplicationSurf
 		handle.Mesh = w.terminalDragHandleMesh
 	}
 	view := w.m.applicationState
-	handle.Hidden = surface.Frameless || surface.DragContent || view.Overview || view.Reading
+	i := view.index(surface.Key)
+	minimized := i >= 0 && view.Layouts[i].Minimized
+	handle.Hidden = surface.Frameless || surface.DragContent || minimized || view.Overview || view.Reading
 	handle.Color = scene.ColorHex(0x6ca7b7, .78)
 	if w.pointer.windowDrag && w.pointer.surface == w.applicationNodes[surface.ID] {
 		handle.Color = scene.ColorHex(0xb2f5ff, 1)

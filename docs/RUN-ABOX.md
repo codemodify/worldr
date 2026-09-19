@@ -68,10 +68,10 @@ when the host does not reserve that chord. Super+drag on empty workspace pans th
 camera, and Super+wheel changes the hovered window's depth without focusing it.
 Resize with the bottom-right grip or Super+secondary drag over window content;
 the logical client size and saved spatial frame update together. The three
-controls on a window's top grip minimize it to a visible strip, maximize and
-restore its exact size, or request that its provider close it. Overview and
-portals retrieve minimized windows. Win/Super + double-click window content to
-enter its Read view; repeat the gesture there to return to the workspace.
+controls on a window's top grip hide it completely, toggle its Read view, or
+request that its provider close it. The square control and Win/Super +
+double-click use the same Read action; repeat the gesture there to return to the
+workspace. Overview and portals retrieve minimized windows.
 
 `--project=.` opens a native directory list and UTF-8 file preview. Use Up/Refresh,
 arrows/Enter/Backspace, or double-click an entry. Copy Path or Ctrl+Shift+C copies

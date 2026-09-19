@@ -87,7 +87,7 @@ func TestSuperWheelMovesOnlyHoveredWindowDepth(t *testing.T) {
 func TestSuperWheelOverWindowControlsStillChangesHoveredDepth(t *testing.T) {
 	w, apps := windowDragWorkspace(t, 2)
 	target := apps.surfaces[1]
-	x, y := applicationWindowControlPoint(t, w, target, windowControlMaximize)
+	x, y := applicationWindowControlPoint(t, w, target, windowControlRead)
 	view := w.Document().View.Application
 	i := view.index(target.Key)
 	before := view.Layouts[i]

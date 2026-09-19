@@ -87,8 +87,9 @@ type ApplicationPlacement struct {
 	Height int   `json:"height,omitempty"`
 	Wide   bool  `json:"wide,omitempty"`
 	Group  uint8 `json:"group,omitempty"`
-	// Minimized keeps the live surface as a collapsed spatial strip. Maximized
-	// retains the exact prior custom or preset size for a reversible restore.
+	// Minimized keeps the live surface available through Overview and portals.
+	// Maximized and Restore* remain for compatibility with older saved documents;
+	// current window chrome uses Read instead.
 	Minimized     bool `json:"minimized,omitempty"`
 	Maximized     bool `json:"maximized,omitempty"`
 	RestoreWidth  int  `json:"restore_width,omitempty"`
