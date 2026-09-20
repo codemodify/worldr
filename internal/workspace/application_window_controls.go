@@ -27,10 +27,13 @@ var applicationWindowControlBoxes = [...]struct {
 // It is parented to the drag grip so Read, Overview and frameless surfaces
 // inherit the grip's established visibility policy.
 func buildApplicationWindowControlMesh() (*scene.Mesh, error) {
+	return buildApplicationWindowControlMeshFor(windowBorderInstrument)
+}
+
+func buildApplicationWindowControlMeshFor(style windowBorderStyle) (*scene.Mesh, error) {
 	var g frameGeometry
-	plate := scene.ColorHex(0x123b48, .96)
-	edge := scene.ColorHex(0x5ed5e8, .90)
-	glyph := scene.ColorHex(0xc4f8ff, 1)
+	palette := chromePaletteFor(style)
+	plate, edge, glyph := palette.plate, palette.edge, palette.glyph
 	for _, control := range applicationWindowControlBoxes {
 		b := control.box
 		left, bottom, right, top := b.x, b.y, b.x+b.w, b.y+b.h
@@ -63,10 +66,17 @@ func buildApplicationWindowControlMesh() (*scene.Mesh, error) {
 }
 
 func buildApplicationResizeHandleMesh() (*scene.Mesh, error) {
+	return buildApplicationResizeHandleMeshFor(windowBorderInstrument)
+}
+
+func buildApplicationResizeHandleMeshFor(style windowBorderStyle) (*scene.Mesh, error) {
 	var g frameGeometry
-	plate := scene.ColorHex(0x103744, .96)
-	edge := scene.ColorHex(0x75e9f7, .96)
-	detail := scene.ColorHex(0x3faabd, .78)
+	palette := chromePaletteFor(style)
+	plate, edge, detail := palette.plate, palette.edge, palette.detail
+	if style == windowBorderInstrument {
+		plate = scene.ColorHex(0x103744, .96)
+		edge = scene.ColorHex(0x75e9f7, .96)
+	}
 	// The clipped corner is visibly different from the top drag grip. Its full
 	// plate remains pickable, while the inset diagonals communicate resize.
 	g.polygon(plate,
@@ -117,13 +127,14 @@ func (w *Workspace) syncApplicationWindowControls(surface experience.Application
 	}
 	i := w.m.applicationState.index(surface.Key)
 	minimized := i >= 0 && w.m.applicationState.Layouts[i].Minimized
-	control.Mesh = w.applicationWindowControlMesh
+	style := w.selectedWindowBorderStyle()
+	control.Mesh = w.windowBorderControlMesh(style)
 	control.Hidden = surface.Frameless || surface.DragContent || minimized || w.m.applicationState.Overview || w.m.applicationState.Reading
 	control.Color = scene.Color{R: 1, G: 1, B: 1, A: 1}
 	if control.Hidden {
 		control.Glow = [3]float32{}
 	} else if surface.Key == w.m.applicationState.Active {
-		control.Glow = [3]float32{.04, .18, .22}
+		control.Glow = windowChromeGlow(style, .18)
 	} else {
 		control.Glow = [3]float32{}
 	}
@@ -137,11 +148,12 @@ func (w *Workspace) syncApplicationResizeHandle(surface experience.ApplicationSu
 	i := w.m.applicationState.index(surface.Key)
 	minimized := i >= 0 && w.m.applicationState.Layouts[i].Minimized
 	view := w.m.applicationState
+	style := w.selectedWindowBorderStyle()
 	handle.Hidden = surface.Frameless || surface.DragContent || minimized || view.Overview || view.Reading
-	handle.Mesh = w.applicationResizeHandleMesh
+	handle.Mesh = w.windowBorderResizeMesh(style)
 	handle.Color = scene.Color{R: 1, G: 1, B: 1, A: 1}
 	if surface.Key == view.Active {
-		handle.Glow = [3]float32{.04, .18, .22}
+		handle.Glow = windowChromeGlow(style, .18)
 	} else {
 		handle.Glow = [3]float32{}
 	}

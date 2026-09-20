@@ -31,17 +31,7 @@ func (w *Workspace) frameMeshFor(surface experience.ApplicationSurface) *scene.M
 		}
 		return w.photoFrameMesh
 	}
-	if !cinematicFrameSurface(surface) {
-		return w.applicationFrameMesh
-	}
-	if w.terminalFrameMesh == nil {
-		mesh, err := terminalFrameMesh()
-		if err != nil {
-			panic(err) // Invalid constant frame geometry is a programming error.
-		}
-		w.terminalFrameMesh = mesh
-	}
-	return w.terminalFrameMesh
+	return w.windowBorderFrameMeshForAspect(w.selectedWindowBorderStyle(), w.windowBorderAspect(surface))
 }
 
 type framePoint struct{ x, y float32 }
@@ -49,6 +39,10 @@ type frameGeometry struct {
 	vertices []scene.Vec3
 	indices  []uint32
 	colors   []scene.Color
+	// aspect is the world-space width/height of the surface that will own this
+	// geometry. It keeps authored strokes equally thick after the application's
+	// normalized plane is scaled to freely resized dimensions.
+	aspect float32
 }
 
 // Convex plates and joined strips are retained geometry, with no bitmap border
@@ -98,9 +92,10 @@ func (g *frameGeometry) wall(depth float32, color scene.Color, closed bool, poin
 }
 
 func (g *frameGeometry) stroke(width float32, color scene.Color, points ...framePoint) {
-	// The workspace configures compact and wide terminals at the same 8:5
-	// aspect. Correct that aspect when constructing equal-width angled rails.
-	const aspect = float32(1.6)
+	aspect := g.aspect
+	if aspect <= 0 || math.IsInf(float64(aspect), 0) || math.IsNaN(float64(aspect)) {
+		aspect = 1.6
+	}
 	normals := make([]framePoint, len(points)-1)
 	for i := range normals {
 		dx, dy := points[i+1].x-points[i].x, (points[i+1].y-points[i].y)/aspect
@@ -157,7 +152,11 @@ func clipFramePolygon(points []framePoint, axis int, limit float32, greater bool
 }
 
 func terminalFrameMesh() (*scene.Mesh, error) {
-	var g frameGeometry
+	return terminalFrameMeshForAspect(1.6)
+}
+
+func terminalFrameMeshForAspect(aspect float32) (*scene.Mesh, error) {
+	g := frameGeometry{aspect: aspect}
 	navy := scene.ColorHex(0x082c39, .96)
 	cyan := scene.ColorHex(0x0ac8f5, 1)
 	dim := scene.ColorHex(0x087594, .84)
@@ -229,12 +228,24 @@ func terminalFrameMesh() (*scene.Mesh, error) {
 }
 
 func terminalDragHandleMesh() (*scene.Mesh, error) {
+	return terminalDragHandleMeshFor(windowBorderInstrument)
+}
+
+func terminalDragHandleMeshFor(style windowBorderStyle) (*scene.Mesh, error) {
 	var g frameGeometry
-	g.polygon(scene.ColorHex(0x0b485b, 1), framePoint{-.19, .557}, framePoint{.19, .557}, framePoint{.166, .519}, framePoint{-.166, .519})
-	g.stroke(.002, scene.ColorHex(0x16d3ff, 1), framePoint{-.176, .552}, framePoint{.176, .552})
-	g.stroke(.0012, scene.ColorHex(0x29778e, 1), framePoint{-.164, .523}, framePoint{.164, .523})
+	palette := chromePaletteFor(style)
+	plate, edge, detail, glyph := palette.plate, palette.edge, palette.detail, palette.glyph
+	if style == windowBorderInstrument {
+		plate = scene.ColorHex(0x0b485b, 1)
+		edge = scene.ColorHex(0x16d3ff, 1)
+		detail = scene.ColorHex(0x29778e, 1)
+		glyph = scene.ColorHex(0xa6f4ff, .90)
+	}
+	g.polygon(plate, framePoint{-.19, .557}, framePoint{.19, .557}, framePoint{.166, .519}, framePoint{-.166, .519})
+	g.stroke(.002, edge, framePoint{-.176, .552}, framePoint{.176, .552})
+	g.stroke(.0012, detail, framePoint{-.164, .523}, framePoint{.164, .523})
 	for _, x := range []float32{-.025, -.003, .019} {
-		g.rect(x, .534, x+.010, .538, scene.ColorHex(0xa6f4ff, .90))
+		g.rect(x, .534, x+.010, .538, glyph)
 	}
 	return g.mesh()
 }

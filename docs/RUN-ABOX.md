@@ -146,7 +146,8 @@ or Ctrl+Alt+Space from any app, opens Tools + Spaces to launch tools, switch or
 create spaces, transfer a selection, and find windows across spaces. A compact
 scene controller continues the launcher rail at the bottom-right. Drag its
 reticle to orbit; the two unlabeled values show yaw and pitch. Its gear opens
-Settings, where Terminal and Media categories provide previews and Environment
+Settings, where Terminal and Media categories provide previews, Windows selects
+a saved Aperture, Instrument, Glass, or Telemetry border, and Environment
 switches DNA, Cat, and Eyes independently; its Reset control restores the camera
 view.
 Ctrl+Alt+Enter creates an independent native shell

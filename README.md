@@ -27,8 +27,10 @@ native viewer. The desktop has no left sidebar, footer, or main toolbar. Tool
 launching stays in the right rail, and a compact scene controller continues that
 rail at the bottom-right. Its reticle orbits the workspace, two unlabeled values
 show yaw and pitch, its gear opens Settings, and Reset restores the camera view.
-Settings provides Terminal and Media previews plus an Environment category with
-independent DNA, running-cat, and cursor-eye switches.
+Settings provides Terminal and Media previews, a Windows category with live
+Aperture, Instrument, Glass, and Telemetry border choices, and an Environment
+category with independent DNA, running-cat, and cursor-eye switches. Border and
+ambient choices are saved with the workspace.
 
 The general desktop's rear backdrop is a woven cyan energy wall. Its pinned
 25-by-15 physical lattice uses hidden horizontal and vertical bracing while two
@@ -325,7 +327,7 @@ input; click an app or press Enter to resume typing.
 | Open Tools + Spaces | First Launcher icon in the right rail, or Ctrl+Alt+Space from the workspace or a focused app |
 | Pan the spatial workspace | Super+primary drag on empty workspace |
 | Orbit the spatial scene | Drag the reticle in the scene controller below the right launcher rail |
-| Open Settings | Select the gear in the scene controller; choose Terminal or Media for previews, or Environment to switch DNA, Cat, and Eyes independently |
+| Open Settings | Select the gear in the scene controller; choose Terminal or Media for previews, Windows to select a saved native border, or Environment to switch DNA, Cat, and Eyes independently |
 | Zoom the spatial scene | Scroll over the scene; application scrolling keeps its usual behavior |
 | Move / throw a window | Drag its top grip, or use Super+primary drag where the host permits |
 | Change or throw through depth | Scroll with the drag held; release after a quick scroll to carry that recent motion into the throw |

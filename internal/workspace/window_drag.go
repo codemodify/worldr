@@ -8,21 +8,23 @@ import (
 // The grip is a separate scene mesh above the content plane. Its hit region
 // follows perspective and occlusion without taking pixels from the client.
 func applicationDragHandleMesh() (*scene.Mesh, error) {
-	var vertices []scene.Vec3
-	var indices []uint32
-	var colors []scene.Color
-	quad := func(left, bottom, right, top float32, color scene.Color) {
-		base := uint32(len(vertices))
-		vertices = append(vertices, scene.Vec3{X: left, Y: bottom}, scene.Vec3{X: right, Y: bottom}, scene.Vec3{X: right, Y: top}, scene.Vec3{X: left, Y: top})
-		indices = append(indices, base, base+1, base+2, base, base+2, base+3)
-		colors = append(colors, color, color)
+	return applicationDragHandleMeshFor(windowBorderInstrument)
+}
+
+func applicationDragHandleMeshFor(style windowBorderStyle) (*scene.Mesh, error) {
+	var g frameGeometry
+	palette := chromePaletteFor(style)
+	plate, tab := palette.plate, palette.edge
+	if style == windowBorderInstrument {
+		plate = scene.Color{R: .25, G: .35, B: .4, A: 1}
+		tab = scene.Color{R: 1, G: 1, B: 1, A: 1}
 	}
 	// Segments leave two dark notches in a broad, readily grabbed plate.
-	quad(-.16, .522, .16, .548, scene.Color{R: .25, G: .35, B: .4, A: 1})
+	g.rect(-.16, .522, .16, .548, plate)
 	for _, left := range []float32{-.105, -.025, .055} {
-		quad(left, .548, left+.05, .58, scene.Color{R: 1, G: 1, B: 1, A: 1})
+		g.rect(left, .548, left+.05, .58, tab)
 	}
-	return scene.NewMesh(vertices, indices, colors)
+	return g.mesh()
 }
 
 func (w *Workspace) attachApplicationDragHandle(id uint64, parent scene.NodeID) {
@@ -46,26 +48,29 @@ func (w *Workspace) syncApplicationDragHandle(surface experience.ApplicationSurf
 	if handle == nil {
 		return
 	}
-	handle.Mesh = w.applicationDragHandleMesh
-	if cinematicFrameSurface(surface) {
-		if w.terminalDragHandleMesh == nil {
-			mesh, err := terminalDragHandleMesh()
-			if err != nil {
-				panic(err)
-			}
-			w.terminalDragHandleMesh = mesh
-		}
-		handle.Mesh = w.terminalDragHandleMesh
-	}
+	style := w.selectedWindowBorderStyle()
+	handle.Mesh = w.windowBorderDragHandleMesh(style, cinematicFrameSurface(surface))
 	view := w.m.applicationState
 	i := view.index(surface.Key)
 	minimized := i >= 0 && view.Layouts[i].Minimized
 	handle.Hidden = surface.Frameless || surface.DragContent || minimized || view.Overview || view.Reading
-	handle.Color = scene.ColorHex(0x6ca7b7, .78)
+	handle.Glow = [3]float32{}
+	if style == windowBorderInstrument {
+		handle.Color = scene.ColorHex(0x6ca7b7, .78)
+		if w.pointer.windowDrag && w.pointer.surface == w.applicationNodes[surface.ID] {
+			handle.Color = scene.ColorHex(0xb2f5ff, 1)
+			handle.Glow = windowChromeGlow(style, .16)
+		} else if surface.Key == view.Active {
+			handle.Color = scene.ColorHex(0x82dbe9, .95)
+		}
+		return
+	}
+	handle.Color = scene.Color{R: 1, G: 1, B: 1, A: .84}
 	if w.pointer.windowDrag && w.pointer.surface == w.applicationNodes[surface.ID] {
-		handle.Color = scene.ColorHex(0xb2f5ff, 1)
+		handle.Color.A = 1
+		handle.Glow = windowChromeGlow(style, .18)
 	} else if surface.Key == view.Active {
-		handle.Color = scene.ColorHex(0x82dbe9, .95)
+		handle.Color.A = .96
 	}
 }
 

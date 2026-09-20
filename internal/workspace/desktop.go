@@ -29,6 +29,7 @@ type desktopDocument struct {
 	ReducedMotion bool                 `json:"reduced_motion,omitempty"`
 	Applications  ApplicationViewState `json:"applications"`
 	Environment   environmentSettings  `json:"environment"`
+	Windows       windowSettings       `json:"windows"`
 }
 
 func studyAction(kind ActionKind) bool {
@@ -41,13 +42,17 @@ func studyAction(kind ActionKind) bool {
 }
 
 func (w *Workspace) saveDesktopState() ([]byte, error) {
-	return marshalDesktopState(w.Document(), w.environment)
+	return marshalDesktopState(w.Document(), w.environment, w.windows)
 }
 
-func marshalDesktopState(d Document, environment environmentSettings) ([]byte, error) {
+func marshalDesktopState(d Document, environment environmentSettings, windows windowSettings) ([]byte, error) {
 	d.View.Presentation = presentation.Cinematic
 	d.View.ReducedMotion = false
+	windows.Border = windows.Border.normalized()
 	if err := d.Validate(); err != nil {
+		return nil, err
+	}
+	if err := windows.validate(); err != nil {
 		return nil, err
 	}
 	return json.MarshalIndent(desktopDocument{
@@ -57,13 +62,14 @@ func marshalDesktopState(d Document, environment environmentSettings) ([]byte, e
 		ReducedMotion: d.View.ReducedMotion,
 		Applications:  d.View.Application,
 		Environment:   environment,
+		Windows:       windows,
 	}, "", "  ")
 }
 
 func (w *Workspace) loadDesktopState(data []byte) error {
 	base := initialModel().document()
 	base.Timeline.Playing = false
-	d := desktopDocument{Camera: base.View.Camera, Presentation: presentation.Cinematic, Environment: defaultEnvironmentSettings()}
+	d := desktopDocument{Camera: base.View.Camera, Presentation: presentation.Cinematic, Environment: defaultEnvironmentSettings(), Windows: defaultWindowSettings()}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&d); err != nil {
@@ -75,6 +81,9 @@ func (w *Workspace) loadDesktopState(data []byte) error {
 	}
 	if d.Version != 1 {
 		return fmt.Errorf("unsupported workspace document version %d", d.Version)
+	}
+	if err := d.Windows.validate(); err != nil {
+		return fmt.Errorf("window settings: %w", err)
 	}
 	base.View.Camera, base.View.Presentation = d.Camera, presentation.Cinematic
 	base.View.ReducedMotion, base.View.Application = false, d.Applications
@@ -89,6 +98,7 @@ func (w *Workspace) loadDesktopState(data []byte) error {
 	}
 	w.installLoadedDocument(base)
 	w.environment = d.Environment
+	w.windows = d.Windows
 	return nil
 }
 

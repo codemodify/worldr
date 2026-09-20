@@ -19,13 +19,13 @@ func terminalFrameWorkspace(t *testing.T, count int) (*Workspace, *fakeApplicati
 	return w, apps
 }
 
-func TestCinematicFrameClassificationTracksMetadataWithoutReplacingNodes(t *testing.T) {
+func TestGlobalFrameStyleTracksGripMetadataWithoutReplacingNodes(t *testing.T) {
 	w, apps := terminalFrameWorkspace(t, 1)
 	appID := apps.surfaces[0].ID
 	rootID, frameID, gripID := w.applicationNodes[appID], w.applicationFrames[appID], w.applicationDragHandles[appID]
-	terminalMesh := w.scene.Node(frameID).Mesh
+	globalMesh := w.windowBorderFrameMesh(w.selectedWindowBorderStyle())
 	terminalGrip := w.scene.Node(gripID).Mesh
-	if terminalMesh == w.applicationFrameMesh || terminalGrip == w.applicationDragHandleMesh {
+	if w.scene.Node(frameID).Mesh != globalMesh || globalMesh == w.applicationFrameMesh || terminalGrip == w.applicationDragHandleMesh {
 		t.Fatal("terminal did not receive distinct retained border and grip geometry")
 	}
 	for _, test := range []struct {
@@ -47,12 +47,15 @@ func TestCinematicFrameClassificationTracksMetadataWithoutReplacingNodes(t *test
 		if w.applicationNodes[appID] != rootID || w.applicationFrames[appID] != frameID || w.applicationDragHandles[appID] != gripID {
 			t.Fatal("changing AppID recreated application or decoration nodes")
 		}
+		if border.Mesh != globalMesh {
+			t.Fatalf("global border preference did not cover identity %q", test.appID)
+		}
 		if test.cinematic {
-			if border.Mesh != terminalMesh || grip.Mesh != terminalGrip {
-				t.Fatalf("cinematic identity %q did not reuse its retained style", test.appID)
+			if grip.Mesh != terminalGrip {
+				t.Fatalf("cinematic identity %q did not reuse its retained grip", test.appID)
 			}
-		} else if border.Mesh != w.applicationFrameMesh || grip.Mesh != w.applicationDragHandleMesh {
-			t.Fatalf("unrecognized identity %q received terminal decorations", test.appID)
+		} else if grip.Mesh != w.applicationDragHandleMesh {
+			t.Fatalf("unrecognized identity %q received a cinematic grip", test.appID)
 		}
 		if !border.Unpickable || !border.DepthReadOnly || !border.Unlit || grip.Unpickable || len(w.scene.Children(rootID)) != 3 || len(w.scene.Children(gripID)) != 1 {
 			t.Fatal("style switch changed decoration input/depth policy or ownership")
@@ -255,8 +258,9 @@ func TestTerminalFrameRetainsResourcesFitsReadingAndFollowsLifecycle(t *testing.
 		t.Fatal(err)
 	}
 	w.Draw(1200, 800)
-	if border.Mesh != frameMesh || grip.Mesh != gripMesh || grip.Hidden {
-		t.Fatal("resize/view changes rebuilt the terminal style or left its grip hidden")
+	resizedFrameMesh := w.frameMeshFor(apps.surfaces[0])
+	if border.Mesh != resizedFrameMesh || border.Mesh == frameMesh || grip.Mesh != gripMesh || grip.Hidden {
+		t.Fatal("aspect resize did not select retained ratio-correct border geometry or changed the grip")
 	}
 	apps.surfaces = apps.surfaces[1:]
 	w.Update(0)
@@ -265,7 +269,7 @@ func TestTerminalFrameRetainsResourcesFitsReadingAndFollowsLifecycle(t *testing.
 	}
 	w.Draw(1200, 800)
 	remaining := apps.surfaces[0].ID
-	if w.scene.Node(w.applicationFrames[remaining]).Mesh != frameMesh || w.scene.Node(w.applicationDragHandles[remaining]).Mesh != gripMesh {
+	if w.scene.Node(w.applicationFrames[remaining]).Mesh != resizedFrameMesh || w.scene.Node(w.applicationDragHandles[remaining]).Mesh != gripMesh {
 		t.Fatal("closing one terminal changed its sibling's retained style")
 	}
 	w.SetApplications(nil)

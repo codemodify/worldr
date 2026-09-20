@@ -164,13 +164,17 @@ func TestApplicationFramesRetainResourcesAcrossViewResizeAndLifecycle(t *testing
 		apps.surfaces[i].AppID = "worldr.generic-test"
 	}
 	w.Draw(1440, 900)
-	geometry := w.applicationFrameMesh.Geometry()
+	defaultGeometry := w.frameMeshFor(apps.surfaces[0]).Geometry()
 	firstID, secondID := apps.surfaces[0].ID, apps.surfaces[1].ID
 	firstFrame, secondFrame := w.applicationFrames[firstID], w.applicationFrames[secondID]
 	firstRoot := w.applicationNodes[firstID]
 	command(t, w, Action{Kind: MoveApplications, DeltaX: .4, DeltaY: -.2, DeltaDepth: .5})
 	if err := apps.surfaces[0].Texture.Replace(600, 800, make([]byte, 600*800*4)); err != nil {
 		t.Fatal(err)
+	}
+	geometry := w.frameMeshFor(apps.surfaces[0]).Geometry()
+	if geometry == defaultGeometry {
+		t.Fatal("aspect change reused border strokes authored for the old window ratio")
 	}
 	for _, reading := range []bool{false, true} {
 		if reading {
@@ -209,7 +213,7 @@ func TestApplicationFramesRetainResourcesAcrossViewResizeAndLifecycle(t *testing
 	}
 	replacement := &fakeApplications{surfaces: []experience.ApplicationSurface{{ID: 901, Key: "replacement", Texture: texture}}}
 	w.SetApplications(replacement)
-	if got := frameDraws(w, w.Draw(1440, 900)); len(got) != 1 || got[0].Geometry != geometry {
+	if got := frameDraws(w, w.Draw(1440, 900)); len(got) != 1 || got[0].Geometry != defaultGeometry {
 		t.Fatal("reopened application did not reuse the workspace's border mesh")
 	}
 	newFrame := w.applicationFrames[901]

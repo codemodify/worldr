@@ -320,8 +320,11 @@ Motion and leaves provider playback untouched. This treatment is mesh-only:
 application control textures, legacy buffers, shaped overlays and the host cursor
 never enter its shader.
 
-Explicit `FrameCinematic` and `FramePhotoBracket` preserve the individual app
-identities. `nativeui.Painter` supplies shaped labels, buttons, panels, menus and
+Workspace Settings applies the saved Aperture, Instrument, Glass, or Telemetry
+border to ordinary framed surfaces. `FrameCinematic` keeps the stronger authored
+chrome treatment within the selected family. Explicit `FramePhotoBracket` and
+`Frameless` preserve app-specific open or absent chrome. `nativeui.Painter`
+supplies shaped labels, buttons, panels, menus and
 fields on retained RGBA surfaces; `Controller` supplies keyboard/pointer focus
 and semantic roles. `Field` edits graphemes, selection and transient IME preedit.
 Linux uses Pango/HarfBuzz/font fallback. Non-cgo builds retain limited Go-font

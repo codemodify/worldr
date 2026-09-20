@@ -28,6 +28,7 @@ type Workspace struct {
 	dnaNode                                                           scene.NodeID
 	backgroundPhase                                                   time.Duration
 	environment                                                       environmentSettings
+	windows                                                           windowSettings
 	ambientPointer                                                    ambientPointerState
 	ambientCat                                                        *ambientCat
 	energyNet                                                         *energyNet
@@ -53,13 +54,17 @@ type Workspace struct {
 	applicationFrameMesh                                              *scene.Mesh
 	photoFrameMesh                                                    *scene.Mesh
 	terminalFrameMesh                                                 *scene.Mesh
+	windowBorderFrameMeshes                                           map[windowBorderFrameMeshKey]*scene.Mesh
 	terminalDragHandleMesh                                            *scene.Mesh
+	windowBorderDragHandleMeshes                                      map[windowBorderDragMeshKey]*scene.Mesh
 	applicationDragHandles                                            map[uint64]scene.NodeID
 	applicationDragHandleMesh                                         *scene.Mesh
 	applicationWindowControls                                         map[uint64]scene.NodeID
 	applicationWindowControlMesh                                      *scene.Mesh
+	windowBorderControlMeshes                                         map[windowBorderStyle]*scene.Mesh
 	applicationResizeHandles                                          map[uint64]scene.NodeID
 	applicationResizeHandleMesh                                       *scene.Mesh
+	windowBorderResizeMeshes                                          map[windowBorderStyle]*scene.Mesh
 	windowDragButtons                                                 map[uint32]bool
 	windowThrow                                                       *windowThrow
 	applicationKeys                                                   map[uint64]string
@@ -113,7 +118,7 @@ func newWorkspace(desktop bool) (*Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	w := &Workspace{desktop: desktop, m: initialModel(), canvas: c, scene: scene.NewScene(), width: 1440, height: 900, scale: 1, applicationDockHover: -1, environment: defaultEnvironmentSettings()}
+	w := &Workspace{desktop: desktop, m: initialModel(), canvas: c, scene: scene.NewScene(), width: 1440, height: 900, scale: 1, applicationDockHover: -1, environment: defaultEnvironmentSettings(), windows: defaultWindowSettings()}
 	stage, err := stageMesh()
 	if err != nil {
 		c.Close()
@@ -198,7 +203,7 @@ func (w *Workspace) Update(dt time.Duration) {
 }
 func (w *Workspace) Info() experience.Info {
 	if w.desktop {
-		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the right launcher rail to search or open native tools · Super+drag empty space to pan · drag the bottom-right scene controller to orbit · use its gear for Terminal, Media, and Environment settings or Reset to restore the camera · drag a window grip or Super+primary to move and throw · scroll while holding it and release to throw into the rear energy wall · use the square window control or Super+double-click to enter or leave Read · drag a window's bottom-right grip or Super+secondary to resize · use the other top-grip controls to minimize or close · Super+C closes the active app · Super+wheel changes hovered-window depth · Ctrl+Alt+Enter opens a shell · Ctrl+Alt+O finds windows · Enter reads the selected app · F1 opens Help"}
+		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the right launcher rail to search or open native tools · Super+drag empty space to pan · drag the bottom-right scene controller to orbit · use its gear for Terminal, Media, Windows, and Environment settings or Reset to restore the camera · drag a window grip or Super+primary to move and throw · scroll while holding it and release to throw into the rear energy wall · use the square window control or Super+double-click to enter or leave Read · drag a window's bottom-right grip or Super+secondary to resize · use the other top-grip controls to minimize or close · Super+C closes the active app · Super+wheel changes hovered-window depth · Ctrl+Alt+Enter opens a shell · Ctrl+Alt+O finds windows · Enter reads the selected app · F1 opens Help"}
 	}
 	if w.applications != nil {
 		return experience.Info{ID: "worldr.axial", Title: "worldr — AXIAL / 07", Controls: "Ctrl+Alt+Enter opens a shell · click app or press Enter from workspace to read and type · Ctrl+Alt+O overview from any app · overview: arrows select, Enter or Esc returns · drag scene to orbit, scroll scene to zoom · Place: drag apps, Shift+click to select, scroll for depth · Group moves selected apps together · Super+C requests closing the active window · click workspace to use native shortcuts"}

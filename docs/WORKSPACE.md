@@ -77,9 +77,10 @@ and vertically without moving windows. Empty unmodified drags remain inert. A
 compact scene controller continues the right launcher rail at the bottom-right.
 Its small reticle owns scene orbiting, and two values report yaw and pitch
 without field labels. The adjacent gear opens a modal Settings surface with
-Terminal and Media previews and an Environment category for independent DNA,
-Cat, and Eyes switches; Reset sits inside the same controller and restores the
-camera view.
+Terminal and Media previews, a saved Windows category for choosing Aperture,
+Instrument, Glass, or Telemetry borders, and an Environment category for
+independent DNA, Cat, and Eyes switches; Reset sits inside the same controller
+and restores the camera view.
 
 Workspace F1 exposes the current shortcuts in an on-screen guide. It owns input
 while open; closing it leaves typing focus with the workspace. Focused
@@ -222,7 +223,8 @@ sidebar, footer, or main toolbar. The launcher stays on the right, and its compa
 scene controller sits directly below it at the bottom-right. The controller has
 no title or yaw/pitch field labels; it combines the orbit reticle and angle
 values with a Settings gear and Reset. Settings shows Terminal and Media
-previews plus saved Environment switches for DNA, Cat, and Eyes.
+previews, four saved native-window border choices, and saved Environment
+switches for DNA, Cat, and Eyes.
 
 `--project` anchors a native Files browser at that directory. Select a file
 to preview UTF-8 text with line numbers. Enter, double-click or Open enters a

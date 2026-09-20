@@ -69,20 +69,27 @@ func (w *Workspace) syncApplicationFrame(surface experience.ApplicationSurface) 
 		color, alpha = 0xb4e9f1, .32
 		glow = .35
 	}
-	if cinematicFrameSurface(surface) {
-		// The shared cyan chassis remains legible when idle, with
-		// the same independent focus/selection/hover ordering as other apps.
-		color = 0x8ce9ff
-		alpha = .60 + alpha*.44
-		if alpha > 1 {
-			alpha = 1
-		}
-	} else if photoFrameSurface(surface) {
+	if photoFrameSurface(surface) {
 		// An always-visible left bracket identifies the photo while keeping
 		// its other edges open. A small selection lift avoids a bright halo.
 		color = 0xc3f4ff
 		alpha = .76 + alpha*.20
 		glow *= .18
+	} else {
+		// Border meshes author their own material channels, so the node tint is
+		// theme-owned rather than forcing every reference direction back to cyan.
+		visual := borderVisualFor(w.selectedWindowBorderStyle())
+		color = visual.tint
+		switch {
+		case w.applicationKeyboard && w.applicationFocusedID == surface.ID:
+			alpha = .98
+		case index >= 0 && w.m.applicationState.Selected&(1<<index) != 0:
+			alpha = .82
+		case w.applicationHoveredID == surface.ID:
+			alpha = .72
+		default:
+			alpha = visual.idleAlpha
+		}
 	}
 	frame.Color = scene.ColorHex(color, alpha)
 	// Idle windows never emit, even while a different window has focus.

@@ -234,6 +234,71 @@ func TestDesktopEnvironmentSettingsStateCompatibilityAndTransactions(t *testing.
 	}
 }
 
+func TestDesktopWindowSettingsStateCompatibilityAndTransactions(t *testing.T) {
+	w := desktop(t)
+	w.windows.Border = windowBorderTelemetry
+	data, err := w.SaveState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var encoded map[string]any
+	if err := json.Unmarshal(data, &encoded); err != nil {
+		t.Fatal(err)
+	}
+	windows, ok := encoded["windows"].(map[string]any)
+	if !ok || len(windows) != 1 || windows["border"] != string(windowBorderTelemetry) {
+		t.Fatalf("desktop state omitted its window settings: %#v", encoded["windows"])
+	}
+
+	for _, snapshot := range []struct {
+		name string
+		make func() ([]byte, error)
+	}{
+		{name: "save", make: w.SaveState},
+		{name: "checkpoint", make: w.CheckpointState},
+	} {
+		t.Run(snapshot.name, func(t *testing.T) {
+			state, err := snapshot.make()
+			if err != nil {
+				t.Fatal(err)
+			}
+			restored := desktop(t)
+			if err := restored.LoadState(state); err != nil || restored.windows.Border != windowBorderTelemetry {
+				t.Fatalf("window settings did not round-trip: state=%+v err=%v", restored.windows, err)
+			}
+		})
+	}
+
+	delete(encoded, "windows")
+	legacy, err := json.Marshal(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyLoaded := desktop(t)
+	if err := legacyLoaded.LoadState(legacy); err != nil || legacyLoaded.windows != defaultWindowSettings() {
+		t.Fatalf("legacy state did not receive default window settings: state=%+v err=%v", legacyLoaded.windows, err)
+	}
+
+	invalid := make(map[string]any)
+	if err := json.Unmarshal(data, &invalid); err != nil {
+		t.Fatal(err)
+	}
+	invalid["windows"].(map[string]any)["border"] = "unknown"
+	malformed, err := json.Marshal(invalid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeDocument, beforeEnvironment, beforeWindows, history := w.Document(), w.environment, w.windows, w.historyPosition
+	if err := w.LoadState(malformed); err == nil || w.Document() != beforeDocument || w.environment != beforeEnvironment || w.windows != beforeWindows || w.historyPosition != history {
+		t.Fatal("invalid window settings changed the live desktop")
+	}
+
+	w.windows.Border = "invalid-runtime-value"
+	if _, err := w.SaveState(); err == nil {
+		t.Fatal("desktop save accepted an invalid live window border")
+	}
+}
+
 func TestDesktopResetViewPreservesApplicationPlacementAndPreferences(t *testing.T) {
 	w := desktop(t)
 	desktopApplications(t, w)

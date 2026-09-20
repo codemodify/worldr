@@ -99,12 +99,20 @@ func TestSettingsCategoriesScaleAndRenderDistinctPreviews(t *testing.T) {
 		if reflect.DeepEqual(terminal, media) {
 			t.Fatal("Terminal and Media categories rendered the same preview")
 		}
+		x, y = settingsPoint(w, settingsWindowsButton)
+		if !pointer(w, experience.PointerDown, x, y) || !pointer(w, experience.PointerUp, x, y) || w.settingsCategory != settingsWindows {
+			t.Fatal("scaled Windows category click did not select its controls")
+		}
+		windows := copiedVertices(w.Draw(dimensions.width, dimensions.height))
+		if reflect.DeepEqual(terminal, windows) || reflect.DeepEqual(media, windows) {
+			t.Fatal("Windows category did not render a distinct border chooser")
+		}
 		x, y = settingsPoint(w, settingsEnvironmentButton)
 		if !pointer(w, experience.PointerDown, x, y) || !pointer(w, experience.PointerUp, x, y) || w.settingsCategory != settingsEnvironment {
 			t.Fatal("scaled Environment category click did not select its controls")
 		}
 		environment := copiedVertices(w.Draw(dimensions.width, dimensions.height))
-		if reflect.DeepEqual(media, environment) || reflect.DeepEqual(terminal, environment) {
+		if reflect.DeepEqual(media, environment) || reflect.DeepEqual(terminal, environment) || reflect.DeepEqual(windows, environment) {
 			t.Fatal("Environment category did not render distinct controls")
 		}
 		x, y = settingsPoint(w, settingsTerminalButton)
@@ -113,6 +121,117 @@ func TestSettingsCategoriesScaleAndRenderDistinctPreviews(t *testing.T) {
 		if w.settingsCategory != settingsTerminal || w.Document() != before || w.historyPosition != history || len(w.history) != historyLength {
 			t.Fatal("category navigation changed persistent workspace state")
 		}
+	}
+}
+
+func TestWindowBorderSettingsApplyLiveAndPersistWithoutUndoHistory(t *testing.T) {
+	for _, dimensions := range []struct{ width, height int }{{1440, 900}, {2880, 1800}} {
+		w := desktop(t)
+		w.Draw(dimensions.width, dimensions.height)
+		beforeDocument, history, historyLength := w.Document(), w.historyPosition, len(w.history)
+		beforeState, err := w.SaveState()
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.openSettings()
+		x, y := settingsPoint(w, settingsWindowsButton)
+		pointer(w, experience.PointerDown, x, y)
+		pointer(w, experience.PointerUp, x, y)
+		for _, choice := range []struct {
+			bounds box
+			style  windowBorderStyle
+		}{
+			{settingsWindowInstrument, windowBorderInstrument},
+			{settingsWindowAperture, windowBorderAperture},
+			{settingsWindowGlass, windowBorderGlass},
+			{settingsWindowTelemetry, windowBorderTelemetry},
+		} {
+			x, y = settingsPoint(w, choice.bounds)
+			if !pointer(w, experience.PointerDown, x, y) || !pointer(w, experience.PointerUp, x, y) || w.windows.Border != choice.style {
+				t.Fatalf("border card did not apply %q live", choice.style)
+			}
+		}
+		if w.Document() != beforeDocument || w.historyPosition != history || len(w.history) != historyLength || w.CanUndo() {
+			t.Fatal("window border preference entered the workspace document or Undo history")
+		}
+		afterState, err := w.SaveState()
+		if err != nil || bytes.Equal(beforeState, afterState) {
+			t.Fatal("window border preference did not change persisted desktop state")
+		}
+		loaded := desktop(t)
+		if err := loaded.LoadState(afterState); err != nil || loaded.windows.Border != windowBorderTelemetry {
+			t.Fatalf("window border preference did not round-trip: state=%+v err=%v", loaded.windows, err)
+		}
+	}
+}
+
+func TestWindowBorderSettingsCardUpdatesAttachedWindowChromeOnNextDraw(t *testing.T) {
+	w := desktop(t)
+	apps := desktopApplications(t, w)
+	id := apps.surfaces[0].ID
+	frameID := w.applicationFrames[id]
+	beforeFrame := w.scene.Node(frameID).Mesh
+	beforeGrip := w.scene.Node(w.applicationDragHandles[id]).Mesh
+	beforeControls := w.scene.Node(w.applicationWindowControls[id]).Mesh
+	beforeResize := w.scene.Node(w.applicationResizeHandles[id]).Mesh
+
+	w.openSettings()
+	x, y := settingsPoint(w, settingsWindowsButton)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	x, y = settingsPoint(w, settingsWindowTelemetry)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	w.Draw(1440, 900)
+
+	if w.windows.Border != windowBorderTelemetry || w.scene.Node(frameID).Mesh == beforeFrame || w.scene.Node(frameID).Mesh != w.windowBorderFrameMesh(windowBorderTelemetry) {
+		t.Fatal("Telemetry card did not swap the attached window frame on the next draw")
+	}
+	if w.scene.Node(w.applicationDragHandles[id]).Mesh == beforeGrip || w.scene.Node(w.applicationWindowControls[id]).Mesh == beforeControls || w.scene.Node(w.applicationResizeHandles[id]).Mesh == beforeResize {
+		t.Fatal("Telemetry card left Instrument grip, controls, or resize chrome attached")
+	}
+}
+
+func TestWindowBorderSettingsRequireVisibleCompletedUnmovedClicks(t *testing.T) {
+	w := desktop(t)
+	w.Draw(1440, 900)
+	w.openSettings()
+	x, y := settingsPoint(w, settingsWindowsButton)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerUp, x, y)
+
+	x, y = settingsPoint(w, settingsWindowAperture)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerMove, x+12, y)
+	pointer(w, experience.PointerMove, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	if w.windows.Border != windowBorderInstrument {
+		t.Fatal("dragging away and back activated a window border card")
+	}
+	x, y = settingsPoint(w, settingsWindowGlass)
+	pointer(w, experience.PointerDown, x, y)
+	w.Handle(experience.Event{Kind: experience.PointerCancel})
+	pointer(w, experience.PointerUp, x, y)
+	if w.windows.Border != windowBorderInstrument {
+		t.Fatal("a cancelled border press activated on a later release")
+	}
+	x, y = settingsPoint(w, settingsWindowTelemetry)
+	pointer(w, experience.PointerDown, x, y)
+	w.Draw(2880, 1800)
+	pointer(w, experience.PointerUp, x*2, y*2)
+	if w.windows.Border != windowBorderInstrument {
+		t.Fatal("a resized Settings press activated a border using stale coordinates")
+	}
+
+	w.Draw(1440, 900)
+	x, y = settingsPoint(w, settingsTerminalButton)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	x, y = settingsPoint(w, settingsWindowAperture)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	if w.windows.Border != windowBorderInstrument {
+		t.Fatal("an invisible Windows card activated from another category")
 	}
 }
 

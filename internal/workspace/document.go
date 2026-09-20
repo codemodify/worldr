@@ -213,7 +213,7 @@ func (w *Workspace) CheckpointState() ([]byte, error) {
 		d = merge(d, w.pointer.start, w.pointer.mask())
 	}
 	if w.desktop {
-		return marshalDesktopState(d, w.environment)
+		return marshalDesktopState(d, w.environment, w.windows)
 	}
 	if err := d.Validate(); err != nil {
 		return nil, err

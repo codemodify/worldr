@@ -418,8 +418,9 @@ func (w *Workspace) syncApplicationScene() {
 		}
 		w.syncApplicationFrame(surface)
 		if view.Reading && !view.Overview && surface.Key == view.Active {
-			if cinematicFrameSurface(surface) && !surface.Frameless {
-				// Include the outer cinematic rails in the readable framing.
+			if !surface.Frameless && !photoFrameSurface(surface) {
+				// Every selectable border shares the same outer envelope. Include
+				// it when framing both native and compatibility apps for Read.
 				width, height = width*1.09, height*1.09
 			}
 			w.frameApplicationCamera(center, normal, up, width, height)

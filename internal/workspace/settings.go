@@ -4,13 +4,14 @@ import "github.com/codemodify/worldr/internal/experience"
 
 // Settings is transient workspace chrome. Its category selection deliberately
 // lives outside Document so inspecting another category never creates an edit
-// or a saved-state change. Environment switches are desktop preferences and
-// persist separately from the workspace's undoable document.
+// or a saved-state change. Window and Environment choices are desktop
+// preferences and persist separately from the workspace's undoable document.
 type settingsCategory uint8
 
 const (
 	settingsTerminal settingsCategory = iota
 	settingsMedia
+	settingsWindows
 	settingsEnvironment
 )
 
@@ -22,7 +23,12 @@ const (
 	settingsTargetClose
 	settingsTargetTerminal
 	settingsTargetMedia
+	settingsTargetWindows
 	settingsTargetEnvironment
+	settingsTargetWindowAperture
+	settingsTargetWindowInstrument
+	settingsTargetWindowGlass
+	settingsTargetWindowTelemetry
 	settingsTargetDNA
 	settingsTargetCat
 	settingsTargetEyes
@@ -40,8 +46,13 @@ var (
 	settingsCloseButton       = box{1234, 98, 44, 32}
 	settingsTerminalButton    = box{160, 176, 218, 54}
 	settingsMediaButton       = box{160, 242, 218, 54}
-	settingsEnvironmentButton = box{160, 308, 218, 54}
+	settingsWindowsButton     = box{160, 308, 218, 54}
+	settingsEnvironmentButton = box{160, 374, 218, 54}
 	settingsPreviewBounds     = box{432, 222, 830, 430}
+	settingsWindowAperture    = box{452, 242, 380, 180}
+	settingsWindowInstrument  = box{862, 242, 380, 180}
+	settingsWindowGlass       = box{452, 446, 380, 180}
+	settingsWindowTelemetry   = box{862, 446, 380, 180}
 	settingsDNAToggle         = box{462, 256, 770, 92}
 	settingsCatToggle         = box{462, 370, 770, 92}
 	settingsEyesToggle        = box{462, 484, 770, 92}
@@ -55,8 +66,18 @@ func (w *Workspace) settingsButtonTarget(x, y float32) settingsTarget {
 		return settingsTargetTerminal
 	case settingsMediaButton.contains(x, y):
 		return settingsTargetMedia
+	case settingsWindowsButton.contains(x, y):
+		return settingsTargetWindows
 	case settingsEnvironmentButton.contains(x, y):
 		return settingsTargetEnvironment
+	case w.settingsCategory == settingsWindows && settingsWindowAperture.contains(x, y):
+		return settingsTargetWindowAperture
+	case w.settingsCategory == settingsWindows && settingsWindowInstrument.contains(x, y):
+		return settingsTargetWindowInstrument
+	case w.settingsCategory == settingsWindows && settingsWindowGlass.contains(x, y):
+		return settingsTargetWindowGlass
+	case w.settingsCategory == settingsWindows && settingsWindowTelemetry.contains(x, y):
+		return settingsTargetWindowTelemetry
 	case w.settingsCategory == settingsEnvironment && settingsDNAToggle.contains(x, y):
 		return settingsTargetDNA
 	case w.settingsCategory == settingsEnvironment && settingsCatToggle.contains(x, y):
@@ -225,8 +246,18 @@ func (w *Workspace) handleSettings(event experience.Event) bool {
 						w.settingsCategory = settingsTerminal
 					case settingsTargetMedia:
 						w.settingsCategory = settingsMedia
+					case settingsTargetWindows:
+						w.settingsCategory = settingsWindows
 					case settingsTargetEnvironment:
 						w.settingsCategory = settingsEnvironment
+					case settingsTargetWindowAperture:
+						w.windows.Border = windowBorderAperture
+					case settingsTargetWindowInstrument:
+						w.windows.Border = windowBorderInstrument
+					case settingsTargetWindowGlass:
+						w.windows.Border = windowBorderGlass
+					case settingsTargetWindowTelemetry:
+						w.windows.Border = windowBorderTelemetry
 					case settingsTargetDNA:
 						w.environment.DNA = !w.environment.DNA
 					case settingsTargetCat:
@@ -274,9 +305,10 @@ func (w *Workspace) drawSettings() {
 	w.drawSettingsClose()
 	w.drawSettingsCategory(settingsTerminalButton, "TERMINAL", "SHELL SURFACE", w.settingsCategory == settingsTerminal)
 	w.drawSettingsCategory(settingsMediaButton, "MEDIA", "PLAYBACK SURFACE", w.settingsCategory == settingsMedia)
+	w.drawSettingsCategory(settingsWindowsButton, "WINDOWS", "NATIVE BORDERS", w.settingsCategory == settingsWindows)
 	w.drawSettingsCategory(settingsEnvironmentButton, "ENVIRONMENT", "AMBIENT SCENE", w.settingsCategory == settingsEnvironment)
 	footer := "TRANSIENT PREVIEW"
-	if w.settingsCategory == settingsEnvironment {
+	if w.settingsCategory == settingsWindows || w.settingsCategory == settingsEnvironment {
 		footer = "SAVED WITH WORKSPACE"
 	}
 	w.text(160, 760, 10, footer, muted, .72)
@@ -285,6 +317,8 @@ func (w *Workspace) drawSettings() {
 	switch w.settingsCategory {
 	case settingsMedia:
 		w.drawMediaSettingsPreview()
+	case settingsWindows:
+		w.drawWindowSettingsPreview()
 	case settingsEnvironment:
 		w.drawEnvironmentSettingsPreview()
 	default:
@@ -389,6 +423,106 @@ func (w *Workspace) drawMediaSettingsPreview() {
 	w.text(b.x+b.w-260, b.y+362, 10, "AUDIO  82%", muted, .82)
 	w.line(b.x+b.w-145, b.y+371, b.x+b.w-42, b.y+371, 2, muted, .2)
 	w.line(b.x+b.w-145, b.y+371, b.x+b.w-66, b.y+371, 2, teal, .86)
+}
+
+func (w *Workspace) drawWindowSettingsPreview() {
+	w.drawSettingsPreviewHeader("WINDOWS", "NATIVE BORDERS", "SELECT TO APPLY LIVE")
+	w.drawPreviewFrame(settingsPreviewBounds)
+	cards := [...]struct {
+		bounds box
+		choice windowBorderChoice
+	}{
+		{settingsWindowAperture, windowBorderChoices[0]},
+		{settingsWindowInstrument, windowBorderChoices[1]},
+		{settingsWindowGlass, windowBorderChoices[2]},
+		{settingsWindowTelemetry, windowBorderChoices[3]},
+	}
+	selected := w.windows.Border.normalized()
+	for _, card := range cards {
+		w.drawWindowBorderCard(card.bounds, card.choice, selected == card.choice.style)
+	}
+}
+
+func (w *Workspace) drawWindowBorderCard(b box, choice windowBorderChoice, selected bool) {
+	fillAlpha, edgeAlpha, titleColor := float32(.94), float32(.18), muted
+	if selected {
+		fillAlpha, edgeAlpha, titleColor = .99, .92, ink
+	}
+	w.rect(b.x, b.y, b.w, b.h, 0x07131f, fillAlpha)
+	w.line(b.x, b.y, b.x+b.w, b.y, 1.4, teal, edgeAlpha)
+	w.line(b.x, b.y+b.h, b.x+b.w, b.y+b.h, 1, teal, edgeAlpha*.7)
+	w.rect(b.x, b.y, 4, b.h, teal, edgeAlpha)
+	w.text(b.x+18, b.y+13, 13, choice.title, titleColor, 1)
+	w.text(b.x+18, b.y+34, 8, choice.description, muted, .78)
+	if selected {
+		w.text(b.x+b.w-58, b.y+14, 8, "ACTIVE", teal, .94)
+	}
+	w.drawWindowBorderThumbnail(box{b.x + 18, b.y + 58, b.w - 36, b.h - 74}, choice.style)
+}
+
+func (w *Workspace) drawWindowBorderThumbnail(b box, style windowBorderStyle) {
+	// The cards use the same normalized aperture as live frames: the dark center
+	// represents client pixels, while every authored rail remains outside it.
+	w.rect(b.x+9, b.y+7, b.w-18, b.h-14, 0x030a12, .98)
+	for i := 1; i < 4; i++ {
+		x := b.x + 9 + float32(i)*(b.w-18)/4
+		w.line(x, b.y+7, x, b.y+b.h-7, .6, teal, .055)
+	}
+	for i := 1; i < 3; i++ {
+		y := b.y + 7 + float32(i)*(b.h-14)/3
+		w.line(b.x+9, y, b.x+b.w-9, y, .6, teal, .055)
+	}
+
+	left, top, right, bottom := b.x+5, b.y+3, b.x+b.w-5, b.y+b.h-3
+	switch style {
+	case windowBorderAperture:
+		const reach = float32(44)
+		w.line(left, top, left+reach, top, 2.2, teal, .92)
+		w.line(left, top, left, top+30, 2.2, teal, .92)
+		w.line(right-reach, top, right, top, 2.2, teal, .92)
+		w.line(right, top, right, top+30, 2.2, teal, .92)
+		w.line(left, bottom-30, left, bottom, 2.2, teal, .76)
+		w.line(left, bottom, left+reach, bottom, 2.2, teal, .76)
+		w.line(right-reach, bottom, right, bottom, 2.2, teal, .76)
+		w.line(right, bottom-30, right, bottom, 2.2, teal, .76)
+		w.line(left+58, top-3, left+112, top-3, 1, 0xc9f8ff, .7)
+	case windowBorderGlass:
+		w.rect(left, top, right-left, bottom-top, 0x59c4d8, .075)
+		w.line(left, top, right, top, 1.4, 0xc9f8ff, .68)
+		w.line(left, top, left, bottom, 1.4, teal, .55)
+		w.line(right, top, right, bottom, 1.4, teal, .55)
+		w.line(left, bottom, right, bottom, 1.4, teal, .42)
+		w.line(left+5, top+5, right-5, top+5, .7, 0xe3fbff, .34)
+		w.line(left+5, bottom-5, right-5, bottom-5, .7, teal, .22)
+		w.circle(left+16, top+15, 3, 1.2, teal, .72)
+	case windowBorderTelemetry:
+		w.line(left, top, left+112, top, 2.2, teal, .88)
+		w.line(left, top, left, bottom, 3, teal, .84)
+		w.line(left, bottom, left+74, bottom, 2.2, teal, .72)
+		w.line(right-94, top, right, top, 1.2, amber, .8)
+		w.line(right, top, right, top+34, 1.2, amber, .8)
+		w.line(right-128, bottom, right, bottom, 1.2, teal, .62)
+		for i := 0; i < 7; i++ {
+			y := top + 14 + float32(i)*9
+			length := float32(8)
+			if i%3 == 0 {
+				length = 15
+			}
+			w.line(right-length, y, right, y, 1, amber, .64)
+		}
+		w.rect(left+13, bottom-18, 62, 9, teal, .18)
+	default: // Instrument is the established layered chassis.
+		w.line(left+30, top, right-30, top, 3, teal, .9)
+		w.line(left, top+20, left, bottom-20, 2.4, teal, .86)
+		w.line(right, top+20, right, bottom-20, 2.4, teal, .86)
+		w.line(left+30, bottom, right-30, bottom, 3, teal, .78)
+		w.line(left, top+20, left+20, top, 2.4, teal, .86)
+		w.line(right-20, top, right, top+20, 2.4, teal, .86)
+		w.line(left, bottom-20, left+20, bottom, 2.4, teal, .7)
+		w.line(right-20, bottom, right, bottom-20, 2.4, teal, .7)
+		w.line(left+48, top+6, right-48, top+6, .8, 0xc9f8ff, .5)
+		w.rect(left+78, top-3, 72, 8, teal, .28)
+	}
 }
 
 func (w *Workspace) drawEnvironmentSettingsPreview() {

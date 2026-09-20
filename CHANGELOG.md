@@ -2,6 +2,13 @@
 
 ## 0.10.0-dev — native scene architecture reset
 
+- Added a saved Windows appearance category with four live-selectable native
+  chrome families derived from the FUI reference set: sparse Aperture rails,
+  the layered Instrument chassis, a translucent Glass slab, and asymmetric
+  Telemetry brackets. Each family themes the frame, drag grip, controls and
+  resize corner without changing their input geometry; retained frame strokes
+  are cached by window aspect for consistent free resizing. Photo brackets and
+  frameless surfaces keep their app-specific presentation.
 - Added a living woven energy wall behind the general desktop. Its pinned
   spring lattice carries traveling electrical pulses, deforms at the impact
   location, and sends depth-thrown windows or rigid groups back toward the
