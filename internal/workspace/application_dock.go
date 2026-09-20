@@ -12,6 +12,7 @@ type applicationDockEntry struct {
 }
 
 var applicationDockEntries = [...]applicationDockEntry{
+	{kind: "launcher", label: "Launcher", hint: "Find tools, windows and spaces"},
 	{kind: "files", label: "Files", hint: "Browse projects and documents"},
 	{kind: "terminal", label: "Terminal", hint: "Start a native shell"},
 	{kind: "photo", label: "Photo", hint: "Choose an image to view"},
@@ -22,10 +23,10 @@ var applicationDockEntries = [...]applicationDockEntry{
 	{kind: "axial", label: "AXIAL", hint: "Open the native 3D engineering study"},
 }
 
-var applicationDockBounds = box{1348, 122, 76, 620}
+var applicationDockBounds = box{1348, 112, 76, 676}
 
 const (
-	applicationDockTop    = float32(155)
+	applicationDockTop    = float32(126)
 	applicationDockPitch  = float32(72)
 	applicationDockButton = float32(54)
 )
@@ -44,11 +45,7 @@ func applicationDockIndexAt(x, y float32) int {
 }
 
 func (w *Workspace) applicationDockVisible() bool {
-	if !w.desktop || w.applications == nil {
-		return false
-	}
-	_, ok := w.applications.(experience.ApplicationLauncher)
-	return ok
+	return w.desktop
 }
 
 func (w *Workspace) applicationDockAvailable(kind string) bool {
@@ -66,11 +63,23 @@ func (w *Workspace) applicationDockAvailability() [len(applicationDockEntries)]b
 	if !w.applicationDockVisible() {
 		return available
 	}
+	available[0] = true
+	if w.applications == nil {
+		return available
+	}
+	if _, ok := w.applications.(experience.ApplicationLauncher); !ok {
+		return available
+	}
 	catalog, ok := w.applications.(experience.ApplicationLaunchCatalog)
 	if !ok {
 		// The terminal launcher predates the catalog contract. Preserve that
 		// one compatibility path while keeping file intents visibly disabled.
-		available[1] = true
+		for i, entry := range applicationDockEntries {
+			if entry.kind == "terminal" {
+				available[i] = true
+				break
+			}
+		}
 		return available
 	}
 	for _, choice := range catalog.ApplicationLaunches() {
@@ -116,16 +125,16 @@ func (w *Workspace) drawApplicationDock() {
 	// without moving content or changing its hit targets.
 	flare := float32(1)
 	w.rect(applicationDockBounds.x, applicationDockBounds.y, applicationDockBounds.w, applicationDockBounds.h, bg, .78)
-	w.line(1350, 143, 1350, 725, 1, muted, .24)
-	w.line(1422, 143, 1422, 725, 1, teal, .22+.22*flare)
-	w.line(1360, 143, 1380, 143, 2, teal, .45+.35*flare)
-	w.text(1387, 134, 10, "APPS", muted, .9)
+	w.line(1350, 119, 1350, 772, 1, muted, .24)
+	w.line(1422, 119, 1422, 772, 1, teal, .22+.22*flare)
+	w.line(1360, 119, 1380, 119, 2, teal, .45+.35*flare)
+	w.text(1360, 101, 10, "LAUNCHER", muted, .9)
 	if flare > .05 {
-		w.line(1343, 171, 1350, 164, 1, teal, .35*flare)
-		w.line(1343, 171, 1343, 209, 1, teal, .28*flare)
-		w.line(1394, 725, 1422, 725, 2, teal, .55*flare)
+		w.line(1343, 147, 1350, 140, 1, teal, .35*flare)
+		w.line(1343, 147, 1343, 185, 1, teal, .28*flare)
+		w.line(1394, 772, 1422, 772, 2, teal, .55*flare)
 		for i := range applicationDockEntries {
-			y := float32(158 + i*72)
+			y := applicationDockTop + 3 + float32(i)*applicationDockPitch
 			w.line(1417, y, 1422, y, 1, teal, .22*flare)
 		}
 	}
@@ -187,6 +196,20 @@ func (w *Workspace) drawApplicationDockIcon(index int, x, y, alpha float32) {
 	circle := func(xx, yy, radius float32) { w.circle(x+xx, y+yy, radius, 1.25, teal, alpha) }
 
 	switch applicationDockEntries[index].kind {
+	case "launcher":
+		line(4, 4, 15, 4, 1.5)
+		line(4, 4, 4, 15, 1.5)
+		line(32, 4, 21, 4, 1.5)
+		line(32, 4, 32, 15, 1.5)
+		line(4, 32, 15, 32, 1.5)
+		line(4, 32, 4, 21, 1.5)
+		line(32, 32, 21, 32, 1.5)
+		line(32, 32, 32, 21, 1.5)
+		circle(18, 18, 5)
+		line(18, 9, 18, 13, 1.2)
+		line(18, 23, 18, 27, 1.2)
+		line(9, 18, 13, 18, 1.2)
+		line(23, 18, 27, 18, 1.2)
 	case "files":
 		line(3, 10, 14, 10, 1.5)
 		line(14, 10, 18, 14, 1.5)
@@ -257,13 +280,6 @@ func (w *Workspace) handleApplicationDock(event experience.Event) bool {
 		w.applicationDockHover = -1
 		return false
 	}
-	// Modal portal input and an already-started footer/atlas click retain
-	// ownership over the fixed launcher rail.
-	if w.portals.open || w.portals.pressed != -1 {
-		w.applicationDockHover = -1
-		return false
-	}
-
 	if w.pointer.kind == captureApplicationDock {
 		switch event.Kind {
 		case experience.PointerMove:
@@ -335,6 +351,10 @@ func (w *Workspace) launchApplicationDockEntry(index int) {
 		return
 	}
 	entry := applicationDockEntries[index]
+	if entry.kind == "launcher" {
+		w.openCommands()
+		return
+	}
 	if !w.applicationDockAvailable(entry.kind) {
 		w.showApplicationNotice(fmt.Sprintf("%s launcher is unavailable.", entry.label))
 		return

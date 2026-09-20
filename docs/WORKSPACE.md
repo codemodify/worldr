@@ -44,10 +44,11 @@ request closing that individual window. The square control performs the same
 Read action as Win/Super + double-click. The exact Win/Super+C chord requests
 closing the current active app even while it owns keyboard focus; its provider
 may keep it open to confirm unsaved work. Minimize hides the content and its
-complete frame; Overview and portals reveal and restore minimized windows.
-Place mode also makes content draggable and offers Shift+click selection for
-groups. The streamlined header places Place / Group, Group Selected and Ungroup
-directly after Reset View. Scrolling during a held drag moves the selection through depth without
+complete frame; Overview reveals and restores minimized windows. Place mode
+also makes content draggable and offers Shift+click selection for groups. The
+streamlined top bar places Place / Group, Group Selected, Ungroup, and the Send
+selection to back / Bring selection forward depth toggle directly after Reset
+View. Scrolling during a held drag moves the selection through depth without
 introducing a lateral jump. Super+wheel changes the hovered window's depth
 without focusing it; an explicit group moves with that window. The grips follow
 perspective and visible scene occlusion, and hide in Read and Overview.
@@ -70,12 +71,12 @@ Selection, keyboard focus, and camera focus are separate states with clear cues.
 Camera movement must never silently change where a keystroke goes.
 Super+primary dragging empty workspace pans the saved camera target horizontally
 and vertically without moving windows. Empty unmodified drags remain inert. A fixed rotation pad in the
-bottom-right corner owns that gesture and shows the current yaw and pitch; the
+bottom-left corner owns that gesture and shows the current yaw and pitch; the
 former center reticle and floor grid live inside this compact control instead.
 
-The footer Help control and workspace F1 expose the current shortcuts in an
-on-screen guide. It owns input while open; closing it leaves typing focus with
-the workspace. Focused applications retain their own F1 behavior.
+Workspace F1 exposes the current shortcuts in an on-screen guide. It owns input
+while open; closing it leaves typing focus with the workspace. Focused
+applications retain their own F1 behavior.
 
 An existing application keeps its own content and behavior. A browser remains a
 browser surface in the space. Native worldr experiences can expose models,
@@ -190,11 +191,14 @@ Start the default general workspace with real project data and a native shell:
 ./bin/worldr-shell --backend=nested --project=. --terminal --state=documents/workspace.json
 ```
 
-The fixed APPS rail on the right launches Files, Terminal, Photo, Media, Model,
-Research, Notes, and AXIAL. Photo, Media, Model, and Research reuse Files as a filtered
-chooser so the user can navigate folders before opening content in the native
-viewer. Ctrl+Alt+Space opens the searchable launcher for the same tools and all
-live windows.
+The fixed LAUNCHER rail on the right begins with a Launcher icon that opens the
+searchable Tools + Spaces surface. Its remaining icons launch Files, Terminal,
+Photo, Media, Model, Research, Notes, and AXIAL. Photo, Media, Model, and
+Research reuse Files as a filtered chooser so the user can navigate folders
+before opening content in the native viewer. Ctrl+Alt+Space opens the same
+launcher for all tools, live windows, and named spaces. The desktop has no left
+sidebar or footer; global actions stay in the top bar, the launcher stays on the
+right, and the scene rotation pad stays at bottom left.
 
 `--project` anchors a native Files browser at that directory. Select a file
 to preview UTF-8 text with line numbers. Enter, double-click or Open enters a
@@ -237,7 +241,7 @@ native apps and recovery while loading the primary layout and explicit CLI apps.
 Missing resources produce notices and remain pending with their saved placements
 for a later launch; a missing Files subfolder falls back to the project root.
 
-Open AXIAL from the APPS rail or pass `--axial` to host its procedural assembly,
+Open AXIAL from the launcher rail or pass `--axial` to host its procedural assembly,
 live instrument, picking and playback as an ordinary spatial application. Its
 stable application state survives workspace save/restore. Closing it retires
 its panel texture and all four procedural mesh buffers; reopening builds fresh
@@ -403,26 +407,16 @@ qualification is deliberately pinned in the product backlog.
 
 ## Named spaces and native tools
 
-Click **TOOLS + SPACES** or press **Ctrl+Alt+Space** to search tools, windows and
-spaces. Type a new name to create a space or rename the current one. Each of the
-16 spaces retains its own camera, arrangement and contents. Existing tools keep
-running when their space is hidden. The menu can transfer the selected window
-or group; Undo returns it. Switching a space does not assign keyboard focus.
-Opening an existing window through the launcher is an explicit focus action.
-
-The portal atlas is the fast path across that larger workspace. Click **PORTALS**
-or press **Ctrl+Alt+G** from either workspace or application focus. Each card is
-derived from a live group and its named space; an ungrouped window is its own
-portal, and an empty named space retains a destination card. Arrow keys select,
-Enter travels, Escape closes, and Ctrl+Alt+Left/Right travels directly between
-portals. Travel switches space when needed, selects the destination group and
-centers a fitted camera target without changing any placement. It never grants
-client keyboard focus. The entire trip is one undoable edit, and camera targets
-round-trip through workspace state and graphics recovery.
-
-Zooming the camera never places application-name cards over the workspace.
-Portal discovery remains explicit through the footer atlas and reserved
-shortcuts, so application pixels and their surrounding space stay unobscured.
+Click the first **Launcher** icon in the right rail or press
+**Ctrl+Alt+Space** to search tools, windows and spaces. Type a new name to create
+a space or rename the current one. Each of the 16 spaces retains its own camera,
+arrangement and contents. Existing tools keep running when their space is
+hidden. The menu can transfer the selected window or group; Undo returns it.
+Switching a space does not assign keyboard focus. Opening an existing window
+through the launcher is an explicit focus action. **Ctrl+Alt+O** opens Overview
+to retrieve a window within the current space; the launcher finds windows across
+all named spaces. Zooming the camera never places application-name cards over
+the workspace.
 
 Open triangle OBJ, STL or `.worldr-model.json` from Files, or supply repeatable
 `--model=PATH`. Model inspectors share the workspace's geometry/depth/picking

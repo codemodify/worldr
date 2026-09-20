@@ -49,11 +49,6 @@ func TestSuperCReleaseDrainsWhenModalOpensMidStroke(t *testing.T) {
 			open:  func(_ *testing.T, w *Workspace) { w.openHelp() },
 			close: func(w *Workspace) { w.helpOpen = false },
 		},
-		{
-			name:  "portal-atlas",
-			open:  func(_ *testing.T, w *Workspace) { w.openPortalAtlas() },
-			close: func(w *Workspace) { w.portals.open = false },
-		},
 	}
 	for _, tc := range modalCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -97,11 +92,6 @@ func TestSuperCKeyboardCancelClearsStrokeBehindModal(t *testing.T) {
 				}
 			},
 			close: func(w *Workspace) { w.commands.open = false },
-		},
-		{
-			name:  "portal-atlas",
-			open:  func(_ *testing.T, w *Workspace) { w.openPortalAtlas() },
-			close: func(w *Workspace) { w.portals.open = false },
 		},
 	}
 	for _, tc := range modalCases {

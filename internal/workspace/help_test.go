@@ -10,6 +10,38 @@ func helpKeyEvent(code uint32, key experience.Key, pressed bool) experience.Even
 	return experience.Event{Kind: experience.KeyInput, Keycode: code, Key: key, Pressed: pressed}
 }
 
+func TestDesktopRemovedFooterTargetsAreInertAndF1StillOpensHelp(t *testing.T) {
+	formerFooterTargets := map[string]box{
+		"portals": {752, 871, 174, 24},
+		"help":    helpButton,
+	}
+	for _, dimensions := range []struct {
+		width, height int
+	}{{1440, 900}, {2880, 1800}} {
+		for name, target := range formerFooterTargets {
+			t.Run(name, func(t *testing.T) {
+				w := desktop(t)
+				w.Draw(dimensions.width, dimensions.height)
+				x := w.ox + (target.x+target.w/2)*w.scale
+				y := w.oy + (target.y+target.h/2)*w.scale
+				before, history, historyLength := w.Document(), w.historyPosition, len(w.history)
+				if pointer(w, experience.PointerDown, x, y) || pointer(w, experience.PointerUp, x, y) {
+					t.Fatalf("removed desktop footer %s target still consumed input", name)
+				}
+				if w.helpOpen || w.pointer.kind != captureNone || w.Document() != before || w.historyPosition != history || len(w.history) != historyLength {
+					t.Fatalf("removed desktop footer %s target changed workspace state", name)
+				}
+				if !w.Handle(helpKeyEvent(59, experience.KeyF1, true)) || !w.Handle(helpKeyEvent(59, experience.KeyF1, false)) || !w.helpOpen {
+					t.Fatal("desktop F1 did not open Help after its footer target was removed")
+				}
+				if w.Document() != before {
+					t.Fatal("opening desktop Help with F1 changed the document")
+				}
+			})
+		}
+	}
+}
+
 func TestHelpIsTransientAndConsumesHeldKeysThroughDismissal(t *testing.T) {
 	w := study(t)
 	w.Draw(1440, 900)

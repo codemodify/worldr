@@ -42,7 +42,7 @@ flowchart TB
 | `internal/nativeapps` | Native terminal manager, independent providers, cell selection, retained image updates and application contract |
 | `internal/projectapp` | Read-only native directory/text browser, bounded asynchronous file access and copy-path clipboard |
 | `internal/resourcepath` | Validated local resource paths, descriptor-to-path identity checks and safe reopen helpers |
-| `internal/workspace` | General application workspace, hosted or standalone AXIAL study, spatial drag/throw, explicit portal navigation, semantic actions, separate saved documents and undo/redo |
+| `internal/workspace` | General application workspace, hosted or standalone AXIAL study, spatial drag/throw, named-space and overview navigation, semantic actions, separate saved documents and undo/redo |
 | `internal/scene` | Hierarchical transforms, meshes and content planes, GPU instance submission, camera math, ray/BVH picking, texture-coordinate input mapping, and 2D canvas/text |
 | `internal/render` | Immutable geometry, versioned RGBA images, atlas data, scene instances, and ordered frame commands |
 | `internal/platform/linux/native` | Vulkan resources, shader pipelines, swapchains, submission, and DRM ABI |
@@ -326,8 +326,8 @@ strokes keep their repeats and release until completion across view/focus change
 so a held Enter cannot type into or focus the returned window. Keyboard focus
 loss clears that held state.
 
-Workspace F1 or the footer Help control opens a transient shortcut guide. Its
-overlay owns input and cancels ongoing gestures and application capture. Held
+Workspace F1 opens a transient shortcut guide. Its overlay owns input and
+cancels ongoing gestures and application capture. Held
 keys stay consumed through dismissal; closing does not restore typing focus.
 Focused applications keep their own F1. Guide visibility and input capture are
 outside saved documents and undo.
@@ -586,12 +586,13 @@ Named spaces are persisted in the application view, with independent cameras,
 selection and contents. Hidden-space providers continue polling. Explicit new
 instances reuse saved positions in the current space; restore retains saved
 spaces. Group transfer is undoable; switching does not acquire keyboard focus.
-The workspace derives portals from live grouped placements and keeps empty named
-spaces reachable. Portal travel switches space, selects the group and changes a
-bounded camera target in one reducer edit; placement and application focus stay
-unchanged. Portal discovery is explicit through the footer atlas and reserved
-shortcuts; camera distance does not create scene-overlay labels or hit targets.
-The searchable launcher consumes its own keys, including releases after closing.
+The first icon in the fixed right launcher rail opens the searchable Tools +
+Spaces surface; Ctrl+Alt+Space reaches the same surface from workspace or
+application focus. It lists tools, windows and named spaces, including windows
+outside the current space. Overview remains a separate retrieval view for the
+current space. The launcher consumes its own keys, including releases after
+closing. The desktop has no left sidebar or footer. Its fixed chrome consists
+of the top action bar, right launcher rail and bottom-left scene rotation pad.
 
 `nativeui` supplies Pango/HarfBuzz shaping, fallback fonts, reusable controls,
 grapheme editing and semantic focus snapshots. Nested text-input-v3 batches

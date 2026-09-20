@@ -3,6 +3,7 @@ package workspace
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -148,7 +149,20 @@ func TestDesktopStateRoundTripAndStudyStateRejection(t *testing.T) {
 	state["camera"].(map[string]any)["zoom"] = 4
 	badCamera, _ := json.Marshal(state)
 	before, history := w.Document(), w.historyPosition
-	for _, invalid := range [][]byte{studyState, append(append([]byte(nil), data...), []byte(` {}`)...), badCamera, []byte(`{"version":2}`)} {
+	badDocument := before
+	badDocument.View.Camera.TargetX = 101
+	if err := badDocument.Validate(); err == nil {
+		t.Fatal("accepted an out-of-bounds camera target")
+	}
+	badDocument = before
+	badDocument.View.Camera.TargetDepth = float32(math.NaN())
+	if err := badDocument.Validate(); err == nil {
+		t.Fatal("accepted a non-finite camera target")
+	}
+	state["camera"].(map[string]any)["zoom"] = float64(before.View.Camera.Zoom)
+	state["camera"].(map[string]any)["target_y"] = 1000
+	badTarget, _ := json.Marshal(state)
+	for _, invalid := range [][]byte{studyState, append(append([]byte(nil), data...), []byte(` {}`)...), badCamera, badTarget, []byte(`{"version":2}`)} {
 		if err := w.LoadState(invalid); err == nil || w.Document() != before || w.historyPosition != history {
 			t.Fatal("invalid or wrong-experience state changed the desktop")
 		}

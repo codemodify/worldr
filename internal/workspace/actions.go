@@ -13,7 +13,6 @@ const (
 	RenameSpace                ActionKind = "rename-space"
 	SwitchSpace                ActionKind = "switch-space"
 	MoveToSpace                ActionKind = "move-to-space"
-	NavigatePortal             ActionKind = "navigate-portal"
 	TogglePlayback             ActionKind = "toggle-playback"
 	SetPlayback                ActionKind = "set-playback"
 	ToggleExplode              ActionKind = "toggle-explode"
@@ -258,13 +257,13 @@ func (w *Workspace) Dispatch(action Action) error {
 		w.stopWindowThrows(w.m.applicationState.movementSelectionFor(action.ApplicationKey))
 	case ToggleApplicationSize:
 		w.stopWindowThrowForKey(w.m.applicationState.Active)
-	case OrbitCamera, PanCamera, ZoomCamera, SwitchSpace, CreateSpace, RenameSpace, NavigatePortal:
+	case OrbitCamera, PanCamera, ZoomCamera, SwitchSpace, CreateSpace, RenameSpace:
 		// Navigation does not own any window's momentum.
 	default:
 		w.finishWindowThrow()
 	}
 	switch action.Kind {
-	case SelectApplication, ToggleApplicationDepth, ToggleApplicationReading, ToggleApplicationSize, ToggleApplicationMinimized, ToggleApplicationMaximized, ToggleApplicationOverview, ToggleApplicationPlacement, MoveApplications, MoveApplication, ResizeApplication, GroupApplications, UngroupApplications, SwitchSpace, MoveToSpace, NavigatePortal:
+	case SelectApplication, ToggleApplicationDepth, ToggleApplicationReading, ToggleApplicationSize, ToggleApplicationMinimized, ToggleApplicationMaximized, ToggleApplicationOverview, ToggleApplicationPlacement, MoveApplications, MoveApplication, ResizeApplication, GroupApplications, UngroupApplications, SwitchSpace, MoveToSpace:
 		w.applicationRestoreKey = ""
 	}
 	w.commitPointer()
@@ -282,10 +281,6 @@ func reduce(d Document, a Action) (Document, error) {
 	switch a.Kind {
 	case CreateSpace, RenameSpace, SwitchSpace, MoveToSpace:
 		if err := reduceSpace(&d, a); err != nil {
-			return d, err
-		}
-	case NavigatePortal:
-		if err := reducePortalNavigation(&d, a); err != nil {
 			return d, err
 		}
 	case TogglePlayback:

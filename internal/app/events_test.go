@@ -28,7 +28,7 @@ func TestPlatformEventsUseSemanticKeys(t *testing.T) {
 	}
 	for _, code := range []uint32{'g', 'G'} {
 		if hostEvent(host.Event{Kind: host.Key, Code: code}).Key != experience.KeyG {
-			t.Fatal("host lost portal shortcut")
+			t.Fatal("host lost semantic G key mapping")
 		}
 	}
 	for _, code := range []uint32{'c', 'C'} {
@@ -41,7 +41,7 @@ func TestPlatformEventsUseSemanticKeys(t *testing.T) {
 		t.Fatal("direct-display input lost presentation shortcut")
 	}
 	if direct.event(34, true).Key != experience.KeyG {
-		t.Fatal("direct-display input lost portal shortcut")
+		t.Fatal("direct-display input lost semantic G key mapping")
 	}
 	if direct.event(46, true).Key != experience.KeyC {
 		t.Fatal("direct-display input lost close shortcut")

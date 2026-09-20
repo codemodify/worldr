@@ -108,6 +108,59 @@ func TestApplicationFocusOwnsEveryRawKey(t *testing.T) {
 	}
 }
 
+func TestDesktopFocusedApplicationReceivesUnreservedNavigationChords(t *testing.T) {
+	w, apps := headerDesktopApplications(t, 1)
+	w.Draw(1440, 900)
+	x, y := visibleApplication(t, w, apps.surfaces[0])
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	if !w.OwnsKeyboard() {
+		t.Fatal("fixture did not focus the desktop application")
+	}
+	apps.events = nil
+	before := w.Document()
+	for _, event := range []experience.Event{
+		{Kind: experience.KeyInput, Key: experience.KeyG, Keycode: 34, Pressed: true, Modifiers: experience.ModControl | experience.ModAlt},
+		{Kind: experience.KeyInput, Key: experience.KeyG, Keycode: 34},
+		{Kind: experience.KeyInput, Key: experience.KeyLeft, Keycode: 105, Pressed: true, Modifiers: experience.ModControl | experience.ModAlt},
+		{Kind: experience.KeyInput, Key: experience.KeyLeft, Keycode: 105},
+		{Kind: experience.KeyInput, Key: experience.KeyRight, Keycode: 106, Pressed: true, Modifiers: experience.ModControl | experience.ModAlt},
+		{Kind: experience.KeyInput, Key: experience.KeyRight, Keycode: 106},
+	} {
+		if !w.Handle(event) {
+			t.Fatalf("focused application did not consume former global navigation chord event: %+v", event)
+		}
+		got := apps.events[len(apps.events)-1]
+		if got.id != apps.surfaces[0].ID || got.event != event {
+			t.Fatalf("navigation chord changed before reaching the client: got %+v want %+v", got, event)
+		}
+	}
+	if len(apps.events) != 6 || w.Document() != before || !w.OwnsKeyboard() {
+		t.Fatal("former global navigation chords changed workspace state or focus")
+	}
+}
+
+func TestDesktopWorkspaceDoesNotReserveRemovedNavigationChords(t *testing.T) {
+	w := desktop(t)
+	w.Draw(1440, 900)
+	before := w.Document()
+	for _, event := range []experience.Event{
+		{Kind: experience.KeyInput, Key: experience.KeyG, Keycode: 34, Pressed: true, Modifiers: experience.ModControl | experience.ModAlt},
+		{Kind: experience.KeyInput, Key: experience.KeyG, Keycode: 34},
+		{Kind: experience.KeyInput, Key: experience.KeyLeft, Keycode: 105, Pressed: true, Modifiers: experience.ModControl | experience.ModAlt},
+		{Kind: experience.KeyInput, Key: experience.KeyLeft, Keycode: 105},
+		{Kind: experience.KeyInput, Key: experience.KeyRight, Keycode: 106, Pressed: true, Modifiers: experience.ModControl | experience.ModAlt},
+		{Kind: experience.KeyInput, Key: experience.KeyRight, Keycode: 106},
+	} {
+		if w.Handle(event) {
+			t.Fatalf("workspace retained removed navigation chord event: %+v", event)
+		}
+	}
+	if w.Document() != before || w.OwnsKeyboard() {
+		t.Fatal("removed navigation chords changed workspace state or focus")
+	}
+}
+
 func TestApplicationCaptureMapsOutsideBoundsAndSupportsAllButtons(t *testing.T) {
 	w, apps := applicationStudy(t)
 	command(t, w, Action{Kind: ToggleApplicationReading})

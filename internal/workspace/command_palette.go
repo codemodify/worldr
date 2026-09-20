@@ -12,7 +12,6 @@ import (
 	"github.com/codemodify/worldr/internal/textinput"
 )
 
-var commandButton = box{215, 48, 310, 34}
 var commandBounds = box{365, 195, 720, 506}
 
 type commandEntry struct {
@@ -64,7 +63,6 @@ func (w *Workspace) openCommands() bool {
 	w.clearApplicationFocus()
 	w.cancelPointer()
 	w.helpOpen = false
-	w.portals.open = false
 	p := w.commands
 	p.open, p.dirty = true, true
 	p.epoch++
@@ -101,16 +99,6 @@ func (w *Workspace) refreshCommands() {
 		if uint8(i) != v.Space && v.Selected != 0 {
 			add(commandEntry{label: "Move selected/group to / " + name, action: Action{Kind: MoveToSpace, Space: uint8(i)}})
 		}
-	}
-	for _, portal := range w.navigationPortals() {
-		if portal.Applications == 0 {
-			continue
-		}
-		label := fmt.Sprintf("Portal / %s / %s", portal.SpaceName, portal.Title)
-		if portal.Applications > 1 {
-			label += fmt.Sprintf(" / %d windows", portal.Applications)
-		}
-		add(commandEntry{label: label, action: Action{Kind: NavigatePortal, Space: portal.Space, ApplicationKey: portal.Key}})
 	}
 	for _, surface := range w.applicationSurfaces {
 		i := v.index(surface.Key)
@@ -219,9 +207,6 @@ func (w *Workspace) handleCommands(e experience.Event) bool {
 		return true
 	}
 	if p == nil || !p.open {
-		if e.Kind == experience.PointerDown && e.Button == experience.ButtonPrimary && commandButton.contains((e.X-w.ox)/w.scale, (e.Y-w.oy)/w.scale) {
-			return w.openCommands()
-		}
 		if p != nil && (e.Kind == experience.KeymapChanged || e.Kind == experience.KeyboardModifiers || e.Kind == experience.KeyboardCancel) {
 			p.input.Handle(e)
 		}

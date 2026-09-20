@@ -2,11 +2,18 @@
 
 ## 0.10.0-dev — native scene architecture reset
 
+- Simplified desktop chrome to a top action bar, right launcher rail and
+  bottom-left scene rotation pad, removing the left sidebar and footer. The
+  depth-zone toggle now follows the grouping controls in the top bar. The
+  Tools + Spaces surface moved to the first Launcher icon and remains available through
+  Ctrl+Alt+Space. Removed the portal atlas and its Ctrl+Alt+G and
+  Ctrl+Alt+Left/Right shortcuts; Overview remains available through Ctrl+Alt+O.
 - Made Cinematic presentation and full ambient motion permanent. Removed the
   Adaptive, Reduced Motion, Size, Depth −/+, New Terminal, Overview, Read
-  Selected and Close Selected controls from the header and application sidebar.
-  Reset View is followed by Place / Group, Group Selected and Ungroup; free
-  resize, window chrome and reserved keyboard shortcuts remain available.
+  Selected and Close Selected controls from the prior desktop chrome.
+  Reset View is followed by Place / Group, Group Selected, Ungroup and the
+  depth-zone toggle; free resize, window chrome and reserved keyboard shortcuts
+  remain available.
 - Raised the private application server to XDG shell v3 and implemented copied
   explicit popup positioners, parent-size constraints, parent-configure
   metadata acceptance and reactive
@@ -44,7 +51,7 @@
   fail after two seconds. Real two-client coverage verifies UTF-8 payload,
   legacy completion, cancellation, owner/target lifetime and unmap cleanup.
 
-- Replaced desktop-wide empty-space orbiting with a dedicated bottom-right
+- Replaced desktop-wide empty-space orbiting with a dedicated bottom-left
   scene rotation pad. The compact gridded reticle shows live yaw and pitch,
   ordinary background drags leave the workspace still, and AXIAL retains its
   direct model-orbit gesture.
@@ -52,11 +59,11 @@
   side depth while keeping all geometry outside client pixels and out of input
   picking. Window momentum continues independently during camera rotation.
 - Removed the zoom-dependent L-shaped application title cards and their pointer
-  targets from the workspace. Portal navigation remains available through the
-  footer atlas and reserved shortcuts; native app-authored spatial annotations
+  targets from the workspace. Overview and Tools + Spaces provide explicit
+  retrieval without covering the scene; native app-authored spatial annotations
   retain their prior behavior.
 - Changed managed window chrome so Minimize removes the window and all of its
-  chrome from Space while keeping it recoverable through Overview and portals.
+  chrome from Space while keeping it recoverable through Overview.
   The square control now performs the same target-aware Read transition as
   Win/Super+double-click, and the duplicate header Read button is gone.
 - Added the exact Win/Super+C global shortcut for requesting that the current
@@ -77,9 +84,6 @@
 - Added a native `.worldr-note.md` editor with grapheme-safe multiline input,
   IME, clipboard, undo/redo, semantics, exact dirty-buffer recovery, durable
   atomic saves and external-change detection.
-- Added the portal atlas and direct group travel across named spaces. Camera
-  targets persist, travel is undoable and navigation does not grant application
-  keyboard focus.
 - Added a terminal Tasks deck for bounded command recipes captured from OSC 133
   blocks. Recipes can be inspected, staged and explicitly run; restoration
   retains definitions without sending anything to the PTY.
@@ -102,14 +106,14 @@
   HDR signaling, ICC profiles and wide-gamut scanout are not claimed.
 - Added an opt-in native hologram material for translucent meshes. It combines
   true depth-peeling/opaque occlusion with view-dependent coverage, world-space
-  scan bands and a narrow opaque-depth contact cue. The workspace freezes its
-  transient scan phase under Reduced Motion, while application pixels, overlays
+  scan bands and a narrow opaque-depth contact cue. Its transient scan phase
+  remains animated, while application pixels, overlays
   and the host cursor remain outside the material shader. This is a bounded
   surface treatment; it does not claim volumetric scattering or physical HDR.
 - Added hosted retained 3D objects, mesh picking and labels, plus file-backed
   OBJ/STL inspection with component selection, measurements, annotations and
   atomic tool documents. Multiple inspectors coexist with ordinary windows.
-- Moved AXIAL / 07 onto that hosted spatial-application path with APPS-rail
+- Moved AXIAL / 07 onto that hosted spatial-application path with launcher-rail
   launch, workspace placement and exact inert session restore while retaining
   the standalone deterministic harness. Closing the hosted study now retires
   its panel and all four procedural meshes; reopening uses fresh resource IDs.

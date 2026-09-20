@@ -97,7 +97,7 @@ func dockPoint(w *Workspace, index int) (float32, float32) {
 
 func TestApplicationDockHasStableNativeToolLayout(t *testing.T) {
 	w, _ := desktopDock(t, "files", "terminal", "photo", "media", "model", "research", "note", "axial")
-	want := []string{"files", "terminal", "photo", "media", "model", "research", "note", "axial"}
+	want := []string{"launcher", "files", "terminal", "photo", "media", "model", "research", "note", "axial"}
 	if len(applicationDockEntries) != len(want) || !w.applicationDockVisible() {
 		t.Fatalf("dock visibility or entry count is wrong: visible=%v entries=%d", w.applicationDockVisible(), len(applicationDockEntries))
 	}
@@ -113,25 +113,26 @@ func TestApplicationDockHasStableNativeToolLayout(t *testing.T) {
 		previousBottom = b.y + b.h
 	}
 	plain := desktop(t)
-	if plain.applicationDockVisible() {
-		t.Fatal("dock appeared without an application launcher")
+	if !plain.applicationDockVisible() || !plain.applicationDockAvailable("launcher") || plain.applicationDockAvailable("files") {
+		t.Fatal("desktop launcher entry was not available independently of application providers")
 	}
 }
 
 func TestApplicationDockLaunchesAllNativeIntentsAtScaledSize(t *testing.T) {
-	kinds := make([]string, len(applicationDockEntries))
-	for i, entry := range applicationDockEntries {
+	kinds := make([]string, len(applicationDockEntries)-1)
+	for i, entry := range applicationDockEntries[1:] {
 		kinds[i] = entry.kind
 	}
 	w, apps := desktopDock(t, kinds...)
 	w.Draw(2880, 1800)
 
-	for i, entry := range applicationDockEntries {
-		x, y := dockPoint(w, i)
+	for i, entry := range applicationDockEntries[1:] {
+		dockIndex := i + 1
+		x, y := dockPoint(w, dockIndex)
 		if !pointer(w, experience.PointerDown, x, y) || len(apps.launched) != i {
 			t.Fatalf("%s launched before a completed click: %v", entry.kind, apps.launched)
 		}
-		if w.pointer.kind != captureApplicationDock || w.pointer.dockIndex != i {
+		if w.pointer.kind != captureApplicationDock || w.pointer.dockIndex != dockIndex {
 			t.Fatalf("%s did not capture its scaled dock button", entry.kind)
 		}
 		if !pointer(w, experience.PointerUp, x, y) || len(apps.launched) != i+1 || apps.launched[i] != entry.kind {
@@ -143,6 +144,24 @@ func TestApplicationDockLaunchesAllNativeIntentsAtScaledSize(t *testing.T) {
 	}
 	if !slices.Equal(apps.launched, kinds) {
 		t.Fatalf("dock launch order = %v, want %v", apps.launched, kinds)
+	}
+}
+
+func TestApplicationDockLauncherOpensPaletteOnlyOnCompletedClick(t *testing.T) {
+	w, apps := desktopDock(t, "files", "terminal")
+	w.Draw(1440, 900)
+	x, y := dockPoint(w, 0)
+	if !pointer(w, experience.PointerDown, x, y) || w.pointer.kind != captureApplicationDock {
+		t.Fatal("Launcher entry did not capture its press")
+	}
+	if w.commands != nil && w.commands.open || len(apps.launched) != 0 {
+		t.Fatal("Launcher entry opened the palette or launched a provider before release")
+	}
+	if !pointer(w, experience.PointerUp, x, y) || w.commands == nil || !w.commands.open {
+		t.Fatal("completed Launcher click did not open the command palette")
+	}
+	if len(apps.launched) != 0 || w.pointer.kind != captureNone {
+		t.Fatalf("Launcher entry invoked an application provider or retained capture: launches=%v capture=%v", apps.launched, w.pointer.kind)
 	}
 }
 
@@ -176,7 +195,7 @@ func TestApplicationDockHoverOccludesClientAndDrawsTooltip(t *testing.T) {
 func TestApplicationDockCancelDragAndUnavailableDoNotLaunch(t *testing.T) {
 	w, apps := desktopDock(t, "terminal")
 	w.Draw(1440, 900)
-	x, y := dockPoint(w, 1)
+	x, y := dockPoint(w, 2)
 	pointer(w, experience.PointerDown, x, y)
 	w.Handle(experience.Event{Kind: experience.PointerCancel})
 	pointer(w, experience.PointerUp, x, y)
@@ -191,7 +210,7 @@ func TestApplicationDockCancelDragAndUnavailableDoNotLaunch(t *testing.T) {
 		t.Fatal("dragged dock press launched an application")
 	}
 
-	x, y = dockPoint(w, 2)
+	x, y = dockPoint(w, 3)
 	pointer(w, experience.PointerDown, x, y)
 	pointer(w, experience.PointerUp, x, y)
 	if len(apps.launched) != 0 || !strings.Contains(w.applicationNotice, "Photo launcher is unavailable") {
@@ -204,8 +223,8 @@ func TestApplicationDockKeepsCinematicDecorationAndStableHitTargets(t *testing.T
 	cinematic := w.Draw(1440, 900)
 	repeated := w.Draw(1440, 900)
 	plain := desktop(t).Draw(1440, 900)
-	if len(cinematic.Vertices) <= len(plain.Vertices) || len(repeated.Vertices) != len(cinematic.Vertices) {
-		t.Fatal("permanent cinematic dock framing was missing or unstable")
+	if len(cinematic.Vertices) == 0 || len(repeated.Vertices) != len(cinematic.Vertices) || len(plain.Vertices) != len(cinematic.Vertices) {
+		t.Fatal("permanent launcher framing was missing, unstable, or provider-dependent")
 	}
 	for i := range applicationDockEntries {
 		b := applicationDockButtonBounds(i)
@@ -229,7 +248,7 @@ func TestApplicationDockLaunchDoesNotStopAnotherWindowThrow(t *testing.T) {
 	w.Update(50 * time.Millisecond)
 	beforeLaunch := w.Document().View.Application.Layouts[w.m.applicationState.index(original.Key)]
 
-	x, y := dockPoint(w, 6)
+	x, y := dockPoint(w, 7)
 	pointer(w, experience.PointerDown, x, y)
 	pointer(w, experience.PointerUp, x, y)
 	if w.windowThrow != motion || len(apps.launched) != 1 || apps.launched[0] != "note" {
@@ -250,7 +269,7 @@ func TestApplicationDockRemainsAvailableAtFarZoom(t *testing.T) {
 	w.syncApplications()
 	command(t, w, Action{Kind: ZoomCamera, DeltaZoom: -.8})
 	w.Draw(1440, 900)
-	const dockIndex = 0
+	const dockIndex = 1
 	clickX, clickY := dockPoint(w, dockIndex)
 	before := len(apps.launched)
 	if !pointer(w, experience.PointerDown, clickX, clickY) || w.pointer.kind != captureApplicationDock {
@@ -276,7 +295,7 @@ func TestApplicationDockActivatesExistingFilesWithoutMovingItsSpace(t *testing.T
 	apps.reuse = map[string]string{"files": key}
 	apps.launched = nil
 
-	x, y := dockPoint(w, 0)
+	x, y := dockPoint(w, 1)
 	pointer(w, experience.PointerDown, x, y)
 	pointer(w, experience.PointerUp, x, y)
 	after := w.Document().View.Application.Layouts[w.m.applicationState.index(key)]
@@ -296,7 +315,7 @@ func TestApplicationDockRollsBackNewSurfaceWhenSavedLayoutIsFull(t *testing.T) {
 	w.install(d, false)
 	before := w.Document()
 
-	x, y := dockPoint(w, 6)
+	x, y := dockPoint(w, 7)
 	pointer(w, experience.PointerDown, x, y)
 	pointer(w, experience.PointerUp, x, y)
 	if len(apps.closed) != 1 || len(apps.surfaces) != 0 || w.Document() != before {

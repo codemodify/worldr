@@ -47,7 +47,6 @@ func (w *Workspace) openHelp() {
 	w.clearApplicationFocus()
 	w.cancelHelpPointer()
 	w.claimHelpStrokes()
-	w.portals.open = false
 	w.helpOpen = true
 }
 
@@ -163,7 +162,7 @@ func (w *Workspace) handleHelp(event experience.Event) bool {
 		if w.helpOpen {
 			target = helpCloseButton
 		}
-		if target.contains(x, y) {
+		if (w.helpOpen || !w.desktop) && target.contains(x, y) {
 			w.resetApplicationReadClick()
 			w.cancelPointer()
 			w.clearApplicationFocus()
@@ -219,12 +218,11 @@ func (w *Workspace) drawHelp() {
 			{"Top grip / Super+drag", "Move or throw windows; grab again to stop. Scroll for depth."},
 			{"Place / Group", "Shift+click selects several; group to move together."},
 			{"Native terminal: Ctrl+Shift+C / V", "Copy selected text / paste from the clipboard."},
-			{"Ctrl+Alt+G / Ctrl+Alt+← →", "Open portals / travel directly between window groups."},
 		}},
 	}
 	if w.desktop {
 		columns[0].rows = []helpEntry{
-			{"Super+drag space / rotation pad", "Pan the workspace / orbit from the bottom-right pad."},
+			{"Super+drag space / rotation pad", "Pan the workspace / orbit from the bottom-left pad."},
 			{"Header Place / Group controls", "Arrange selections and make windows move together."},
 			{"Super+wheel / scroll while dragging", "Move windows through depth."},
 			{"Ctrl+Z / Ctrl+Shift+Z", "Undo / redo workspace edits."},
@@ -239,7 +237,7 @@ func (w *Workspace) drawHelp() {
 			{"Super+double-click / top square", "Enter or leave Read for the pointed-to window."},
 			{"Top grip / Super+primary", "Move or throw a window; grab it again to stop."},
 			{"Corner grip / Super+secondary", "Resize a window freely; Escape cancels the gesture."},
-			{"Right APPS rail / Ctrl+Alt+Space", "Launch tools directly / search every tool and window."},
+			{"Right launcher rail / Ctrl+Alt+Space", "Open tools directly / search every tool, window and space."},
 			{"Top − / □ / × or Super+C", "Hide / Read / close the active window."},
 		}
 	}

@@ -10,14 +10,15 @@ import (
 )
 
 var (
-	_                        experience.ApplicationAware            = (*Workspace)(nil)
-	_                        experience.KeyboardOwner               = (*Workspace)(nil)
-	_                        experience.ApplicationPlacementChecker = (*Workspace)(nil)
-	applicationDepthButton                                          = box{32, 214, 208, 38}
-	resetViewButton                                                 = box{727, 30, 123, 37}
-	applicationPlaceButton                                          = box{864, 30, 170, 37}
-	applicationGroupButton                                          = box{1048, 30, 168, 37}
-	applicationUngroupButton                                        = box{1230, 30, 168, 37}
+	_                            experience.ApplicationAware            = (*Workspace)(nil)
+	_                            experience.KeyboardOwner               = (*Workspace)(nil)
+	_                            experience.ApplicationPlacementChecker = (*Workspace)(nil)
+	applicationDepthButton                                              = box{32, 214, 208, 38}
+	resetViewButton                                                     = box{573, 30, 112, 37}
+	applicationPlaceButton                                              = box{697, 30, 140, 37}
+	applicationGroupButton                                              = box{849, 30, 154, 37}
+	applicationUngroupButton                                            = box{1015, 30, 120, 37}
+	applicationDepthHeaderButton                                        = box{1147, 30, 251, 37}
 )
 
 func (w *Workspace) SetApplications(applications experience.Applications) {

@@ -41,7 +41,7 @@ func clickDesignButton(t *testing.T, w *Workspace, target box) {
 	}
 }
 
-func TestHeaderResetPlaceGroupAndUngroupTargetsAtEveryScale(t *testing.T) {
+func TestHeaderResetPlaceGroupUngroupAndDepthTargetsAtEveryScale(t *testing.T) {
 	for _, dimensions := range []struct {
 		width, height int
 	}{{1440, 900}, {2880, 1800}} {
@@ -78,44 +78,69 @@ func TestHeaderResetPlaceGroupAndUngroupTargetsAtEveryScale(t *testing.T) {
 			if view.Layouts[0].Group != 0 || view.Layouts[1].Group != 0 {
 				t.Fatal("Ungroup header target did not release the selection")
 			}
+
+			active := view.index(view.Active)
+			if active < 0 {
+				t.Fatal("fixture has no active application for the depth control")
+			}
+			clickDesignButton(t, w, applicationDepthHeaderButton)
+			view = w.Document().View.Application
+			if view.Layouts[active].Depth != -1.6 || !view.Behind {
+				t.Fatalf("Send Selection to Back header target did not move the active window: %+v", view.Layouts[active])
+			}
+			clickDesignButton(t, w, applicationDepthHeaderButton)
+			view = w.Document().View.Application
+			if view.Layouts[active].Depth != 1.9 || view.Behind {
+				t.Fatalf("Bring Selection Forward header target did not move the active window: %+v", view.Layouts[active])
+			}
 		})
 	}
 }
 
-func TestRemovedToolbarAndSideControlAreasAreInert(t *testing.T) {
+func TestRemovedSideControlTargetsDoNotDispatchButtons(t *testing.T) {
 	formerControls := map[string]box{
-		"new-terminal":   {535, 30, 180, 37},
-		"reduced-motion": {912, 10, 173, 20},
-		"old-place":      {32, 258, 208, 38},
-		"read-selected":  {32, 302, 208, 38},
-		"depth-minus":    {32, 390, 100, 38},
-		"depth-plus":     {140, 390, 100, 38},
-		"size-compact":   {32, 434, 208, 38},
-		"old-group":      {32, 478, 208, 38},
-		"old-ungroup":    {32, 522, 208, 38},
-		"close-selected": {32, 744, 208, 32},
+		"old-depth-toggle": {32, 214, 208, 38},
+		"old-place":        {32, 258, 208, 38},
+		"read-selected":    {32, 302, 208, 38},
+		"depth-minus":      {32, 390, 100, 38},
+		"depth-plus":       {140, 390, 100, 38},
+		"size-compact":     {32, 434, 208, 38},
+		"old-group":        {32, 478, 208, 38},
+		"old-ungroup":      {32, 522, 208, 38},
+		"close-selected":   {32, 744, 208, 32},
 	}
+	w, _ := headerDesktopApplications(t, 1)
+	w.Draw(1440, 900)
+	for name, target := range formerControls {
+		t.Run(name, func(t *testing.T) {
+			x, y := target.x+target.w/2, target.y+target.h/2
+			if action, ok := w.buttonAction(x, y); ok {
+				t.Fatalf("removed %s control retained button action %+v", name, action)
+			}
+		})
+	}
+}
+
+func TestRemovedHeaderToolsAndSpacesTargetIsInertAtEveryScale(t *testing.T) {
+	target := box{215, 48, 310, 34}
 	for _, dimensions := range []struct {
 		width, height int
 	}{{1440, 900}, {2880, 1800}} {
 		t.Run(fmt.Sprintf("%dx%d", dimensions.width, dimensions.height), func(t *testing.T) {
-			w, apps := headerDesktopApplications(t, 2)
+			w, apps := headerDesktopApplications(t, 1)
 			provider := &rollbackLaunchingApplications{launchingApplications: terminalLauncher(t, apps)}
 			w.SetApplications(provider)
 			w.Draw(dimensions.width, dimensions.height)
 			before, history, historyLen := w.Document(), w.historyPosition, len(w.history)
-
-			for name, target := range formerControls {
-				t.Run(name, func(t *testing.T) {
-					x := w.ox + (target.x+target.w/2)*w.scale
-					y := w.oy + (target.y+target.h/2)*w.scale
-					if pointer(w, experience.PointerDown, x, y) || pointer(w, experience.PointerUp, x, y) || w.pointer.kind != captureNone {
-						t.Fatalf("removed %s control retained an input target", name)
-					}
-					if w.Document() != before || w.historyPosition != history || len(w.history) != historyLen || len(provider.launched) != 0 || len(provider.closed) != 0 {
-						t.Fatalf("removed %s control still changed workspace or provider state", name)
-					}
-				})
+			x := w.ox + (target.x+target.w/2)*w.scale
+			y := w.oy + (target.y+target.h/2)*w.scale
+			down := pointer(w, experience.PointerDown, x, y)
+			up := pointer(w, experience.PointerUp, x, y)
+			if down || up || w.pointer.kind != captureNone || w.commands != nil && w.commands.open {
+				t.Fatal("removed Tools + Spaces header target retained an input action")
+			}
+			if w.Document() != before || w.historyPosition != history || len(w.history) != historyLen || len(provider.launched) != 0 || len(provider.closed) != 0 {
+				t.Fatal("removed Tools + Spaces header target changed workspace or provider state")
 			}
 		})
 	}

@@ -7,10 +7,9 @@ import (
 	"github.com/codemodify/worldr/internal/experience"
 )
 
-// orbitPadBounds is deliberately separated from application content and the
-// right-side launcher. It is the desktop's only pointer target for orbiting the
-// whole spatial scene.
-var orbitPadBounds = box{1162, 633, 172, 144}
+// orbitPadBounds occupies the otherwise quiet lower-left corner. It is the
+// desktop's only pointer target for orbiting the whole spatial scene.
+var orbitPadBounds = box{32, 706, 172, 144}
 
 func (w *Workspace) orbitPadVisible() bool {
 	view := w.m.applicationState
@@ -93,7 +92,7 @@ func (w *Workspace) handleOrbitPad(event experience.Event) bool {
 			return w.cancelPointer()
 		}
 	}
-	if !w.orbitPadVisible() || w.portals.open || w.portals.pressed != -1 {
+	if !w.orbitPadVisible() {
 		return false
 	}
 	// Existing client and window gestures keep their grabs even when the pointer

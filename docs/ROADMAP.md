@@ -30,13 +30,12 @@ milestones.
    validate snapshots and resource lifetimes. See
    [NATIVE-DEVELOPMENT.md](NATIVE-DEVELOPMENT.md).
 
-4. **Add spatial portals and navigation — implemented and
-   tested.** Each named space and window group has a stable portal. Camera
-   targets survive save/restore, portal travel is undoable, `Ctrl+Alt+G` opens
-   the portal atlas, and `Ctrl+Alt+Left/Right` travels between groups. Portal
-   discovery stays in those explicit controls rather than covering zoomed-out
-   windows with title cards. Navigation never grants keyboard focus to an
-   application.
+4. **Add spatial workspace navigation — implemented and tested.** Named spaces
+   retain independent cameras and contents. The first icon in the right launcher
+   rail and `Ctrl+Alt+Space` open Tools + Spaces for launching tools, switching
+   or creating spaces, transferring selections and finding windows across
+   spaces. `Ctrl+Alt+O` retrieves windows in the current space without changing
+   their saved placement. Navigation never grants keyboard focus implicitly.
 
 5. **Raise cinematic rendering quality — bounded SDR slice implemented and
    tested.** Cinematic presentation adds moving point lights and thin-glass

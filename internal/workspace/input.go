@@ -88,7 +88,7 @@ func (w *Workspace) Handle(event experience.Event) bool {
 	w.syncApplications()
 	// A reserved Super+C stroke remains workspace-owned through modifier
 	// changes, modal transitions, repeats and release. Drain it before any
-	// newly opened command/help/portal surface can capture the tail.
+	// newly opened command or help surface can capture the tail.
 	if w.drainApplicationCloseShortcut(event) {
 		return true
 	}
@@ -108,12 +108,12 @@ func (w *Workspace) Handle(event experience.Event) bool {
 		return true
 	}
 	// A client-owned data drag retains its pointer grab over every workspace
-	// overlay, including the fixed app rail and scene rotation pad.
+	// overlay, including the fixed launcher rail and scene rotation pad.
 	if w.handleApplicationDrag(event) {
 		return true
 	}
 	// A held Read click keeps its grab, while fixed overlays get first refusal
-	// for new presses so an application behind the rail/pad/portal cannot steal
+	// for new presses so an application behind the rail or pad cannot steal
 	// their input through scene picking.
 	if w.pointer.kind == captureApplicationReadClick && w.handleApplicationReadGesture(event) {
 		return true
@@ -122,9 +122,6 @@ func (w *Workspace) Handle(event experience.Event) bool {
 		return true
 	}
 	if w.handleApplicationDock(event) {
-		return true
-	}
-	if w.handlePortalNavigation(event) {
 		return true
 	}
 	if w.handleApplicationCloseShortcut(event) {
@@ -384,7 +381,9 @@ func (w *Workspace) buttonAction(x, y float32) (Action, bool) {
 			return Action{Kind: GroupApplications}, true
 		case applicationUngroupButton.contains(x, y):
 			return Action{Kind: UngroupApplications}, true
-		case applicationDepthButton.contains(x, y):
+		case w.desktop && applicationDepthHeaderButton.contains(x, y):
+			return Action{Kind: ToggleApplicationDepth}, true
+		case !w.desktop && applicationDepthButton.contains(x, y):
 			return Action{Kind: ToggleApplicationDepth}, true
 		}
 	}

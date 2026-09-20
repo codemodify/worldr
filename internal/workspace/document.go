@@ -87,7 +87,7 @@ type ApplicationPlacement struct {
 	Height int   `json:"height,omitempty"`
 	Wide   bool  `json:"wide,omitempty"`
 	Group  uint8 `json:"group,omitempty"`
-	// Minimized keeps the live surface available through Overview and portals.
+	// Minimized keeps the live surface available through Overview and Launcher.
 	// Maximized and Restore* remain for compatibility with older saved documents;
 	// current window chrome uses Read instead.
 	Minimized     bool `json:"minimized,omitempty"`
@@ -255,7 +255,6 @@ func (w *Workspace) installLoadedDocument(d Document) {
 	w.clearApplicationFocus()
 	w.history = nil
 	w.historyPosition = 0
-	w.portals = portalNavigation{pressed: -1}
 	w.install(d, true)
 	w.applicationRestoreKey, w.applicationRestoreSelection = d.View.Application.Active, d.View.Application.Selected
 	w.syncApplications()

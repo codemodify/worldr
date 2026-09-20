@@ -282,9 +282,11 @@ func TestSuperReadGestureCannotStealFixedOrModalOverlayPresses(t *testing.T) {
 				x = w.ox + (b.x+b.w/2)*w.scale
 				y = w.oy + (b.y+b.h/2)*w.scale
 			}
-			putApplicationBehindPoint(t, w, target, x, y)
-			if hit, ok := w.applicationHit(x, y); !ok || w.applicationForNode(hit.Node).ID != target.ID {
-				t.Fatalf("%s fixture has no application behind it", overlay)
+			if overlay == "orbit" {
+				putApplicationBehindPoint(t, w, target, x, y)
+				if hit, ok := w.applicationHit(x, y); !ok || w.applicationForNode(hit.Node).ID != target.ID {
+					t.Fatalf("%s fixture has no application behind it", overlay)
+				}
 			}
 			ax, ay := visibleApplication(t, w, target)
 			superApplicationClick(w, ax, ay, 1000, 1010)
@@ -296,7 +298,7 @@ func TestSuperReadGestureCannotStealFixedOrModalOverlayPresses(t *testing.T) {
 				}
 			case "dock":
 				if w.pointer.kind != captureApplicationDock {
-					t.Fatal("application behind launcher rail stole its Super press")
+					t.Fatal("launcher rail did not own its Super press")
 				}
 			}
 			w.Handle(experience.Event{Kind: experience.PointerUp, Button: experience.ButtonPrimary, Modifiers: experience.ModSuper, X: x, Y: y, Time: 1110})
@@ -304,21 +306,6 @@ func TestSuperReadGestureCannotStealFixedOrModalOverlayPresses(t *testing.T) {
 				t.Fatalf("%s overlay press activated Read", overlay)
 			}
 		})
-	}
-
-	w, apps := windowDragWorkspace(t, 1)
-	w.openPortalAtlas()
-	if !w.portals.open {
-		t.Fatal("portal fixture did not open")
-	}
-	x, y := visibleApplication(t, w, apps.surfaces[0])
-	before := w.m.applicationState.Reading
-	w.Handle(experience.Event{Kind: experience.PointerDown, Button: experience.ButtonPrimary, Modifiers: experience.ModSuper, X: x, Y: y, Time: 1000})
-	if !w.portals.open || w.pointer.kind != captureNone || w.m.applicationState.Reading != before {
-		t.Fatal("application behind open portal atlas stole its Super press")
-	}
-	if applicationClickEvents(apps.events) != 0 {
-		t.Fatal("modal portal press leaked to its underlying client")
 	}
 }
 

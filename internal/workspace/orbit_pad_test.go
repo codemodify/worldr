@@ -35,6 +35,9 @@ func TestDesktopOrbitPadIsScaledAndOneUndoableGesture(t *testing.T) {
 	w := desktop(t)
 	w.Draw(1600, 900) // A horizontal letterbox gives the hit target a non-zero offset.
 	x, y := orbitPadPoint(w)
+	if (x-w.ox)/w.scale >= 720 {
+		t.Fatal("scene rotation pad is not on the left side")
+	}
 	before, history := w.Document(), w.historyPosition
 
 	if !pointer(w, experience.PointerDown, x, y) || w.pointer.kind != captureOrbitPad {
@@ -62,6 +65,27 @@ func TestDesktopOrbitPadIsScaledAndOneUndoableGesture(t *testing.T) {
 	command(t, w, Action{Kind: Redo})
 	if w.Document() != after {
 		t.Fatal("redo did not restore the completed orbit-pad drag")
+	}
+}
+
+func TestDesktopFormerBottomRightOrbitPadAreaIsInert(t *testing.T) {
+	w := desktop(t)
+	w.Draw(1440, 900)
+	former := box{1162, 633, 172, 144}
+	x, y := former.x+former.w/2, former.y+former.h/2
+	before, history, historyLength := w.Document(), w.historyPosition, len(w.history)
+
+	for _, event := range []experience.Event{
+		{Kind: experience.PointerDown, Button: experience.ButtonPrimary, X: x, Y: y},
+		{Kind: experience.PointerMove, Button: experience.ButtonPrimary, X: x + 70, Y: y - 24},
+		{Kind: experience.PointerUp, Button: experience.ButtonPrimary, X: x + 70, Y: y - 24},
+	} {
+		if w.Handle(event) {
+			t.Fatalf("former bottom-right scene rotation area consumed input: %+v", event)
+		}
+	}
+	if w.pointer.kind != captureNone || w.Document() != before || w.historyPosition != history || len(w.history) != historyLength {
+		t.Fatal("former bottom-right scene rotation area changed camera or history")
 	}
 }
 

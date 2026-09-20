@@ -2,7 +2,7 @@
 
 The default experience is a general spatial workspace with native PTY terminals,
 a read-only native project browser, and compatible Wayland applications.
-AXIAL / 07 is available from the general workspace APPS rail or `--axial` as a
+AXIAL / 07 is available from the general workspace launcher rail or `--axial` as a
 hosted native 3D tool with retained meshes, shared depth/picking and session
 restore. It also remains available as a standalone engineering study with retained meshes
 and an instrument surface.
@@ -72,8 +72,8 @@ controls on a window's top grip hide it completely, toggle its Read view, or
 request that its provider close it. The square control and Win/Super +
 double-click use the same Read action; repeat the gesture there to return to the
 workspace. The exact Win/Super+C chord asks the provider to close the current
-active app even while that app owns keyboard focus. Overview and portals retrieve
-minimized windows.
+active app even while that app owns keyboard focus. Overview retrieves minimized
+windows.
 
 `--project=.` opens a native directory list and UTF-8 file preview. Use Up/Refresh,
 arrows/Enter/Backspace, or double-click an entry. Copy Path or Ctrl+Shift+C copies
@@ -120,18 +120,18 @@ applications and the native workspace running.
 
 **Place / Group** enables dragging and Shift+click multi-selection. Grouped
 windows retain their relative positions when moved or sent deeper into space.
-The header places **Place / Group**, **Group selected**, and **Ungroup** after
+The top bar places **Place / Group**, **Group selected**, **Ungroup**, and the
+**Send selection to back / Bring selection forward** depth toggle after
 **Reset View**. Ctrl+Alt+O from the workspace or any focused app retrieves obscured
 apps. Unmodified arrows select thumbnails one step per fresh press; modified
 arrows are consumed. Enter/keypad Enter or Escape returns to the prior view
 without restoring application keyboard focus. A second fresh Enter opens Read
 and grants typing focus to the selected app, even if it was obscured in space.
 Held overview keys and their releases cannot type into the returned application.
-**Portals** in the desktop footer, or Ctrl+Alt+G from any app, opens all live
-window groups across named spaces. Use arrows and Enter to travel, or use
-Ctrl+Alt+Left/Right directly. Portal travel centers the camera and selection
-without moving windows or granting application focus; zooming out leaves the
-windows free of automatic application-name cards.
+The desktop has no left sidebar or footer. Its first right-rail **Launcher** icon,
+or Ctrl+Alt+Space from any app, opens Tools + Spaces to launch tools, switch or
+create spaces, transfer a selection, and find windows across spaces. The scene
+rotation pad is fixed at the bottom left.
 Ctrl+Alt+Enter creates an independent native shell
 and selects it; click its content or press a fresh Enter to read and type. The shortcut works from a focused
 native or legacy app, including with keypad Enter. This control is available even without `--terminal`

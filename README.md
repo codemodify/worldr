@@ -17,11 +17,15 @@ legacy applications. Open a native project browser, arrange terminals around it,
 and drag or throw windows through the space. An empty workspace stays available
 when its last application closes.
 
-The vertical **APPS** rail on the right launches eight built-in tools: Files,
-Terminal, Photo, Media, Model, Research, Notes, and AXIAL. Files, Terminal,
-Notes, and AXIAL open directly. Photo, Media, Model, and Research focus Files in a matching
-choose-file mode; folders remain navigable, Escape restores the full listing,
-and opening a supported file hands it to the selected native viewer.
+The vertical **LAUNCHER** rail on the right begins with a Launcher icon that
+opens the searchable Tools + Spaces menu. Its other icons launch eight built-in
+tools: Files, Terminal, Photo, Media, Model, Research, Notes, and AXIAL. Files,
+Terminal, Notes, and AXIAL open directly. Photo, Media, Model, and Research
+focus Files in a matching choose-file mode; folders remain navigable, Escape
+restores the full listing, and opening a supported file hands it to the selected
+native viewer. The desktop has no left sidebar or footer: workspace actions stay
+in the top bar, tool launching stays in the right rail, and scene rotation stays
+in the bottom-left pad.
 
 A centered, vertical cyan 3D DNA double helix turns slowly behind the workspace, completing one
 rotation every 30 seconds. It stays behind application content and never captures
@@ -29,7 +33,7 @@ input. The cinematic presentation and its ambient motion remain active during
 normal workspace and Read views.
 
 **AXIAL / 07** is a hosted native 3D application in the general workspace; use
-its APPS-rail control or start with `--axial`. It can be moved, grouped, sent
+its launcher-rail control or start with `--axial`. It can be moved, grouped, sent
 through depth, saved and restored like the other tools. `--experience=axial`
 retains the deterministic standalone presentation used by demonstrations. This interactive
 turbine study lets you rotate an assembly, inspect components, animate an
@@ -94,7 +98,8 @@ view. **Win/Super+C** requests that the current active app close, including
 while that app owns keyboard focus. The provider may keep it open to present an
 unsaved-work confirmation. **Place / Group** also enables content dragging;
 Shift+click selects several apps and **Group selected** makes them move together.
-The header places **Place / Group**, **Group selected**, and **Ungroup** directly
+The top bar places **Place / Group**, **Group selected**, **Ungroup**, and the
+**Send selection to back / Bring selection forward** depth toggle directly
 after **Reset View**. Scroll during a drag to move the selection through space;
 **Super+wheel** moves the hovered window (and its explicit group) without
 focusing it. **Super+primary drag** on empty workspace pans left, right, up or
@@ -291,29 +296,26 @@ resize and explicitly hidden cursors. Cursor choice follows pointer hover and
 capture independently of keyboard focus; workspace controls retain worldr's arrow.
 
 The ordinary shortcuts below apply when the workspace owns the keyboard.
-Ctrl+Alt+G, Ctrl+Alt+Left/Right, Ctrl+Alt+O, Ctrl+Alt+Enter and Ctrl+Alt+Q remain
-available while an application has focus. Portals map live window groups across
-named spaces. Their jumps center the saved camera target without moving windows
-or granting application focus. They stay in the explicit portal atlas and
-reserved shortcuts instead of placing title cards over zoomed-out windows.
-**Help** in the footer opens an on-screen guide; F1 does the same from the
-workspace. Focused applications keep their own F1. Closing the guide returns
-to workspace input; click an app or press Enter to resume typing.
+Ctrl+Alt+Space, Ctrl+Alt+O, Ctrl+Alt+Enter and Ctrl+Alt+Q remain available while
+an application has focus. The first icon in the right launcher rail and
+Ctrl+Alt+Space both open Tools + Spaces. Workspace F1 opens the on-screen guide;
+focused applications keep their own F1. Closing the guide returns to workspace
+input; click an app or press Enter to resume typing.
 
 | Action | Control |
 | --- | --- |
-| Open / close the workspace shortcut guide | Help in the footer, or F1 from the workspace; Escape closes |
+| Open / close the workspace shortcut guide | F1 from the workspace; Escape closes |
+| Open Tools + Spaces | First Launcher icon in the right rail, or Ctrl+Alt+Space from the workspace or a focused app |
 | Pan the spatial workspace | Super+primary drag on empty workspace |
-| Orbit the spatial scene | Drag the scene rotation pad in the bottom-right corner |
+| Orbit the spatial scene | Drag the scene rotation pad in the bottom-left corner |
 | Zoom the spatial scene | Scroll over the scene; application scrolling keeps its usual behavior |
-| Open the spatial portal atlas | Portals in the footer, or Ctrl+Alt+G from the workspace or a focused app |
-| Travel directly among window groups | Ctrl+Alt+Left / Ctrl+Alt+Right |
 | Move / throw a window | Drag its top grip; Super+primary drag where the host permits; or drag content in Place mode |
 | Change depth while dragging | Scroll with the drag held |
 | Change a hovered window's depth | Super+wheel; grouped windows stay together |
+| Send a selection back / bring it forward | Use the depth toggle at the right end of the top bar; selected groups preserve their relative depth |
 | Resize a window | Drag its bottom-right grip, or Super+secondary drag over its content |
 | Toggle a window's Read view | Win/Super + double-click its content |
-| Minimize / Read / close a window | Use the three controls on its top grip; minimize hides all window chrome but remains recoverable through Overview and portals, while the square opens the same Read view as Win/Super + double-click |
+| Minimize / Read / close a window | Use the three controls on its top grip; minimize hides all window chrome but remains recoverable through Overview, while the square opens the same Read view as Win/Super + double-click |
 | Stop a released window's glide | Grab again, or Escape from the workspace |
 | Inspect an AXIAL component | Click it or its tree entry; keys 1–3 |
 | Explode / assemble in AXIAL | E |
@@ -496,9 +498,11 @@ Current implementation selection: [docs/BACKLOG.md](docs/BACKLOG.md).
 
 ## Spaces, native inspection and measurement
 
-**Ctrl+Alt+Space** opens the searchable tools/spaces menu. Create or rename named
-spaces, transfer windows/groups, reopen Files or find a window across spaces.
-Sixteen spaces retain independent cameras and layouts; hidden tools keep running.
+The first **Launcher** icon in the right rail, or **Ctrl+Alt+Space**, opens the
+searchable Tools + Spaces menu. Create or rename named spaces, transfer
+windows/groups, reopen Files or find a window across spaces. Sixteen spaces
+retain independent cameras and layouts; hidden tools keep running. Overview
+remains the fast way to retrieve windows in the current space.
 
 ```sh
 ./bin/worldr-shell --backend=nested --project=examples/models --model=examples/models/mount.obj --terminal --state=documents/engineering.json
