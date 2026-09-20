@@ -112,8 +112,8 @@ type energyNetSpring struct {
 }
 
 var energyNetSprings = [...]energyNetSpring{
-	{1, 0, 72}, {0, 1, 72}, // woven structural strands
-	{1, 1, 34}, {-1, 1, 34}, // shear keeps openings coherent
+	{1, 0, 72}, {0, 1, 72}, // invisible structural bracing
+	{1, 1, 34}, {-1, 1, 34}, // the two visible diagonal fiber families
 	{2, 0, 13}, {0, 2, 13}, // bending resistance prevents sharp folds
 }
 
@@ -221,29 +221,156 @@ func (n *energyNet) screenPoint(index int, viewport scene.Viewport) (float32, fl
 	scale := 1 + (point.Z+breath)*.22
 	u = .5 + (u-.5)*scale
 	v = .5 + (v-.5)*scale
-	return viewport.X + u*viewport.Width, viewport.Y + v*viewport.Height
+	// The photographed weave is a loose sheet rather than a framed Cartesian
+	// plane. Let cell size grow slightly toward the lower foreground, add a tiny
+	// deterministic fiber irregularity, and extend the pinned edge beyond the
+	// viewport so no rectangular perimeter is visible.
+	row, column := index/energyNetColumns, index%energyNetColumns
+	boundedU := min(float32(1), max(float32(0), u))
+	boundedV := min(float32(1), max(float32(0), v))
+	envelope *= float32(math.Sin(float64(math.Pi * boundedU)))
+	// A broad convex drape and stronger foreground expansion break the uniform
+	// drafting-plane spacing. The upper sheet recedes while the lower cells open
+	// toward the viewer, like the close macro perspective of the reference.
+	u += .034 * envelope * float32(math.Sin(float64(2*math.Pi*boundedV+.35)))
+	v += .044*envelope + .01*float32(math.Sin(float64(2*math.Pi*boundedU+.6)))*float32(math.Sin(float64(math.Pi*boundedV)))
+	u = .5 + (u-.5)*(.8+.32*boundedV)
+	v = v * (.78 + .22*boundedV)
+	u += envelope * (.0024*float32(math.Sin(float64(column)*.53+float64(row)*.31+.4)) +
+		.0011*float32(math.Sin(float64(column)*1.37-float64(row)*.47)))
+	v += envelope * (.0021*float32(math.Sin(float64(column)*.29-float64(row)*.43+1.2)) +
+		.0009*float32(math.Sin(float64(column)*1.11+float64(row)*.61)))
+	u = .5 + (u-.5)*1.13
+	v = .5 + (v-.5)*1.18
+	// Oblique camera framing turns the simulated rectangular brace into the
+	// skewed lozenge weave seen in the macro reference. Vertical compression and
+	// rotation happen in pixels so the material keeps the same inclination on
+	// different display aspects.
+	px, py := (u-.5)*viewport.Width, (v-.5)*viewport.Height*.82
+	const cosine, sine = float32(.9781476), float32(.2079117) // twelve degrees
+	return viewport.X + viewport.Width*.5 + cosine*px + sine*py,
+		viewport.Y + viewport.Height*.5 - sine*px + cosine*py
 }
 
-func (w *Workspace) drawEnergyNetEdge(n *energyNet, a, b int, path0, path1, phase float64) {
-	x0, y0 := n.screenPoint(a, w.viewport)
-	x1, y1 := n.screenPoint(b, w.viewport)
-	scale := w.scale
-	w.canvas.Line(x0+0.7*scale, y0+0.9*scale, x1+0.7*scale, y1+0.9*scale, 1.55*scale, scene.ColorHex(0x01080d, .48))
-	w.canvas.Line(x0, y0, x1, y1, .78*scale, scene.ColorHex(0x31b7cf, .14))
-	// Resolve each cell into short conductive spans. Electricity now travels
-	// along a strand instead of lighting a whole rectangular cell at once.
-	const pieces = 4
+type energyNetCanvasPoint struct{ x, y float32 }
+
+type energyNetProjection struct {
+	points [energyNetColumns * energyNetRows]energyNetCanvasPoint
+}
+
+func (n *energyNet) projection(viewport scene.Viewport) energyNetProjection {
+	var projected energyNetProjection
+	for index := range projected.points {
+		x, y := n.screenPoint(index, viewport)
+		projected.points[index] = energyNetCanvasPoint{x, y}
+	}
+	return projected
+}
+
+func energyNetBezier(a, control, b energyNetCanvasPoint, t float32) energyNetCanvasPoint {
+	one := 1 - t
+	return energyNetCanvasPoint{
+		x: one*one*a.x + 2*one*t*control.x + t*t*b.x,
+		y: one*one*a.y + 2*one*t*control.y + t*t*b.y,
+	}
+}
+
+func energyNetVariation(a, b int) float32 {
+	return .5 + .5*float32(math.Sin(float64(a*73+b*151)+.83))
+}
+
+func (w *Workspace) drawEnergyNetFiber(a, control, b energyNetCanvasPoint, path0, path1, phase float64, light, variation float32, over bool) {
+	margin := 9 * w.scale
+	canvasWidth, canvasHeight := w.canvas.Size()
+	if max(a.x, max(control.x, b.x)) < -margin ||
+		min(a.x, min(control.x, b.x)) > float32(canvasWidth)+margin ||
+		max(a.y, max(control.y, b.y)) < -margin ||
+		min(a.y, min(control.y, b.y)) > float32(canvasHeight)+margin {
+		return
+	}
+	// Near fibers gain weight as the sheet rolls toward the viewer. One shaded
+	// stroke carries the teal body and pale specular rim together, which looks
+	// rounder than two uniformly colored lines laid on top of each other.
+	width := (3.75 + 1.35*(1-light) + .72*variation) * w.scale
+	if over {
+		// Erase only a short span of the lower fiber. Keeping the shadow local to
+		// the crossing preserves the translucent polymer body elsewhere.
+		underStart, underEnd := energyNetBezier(a, control, b, .42), energyNetBezier(a, control, b, .58)
+		w.canvas.Line(underStart.x, underStart.y, underEnd.x, underEnd.y, width+2.5*w.scale, scene.ColorHex(0x01070b, .61))
+	}
+	const pieces = 3
 	for piece := 0; piece < pieces; piece++ {
 		t0, t1 := float32(piece)/pieces, float32(piece+1)/pieces
-		pulse := energyPulse(path0+(path1-path0)*float64(t0+t1)/2, phase)
-		if pulse <= .025 {
+		start, end := energyNetBezier(a, control, b, t0), energyNetBezier(a, control, b, t1)
+		dx, dy := end.x-start.x, end.y-start.y
+		length := float32(math.Hypot(float64(dx), float64(dy)))
+		if length <= 1e-5 {
 			continue
 		}
-		ax, ay := x0+(x1-x0)*t0, y0+(y1-y0)*t0
-		bx, by := x0+(x1-x0)*t1, y0+(y1-y0)*t1
-		w.canvas.Line(ax, ay, bx, by, (1.8+2.7*pulse)*scale, scene.ColorHex(0x28dcff, .035+.09*pulse))
-		w.canvas.Line(ax, ay, bx, by, (.72+.52*pulse)*scale, scene.ColorHex(0xd1fbff, .18+.67*pulse))
+		nx, ny := -dy/length, dx/length
+		pulse := energyPulse(path0+(path1-path0)*float64(t0+t1)/2, phase)
+		dark := scene.ColorHex(0x105360, .22+.2*light+.08*pulse)
+		lit := scene.ColorHex(0x8ed8d9, .14+.5*light+.22*pulse)
+		// Electricity changes the material's own specular color instead of drawing
+		// ruler-like bars over it.
+		electric := scene.ColorHex(0xe5ffff, lit.A)
+		blend := .68 * pulse
+		lit.R += (electric.R - lit.R) * blend
+		lit.G += (electric.G - lit.G) * blend
+		lit.B += (electric.B - lit.B) * blend
+		if nx+ny < 0 { // the +normal side points toward the upper-left key light
+			w.canvas.ShadedLine(start.x, start.y, end.x, end.y, width, dark, lit)
+		} else {
+			w.canvas.ShadedLine(start.x, start.y, end.x, end.y, width, lit, dark)
+		}
+		// An occasional hairline makes a strand read as bundled polymer rather than
+		// a perfectly extruded vector stroke.
+		if variation > .45 && piece == int(variation*17)%pieces {
+			hairOffset := (width/w.scale*.34 + .32*variation) * w.scale
+			w.canvas.Line(start.x+nx*hairOffset, start.y+ny*hairOffset, end.x+nx*hairOffset, end.y+ny*hairOffset, .5*w.scale, scene.ColorHex(0xa1e6e3, .18+.19*light))
+		}
+		if variation < .2 && piece == (int(variation*29)+1)%pieces {
+			hairOffset := (width/w.scale*.3 + .22) * w.scale
+			w.canvas.Line(start.x-nx*hairOffset, start.y-ny*hairOffset, end.x-nx*hairOffset, end.y-ny*hairOffset, .42*w.scale, scene.ColorHex(0x073943, .22))
+		}
 	}
+}
+
+func (p *energyNetProjection) gridPoint(column, row int) energyNetCanvasPoint {
+	if column < 0 {
+		p0, p1 := p.gridPoint(0, row), p.gridPoint(1, row)
+		amount := float32(column)
+		return energyNetCanvasPoint{p0.x + (p1.x-p0.x)*amount, p0.y + (p1.y-p0.y)*amount}
+	}
+	if column >= energyNetColumns {
+		p0 := p.gridPoint(energyNetColumns-1, row)
+		p1 := p.gridPoint(energyNetColumns-2, row)
+		amount := float32(column - (energyNetColumns - 1))
+		return energyNetCanvasPoint{p0.x + (p0.x-p1.x)*amount, p0.y + (p0.y-p1.y)*amount}
+	}
+	if row >= 0 && row < energyNetRows {
+		return p.points[row*energyNetColumns+column]
+	}
+	// Continue beyond the pinned simulation boundary. These extrapolated fibers
+	// never participate in physics; they only keep the photographed sheet flowing
+	// beyond the crop after the oblique camera transform.
+	if row < 0 {
+		p0, p1 := p.points[column], p.points[energyNetColumns+column]
+		amount := float32(row)
+		return energyNetCanvasPoint{p0.x + (p1.x-p0.x)*amount, p0.y + (p1.y-p0.y)*amount}
+	}
+	p0 := p.points[(energyNetRows-1)*energyNetColumns+column]
+	p1 := p.points[(energyNetRows-2)*energyNetColumns+column]
+	amount := float32(row - (energyNetRows - 1))
+	return energyNetCanvasPoint{p0.x + (p0.x-p1.x)*amount, p0.y + (p0.y-p1.y)*amount}
+}
+
+func energyNetFiberLight(column, row float32) float32 {
+	u := column / float32(energyNetColumns-1)
+	v := row / float32(energyNetRows-1)
+	vertical := 1 - .66*min(float32(1), max(float32(0), v))
+	center := 1 - .34*min(float32(1), float32(math.Abs(float64(u-.48)))*1.7)
+	return min(float32(1), max(float32(.12), .1+vertical*center*.9))
 }
 
 func (w *Workspace) drawEnergyNet() {
@@ -252,42 +379,59 @@ func (w *Workspace) drawEnergyNet() {
 		return
 	}
 	phase := float64(n.phase) / float64(12*time.Second)
-	for row := 0; row < energyNetRows; row++ {
-		for column := 0; column < energyNetColumns-1; column++ {
-			a, b := n.index(column, row), n.index(column+1, row)
-			path0 := float64(column)/float64(energyNetColumns-1) + float64(row)*.071
-			path1 := float64(column+1)/float64(energyNetColumns-1) + float64(row)*.071
-			w.drawEnergyNetEdge(n, a, b, path0, path1, phase*3)
-		}
-	}
-	for column := 0; column < energyNetColumns; column++ {
-		for row := 0; row < energyNetRows-1; row++ {
-			a, b := n.index(column, row), n.index(column, row+1)
-			path0 := float64(row)/float64(energyNetRows-1) + float64(column)*.047
-			path1 := float64(row+1)/float64(energyNetRows-1) + float64(column)*.047
-			w.drawEnergyNetEdge(n, a, b, path0, path1, .18-phase*2)
-		}
-	}
-	// Redraw a short alternating crossing segment to make the strands visibly
-	// weave over and under instead of reading as a flat technical grid.
-	for row := 1; row < energyNetRows-1; row++ {
-		for column := 1; column < energyNetColumns-1; column++ {
-			center := n.index(column, row)
-			cx, cy := n.screenPoint(center, w.viewport)
-			w.canvas.Circle(cx, cy, 1.18*w.scale, 0, scene.ColorHex(0x06131b, .62))
-			var a, b int
-			if (row+column)%2 == 0 {
-				a, b = n.index(column-1, row), n.index(column+1, row)
-			} else {
-				a, b = n.index(column, row-1), n.index(column, row+1)
+	// A restrained cyan pool behind the fibers supplies the photographic depth
+	// cue visible through the apertures without turning the wall into neon UI.
+	radius := max(w.viewport.Width, w.viewport.Height) * .72
+	w.canvas.RadialGradient(w.viewport.X+w.viewport.Width*.46, w.viewport.Y+w.viewport.Height*.2, radius,
+		scene.ColorHex(0x195a68, .055), scene.ColorHex(0x07121a, 0))
+	projection := n.projection(w.viewport)
+	const overscanRows, overscanColumns = 3, 3
+	for row := -overscanRows; row < energyNetRows-1+overscanRows; row++ {
+		for column := -overscanColumns; column < energyNetColumns-1+overscanColumns; column++ {
+			tl, tr := projection.gridPoint(column, row), projection.gridPoint(column+1, row)
+			bl, br := projection.gridPoint(column, row+1), projection.gridPoint(column+1, row+1)
+			seed := (row+overscanRows)*(energyNetColumns+2*overscanColumns) + column + overscanColumns
+			jitter := energyNetVariation(seed, seed+energyNetColumns+1)
+			waveX := .64*float32(math.Sin(float64(column)*.23+float64(row)*.31+.4)) +
+				.36*float32(math.Sin(float64(column)*.67-float64(row)*.19+1.1))
+			waveY := .61*float32(math.Sin(float64(column)*.17-float64(row)*.29+1.2)) +
+				.39*float32(math.Sin(float64(column)*.61+float64(row)*.23+.2))
+			cross := energyNetCanvasPoint{
+				x: (tl.x+tr.x+bl.x+br.x)/4 + (waveX*5.2+(jitter-.5)*2.6)*w.scale,
+				y: (tl.y+tr.y+bl.y+br.y)/4 + (waveY*4.1+(energyNetVariation(seed+1, seed+energyNetColumns)-.5)*2.1)*w.scale,
 			}
-			x0, y0 := n.screenPoint(a, w.viewport)
-			x1, y1 := n.screenPoint(b, w.viewport)
-			x0, y0 = cx+(x0-cx)*.105, cy+(y0-cy)*.105
-			x1, y1 = cx+(x1-cx)*.105, cy+(y1-cy)*.105
-			w.canvas.Line(x0, y0, x1, y1, .88*w.scale, scene.ColorHex(0x69d8e8, .29))
+			descStart, descEnd := tl, br
+			ascStart, ascEnd := tr, bl
+			descControl := energyNetCanvasPoint{2*cross.x - (descStart.x+descEnd.x)/2, 2*cross.y - (descStart.y+descEnd.y)/2}
+			ascControl := energyNetCanvasPoint{2*cross.x - (ascStart.x+ascEnd.x)/2, 2*cross.y - (ascStart.y+ascEnd.y)/2}
+			descPath0 := float64(row)/float64(energyNetRows-1) + float64(column-row)*.043
+			descPath1 := float64(row+1)/float64(energyNetRows-1) + float64(column-row)*.043
+			ascPath0 := float64(row)/float64(energyNetRows-1) + float64(column+row+1)*.037
+			ascPath1 := float64(row+1)/float64(energyNetRows-1) + float64(column+row+1)*.037
+			drawDescending := func(over bool) {
+				w.drawEnergyNetFiber(descStart, descControl, descEnd, descPath0, descPath1, phase*2.55,
+					energyNetFiberLight(float32(column)+.5, float32(row)+.5), energyNetVariation(seed, seed+energyNetColumns+1), over)
+			}
+			drawAscending := func(over bool) {
+				w.drawEnergyNetFiber(ascStart, ascControl, ascEnd, ascPath0, ascPath1, .21-phase*2.15,
+					energyNetFiberLight(float32(column)+.5, float32(row)+.5), energyNetVariation(seed+1, seed+energyNetColumns), over)
+			}
+			// Alternating draw order makes the broad dark seat of the later strand
+			// cut a convincing underpass into the earlier one at each crossing.
+			if (row+column)%2 == 0 {
+				drawDescending(false)
+				drawAscending(true)
+			} else {
+				drawAscending(false)
+				drawDescending(true)
+			}
 		}
 	}
+	// The macro reference falls into deep shadow along the near lower fold. A
+	// broad translucent occlusion wash supplies that depth cue while leaving the
+	// upper fibers in the cool key light.
+	w.canvas.RadialGradient(w.viewport.X+w.viewport.Width*.08, w.viewport.Y+w.viewport.Height*1.06, radius*.92,
+		scene.ColorHex(0x01070b, .27), scene.ColorHex(0x01070b, 0))
 }
 
 func (w *Workspace) energyWallCoordinates(x, y float32) (float32, float32) {

@@ -31,14 +31,16 @@ Settings provides Terminal and Media previews plus an Environment category with
 independent DNA, running-cat, and cursor-eye switches.
 
 The general desktop's rear backdrop is a woven cyan energy wall. Its pinned
-25-by-15 spring lattice breathes gently, carries electrical pulses along both
-sets of fibers, and deforms when a window reaches the rear depth boundary. The
-window or explicit group then rebounds toward the camera instead of passing
-through the wall. The retained 3D DNA double helix completes one rotation every
-30 seconds, a retained 3D cat runs a closed route across all three spatial axes,
-and three bloodshot ambient eyes follow the pointer. These effects remain behind
-application content, never capture input, and can be switched independently in
-Settings.
+25-by-15 physical lattice uses hidden horizontal and vertical bracing while two
+visible families of bowed diagonal fibers form the weave. An overscanned,
+oblique projection hides the lattice boundary; shaded polymer strands breathe
+gently, and subtle electrical pulses modulate their material. The wall deforms
+when a window reaches the rear depth boundary, then rebounds the window or
+explicit group toward the camera. The retained 3D DNA double helix completes one
+rotation every 30 seconds, a retained 3D cat runs a closed route across all three
+spatial axes, and three bloodshot ambient eyes follow the pointer. These effects
+remain behind application content, never capture input, and can be switched
+independently in Settings.
 
 **AXIAL / 07** is a hosted native 3D application in the general workspace; use
 its launcher-rail control or start with `--axial`. It can be moved, grouped, sent
@@ -355,11 +357,11 @@ input; click an app or press Enter to resume typing.
 Both experiences use the permanent **Cinematic** presentation. Spatial guides,
 mesh accents, authored glow, moving lights, transitions, and window throws keep
 their full motion during exploration and focused work. On the general desktop,
-electrical packets continue across the woven wall, its springs breathe and carry
-impact waves, the subdued DNA turns, the cat crosses three-dimensional routes,
-and the ambient eyes track the pointer. Content, placement, camera, and
-application pixels remain independent of those effects. The richer
-concept-art finish is still ahead; Space still pauses AXIAL playback.
+subtle electrical highlights continue through the woven wall while its springs
+breathe and carry impact waves, the subdued DNA turns, the cat crosses
+three-dimensional routes, and the ambient eyes track the pointer. Content,
+placement, camera, and application pixels remain independent of those effects.
+The richer concept-art finish is still ahead; Space still pauses AXIAL playback.
 
 AXIAL now uses a cool blue/silver palette, highlights that respond to the camera
 and light, smooth shading on cylindrical walls, and a grid and rings anchored in

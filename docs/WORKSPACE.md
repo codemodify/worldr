@@ -99,18 +99,22 @@ should use the engine directly. Compatibility provides access to existing
 software alongside those new experiences.
 
 The general desktop's rear background is a woven cyan energy wall: a pinned
-25-by-15 lattice joined by structural, shear, and bending springs. A subtle
-periodic pressure cue gives it a gentle breathing motion, while electrical packets travel independently
-along its horizontal and vertical fibers. Window impacts produce a visible dent
-and spring wave at the collision point. The centered 3D DNA double helix remains
-as subdued retained geometry in front of the weave, rotating once every 30
-seconds. A retained low-poly cat follows a closed running route through X, Y,
-and depth, while three bloodshot ambient eyes track the host pointer. Every
-ambient layer remains behind application content and never participates in
-picking or pointer capture. Animation and gaze are transient and independent of
-camera navigation, saved layouts, and Undo; only the three visibility switches
-are saved. The effects continue during Read and other focused work. The
-standalone AXIAL experience does not create them.
+25-by-15 physical lattice joined by structural, shear, and bending springs. Its
+horizontal and vertical springs are invisible bracing; two visible families of
+bowed diagonal fibers form the weave. An overscanned oblique projection removes
+the rectangular perimeter, and shaded strands read as rounded polymer rather
+than a technical grid. A subtle periodic pressure cue gives the wall a gentle
+breathing motion, while traveling electricity modulates the strand highlights.
+Crossings use local underpass shading without circular knots. Window impacts
+produce a visible dent and spring wave at the collision point. The centered 3D
+DNA double helix remains as subdued retained geometry in front of the weave,
+rotating once every 30 seconds. A retained low-poly cat follows a closed running
+route through X, Y, and depth, while three bloodshot ambient eyes track the host
+pointer. Every ambient layer remains behind application content and never
+participates in picking or pointer capture. Animation and gaze are transient and
+independent of camera navigation, saved layouts, and Undo; only the three
+visibility switches are saved. The effects continue during Read and other
+focused work. The standalone AXIAL experience does not create them.
 
 Opening a video from native Files starts playback in a new independent window
 without changing keyboard focus, selection, camera or Read mode. A new player
@@ -144,7 +148,7 @@ framing, lighting, visible instruments, transitions, window throws, and ambient
 animation retain full motion during exploration and focused work. Study playback
 and application content keep their own controls; Space pauses the study. On the
 general desktop, this ambient motion includes the wall's traveling electrical
-pulses and spring response as well as the subdued rotating DNA in front of it.
+highlights and spring response as well as the subdued rotating DNA in front of it.
 
 The current material pass adds camera/light-responsive highlights, metal tint,
 cyan rim accents, two bounded moving fill lights and smooth cylindrical shading

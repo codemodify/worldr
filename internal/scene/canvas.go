@@ -117,7 +117,15 @@ func (c *Canvas) Rect(x, y, width, height float32, col Color) {
 }
 
 func (c *Canvas) Line(x1, y1, x2, y2, width float32, col Color) {
-	if width <= 0 || col.A <= 0 {
+	c.ShadedLine(x1, y1, x2, y2, width, col, col)
+}
+
+// ShadedLine draws an antialiased line whose color changes across its width.
+// negativeNormal colors the -normal side and positiveNormal colors the +normal
+// side, where the oriented normal is (-dy, dx). The outer one-pixel fringe is
+// transparent while the two inner samples retain the requested side colors.
+func (c *Canvas) ShadedLine(x1, y1, x2, y2, width float32, negativeNormal, positiveNormal Color) {
+	if width <= 0 || (negativeNormal.A <= 0 && positiveNormal.A <= 0) {
 		return
 	}
 	// A one-pixel coverage fringe preserves the weight of subpixel strokes.
@@ -131,10 +139,11 @@ func (c *Canvas) Line(x1, y1, x2, y2, width float32, col Color) {
 	coverage := clamp(width, 0, 1)
 	offsets := [4]float32{-outer, -inner, inner, outer}
 	alphas := [4]float32{0, coverage, coverage, 0}
+	colors := [4]Color{negativeNormal, negativeNormal, positiveNormal, positiveNormal}
 	var start, end [4]render.Vertex
 	for i, offset := range offsets {
 		x, y := nx*offset, ny*offset
-		color := col
+		color := colors[i]
 		color.A *= alphas[i]
 		start[i] = c.vertex(x1+x, y1+y, 0, c.whiteU, c.whiteV, color)
 		end[i] = c.vertex(x2+x, y2+y, 0, c.whiteU, c.whiteV, color)

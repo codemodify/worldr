@@ -114,11 +114,15 @@ buttons, shortcuts and demonstrations share validated behavior and undo rules.
 
 The general desktop's woven wall is implemented in
 [energy_net.go](../internal/workspace/energy_net.go). It is deliberately a
-screen-space `Canvas` layer rather than retained scene geometry: `Line` and
-`Circle` commands draw a 25-by-15 over-under weave and its moving electrical
-packets. A fixed 120 Hz simulation integrates pinned points with structural,
-shear, and bending springs; a long suspension settles the lattice instead of
-running an unbounded catch-up. [drawBackground](../internal/workspace/dna_background.go)
+screen-space `Canvas` layer rather than retained scene geometry. A fixed 120 Hz
+simulation integrates a pinned 25-by-15 lattice with structural, shear, and
+bending springs; the horizontal and vertical springs remain invisible bracing.
+The renderer projects two visible families of bowed diagonal fibers through an
+overscanned oblique crop, then uses shaded strokes to give the strands a rounded
+polymer body. Electrical energy subtly changes that material's highlight instead
+of drawing separate pulse bars, and crossings use local underpass shading rather
+than `Circle` commands. A long suspension settles the lattice instead of running
+an unbounded catch-up. [drawBackground](../internal/workspace/dna_background.go)
 queues this overlay first, then the background scene draw flushes it before the
 subdued retained DNA and running-cat pass. Three cursor-following eyes are queued
 after that retained pass; the normal workspace scene flushes them before drawing
