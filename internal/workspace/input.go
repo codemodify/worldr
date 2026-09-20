@@ -78,6 +78,10 @@ func (p pointerCapture) mask() fields {
 }
 
 func (w *Workspace) Handle(event experience.Event) bool {
+	// Ambient cursor effects observe the host-space pointer before modal,
+	// application, or workspace routing consumes it. Observation never claims
+	// the event or changes input ownership.
+	w.ambientPointer.Observe(event)
 	if event.Kind == experience.TextCommit || event.Kind == experience.TextPreedit {
 		state := w.TextInput()
 		if !state.Enabled || state.ContextID != event.TextContext {

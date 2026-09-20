@@ -2,14 +2,16 @@ package workspace
 
 import "github.com/codemodify/worldr/internal/experience"
 
-// Settings is transient workspace chrome. Its selection deliberately lives
-// outside Document so inspecting another category never creates an edit or a
-// saved-state change.
+// Settings is transient workspace chrome. Its category selection deliberately
+// lives outside Document so inspecting another category never creates an edit
+// or a saved-state change. Environment switches are desktop preferences and
+// persist separately from the workspace's undoable document.
 type settingsCategory uint8
 
 const (
 	settingsTerminal settingsCategory = iota
 	settingsMedia
+	settingsEnvironment
 )
 
 type settingsTarget uint8
@@ -20,6 +22,10 @@ const (
 	settingsTargetClose
 	settingsTargetTerminal
 	settingsTargetMedia
+	settingsTargetEnvironment
+	settingsTargetDNA
+	settingsTargetCat
+	settingsTargetEyes
 )
 
 type settingsPointerCapture struct {
@@ -30,14 +36,18 @@ type settingsPointerCapture struct {
 }
 
 var (
-	settingsBounds         = box{138, 78, 1164, 744}
-	settingsCloseButton    = box{1234, 98, 44, 32}
-	settingsTerminalButton = box{160, 176, 218, 54}
-	settingsMediaButton    = box{160, 242, 218, 54}
-	settingsPreviewBounds  = box{432, 222, 830, 430}
+	settingsBounds            = box{138, 78, 1164, 744}
+	settingsCloseButton       = box{1234, 98, 44, 32}
+	settingsTerminalButton    = box{160, 176, 218, 54}
+	settingsMediaButton       = box{160, 242, 218, 54}
+	settingsEnvironmentButton = box{160, 308, 218, 54}
+	settingsPreviewBounds     = box{432, 222, 830, 430}
+	settingsDNAToggle         = box{462, 256, 770, 92}
+	settingsCatToggle         = box{462, 370, 770, 92}
+	settingsEyesToggle        = box{462, 484, 770, 92}
 )
 
-func settingsButtonTarget(x, y float32) settingsTarget {
+func (w *Workspace) settingsButtonTarget(x, y float32) settingsTarget {
 	switch {
 	case settingsCloseButton.contains(x, y):
 		return settingsTargetClose
@@ -45,6 +55,14 @@ func settingsButtonTarget(x, y float32) settingsTarget {
 		return settingsTargetTerminal
 	case settingsMediaButton.contains(x, y):
 		return settingsTargetMedia
+	case settingsEnvironmentButton.contains(x, y):
+		return settingsTargetEnvironment
+	case w.settingsCategory == settingsEnvironment && settingsDNAToggle.contains(x, y):
+		return settingsTargetDNA
+	case w.settingsCategory == settingsEnvironment && settingsCatToggle.contains(x, y):
+		return settingsTargetCat
+	case w.settingsCategory == settingsEnvironment && settingsEyesToggle.contains(x, y):
+		return settingsTargetEyes
 	default:
 		return settingsTargetBackdrop
 	}
@@ -197,7 +215,7 @@ func (w *Workspace) handleSettings(event experience.Event) bool {
 				p.dragged = true
 			}
 			if event.Kind == experience.PointerUp && button == 272 {
-				target, activate := p.target, !p.dragged && settingsButtonTarget(x, y) == p.target
+				target, activate := p.target, !p.dragged && w.settingsButtonTarget(x, y) == p.target
 				w.cancelSettingsPointer()
 				if activate {
 					switch target {
@@ -207,6 +225,14 @@ func (w *Workspace) handleSettings(event experience.Event) bool {
 						w.settingsCategory = settingsTerminal
 					case settingsTargetMedia:
 						w.settingsCategory = settingsMedia
+					case settingsTargetEnvironment:
+						w.settingsCategory = settingsEnvironment
+					case settingsTargetDNA:
+						w.environment.DNA = !w.environment.DNA
+					case settingsTargetCat:
+						w.environment.Cat = !w.environment.Cat
+					case settingsTargetEyes:
+						w.environment.Eyes = !w.environment.Eyes
 					}
 				}
 			}
@@ -220,7 +246,7 @@ func (w *Workspace) handleSettings(event experience.Event) bool {
 	if w.settingsOpen && event.Kind == experience.PointerDown && button == 272 {
 		w.settingsButtons[button] = true
 		w.settingsPointer = settingsPointerCapture{
-			active: true, target: settingsButtonTarget(x, y), x: x, y: y,
+			active: true, target: w.settingsButtonTarget(x, y), x: x, y: y,
 			width: w.width, height: w.height,
 		}
 		return true
@@ -248,12 +274,19 @@ func (w *Workspace) drawSettings() {
 	w.drawSettingsClose()
 	w.drawSettingsCategory(settingsTerminalButton, "TERMINAL", "SHELL SURFACE", w.settingsCategory == settingsTerminal)
 	w.drawSettingsCategory(settingsMediaButton, "MEDIA", "PLAYBACK SURFACE", w.settingsCategory == settingsMedia)
-	w.text(160, 760, 10, "TRANSIENT PREVIEW", muted, .72)
+	w.drawSettingsCategory(settingsEnvironmentButton, "ENVIRONMENT", "AMBIENT SCENE", w.settingsCategory == settingsEnvironment)
+	footer := "TRANSIENT PREVIEW"
+	if w.settingsCategory == settingsEnvironment {
+		footer = "SAVED WITH WORKSPACE"
+	}
+	w.text(160, 760, 10, footer, muted, .72)
 	w.text(160, 779, 10, "ESC  CLOSE", muted, .72)
 
 	switch w.settingsCategory {
 	case settingsMedia:
 		w.drawMediaSettingsPreview()
+	case settingsEnvironment:
+		w.drawEnvironmentSettingsPreview()
 	default:
 		w.drawTerminalSettingsPreview()
 	}
@@ -356,4 +389,37 @@ func (w *Workspace) drawMediaSettingsPreview() {
 	w.text(b.x+b.w-260, b.y+362, 10, "AUDIO  82%", muted, .82)
 	w.line(b.x+b.w-145, b.y+371, b.x+b.w-42, b.y+371, 2, muted, .2)
 	w.line(b.x+b.w-145, b.y+371, b.x+b.w-66, b.y+371, 2, teal, .86)
+}
+
+func (w *Workspace) drawEnvironmentSettingsPreview() {
+	w.drawSettingsPreviewHeader("ENVIRONMENT", "AMBIENT SCENE", "LIVE WORKSPACE LAYERS")
+	w.drawPreviewFrame(settingsPreviewBounds)
+	w.drawEnvironmentToggle(settingsDNAToggle, "01", "DNA HELIX", "CENTERED RETAINED 3D LANDMARK", w.environment.DNA)
+	w.drawEnvironmentToggle(settingsCatToggle, "02", "RUNNING CAT", "FREE 3D AMBIENT MOTION", w.environment.Cat)
+	w.drawEnvironmentToggle(settingsEyesToggle, "03", "CURSOR EYES", "THREE EYES TRACK THE POINTER", w.environment.Eyes)
+}
+
+func (w *Workspace) drawEnvironmentToggle(b box, index, title, description string, enabled bool) {
+	w.rect(b.x, b.y, b.w, b.h, 0x07131f, .96)
+	w.line(b.x, b.y, b.x+b.w, b.y, 1, teal, .22)
+	w.line(b.x, b.y+b.h, b.x+b.w, b.y+b.h, 1, teal, .16)
+	w.rect(b.x, b.y, 4, b.h, teal, .48)
+	w.text(b.x+22, b.y+18, 10, index, teal, .76)
+	w.text(b.x+62, b.y+16, 14, title, ink, 1)
+	w.text(b.x+62, b.y+45, 10, description, muted, .82)
+
+	toggle := box{b.x + b.w - 112, b.y + 25, 76, 38}
+	alpha := float32(.12)
+	label, labelColor := "OFF", muted
+	knobX := toggle.x + 19
+	if enabled {
+		alpha = .28
+		label, labelColor = "ON", teal
+		knobX = toggle.x + toggle.w - 19
+	}
+	w.rect(toggle.x, toggle.y, toggle.w, toggle.h, teal, alpha)
+	w.line(toggle.x, toggle.y, toggle.x+toggle.w, toggle.y, 1, teal, .64)
+	w.line(toggle.x, toggle.y+toggle.h, toggle.x+toggle.w, toggle.y+toggle.h, 1, teal, .42)
+	w.circle(knobX, toggle.y+toggle.h/2, 8, 8, labelColor, .94)
+	w.text(toggle.x-43, toggle.y+11, 10, label, labelColor, .9)
 }

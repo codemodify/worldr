@@ -120,9 +120,11 @@ packets. A fixed 120 Hz simulation integrates pinned points with structural,
 shear, and bending springs; a long suspension settles the lattice instead of
 running an unbounded catch-up. [drawBackground](../internal/workspace/dna_background.go)
 queues this overlay first, then the background scene draw flushes it before the
-subdued retained DNA pass. The normal workspace scene follows, leaving the wall
-at the rear, the DNA in front of it, and applications in front of both. The
-standalone AXIAL experience does not allocate this wall.
+subdued retained DNA and running-cat pass. Three cursor-following eyes are queued
+after that retained pass; the normal workspace scene flushes them before drawing
+applications. This leaves the wall at the rear, DNA and cat in 3D, eyes as a
+passive ambient overlay, and applications in front of every effect. The
+standalone AXIAL experience does not allocate these desktop effects.
 
 Experience calls belong to one host goroutine. A frame returned by `Draw` is
 borrowed: finish submission before another `Draw` or `Close`. Atlas pixels remain

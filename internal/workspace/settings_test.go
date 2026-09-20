@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 
@@ -98,12 +99,99 @@ func TestSettingsCategoriesScaleAndRenderDistinctPreviews(t *testing.T) {
 		if reflect.DeepEqual(terminal, media) {
 			t.Fatal("Terminal and Media categories rendered the same preview")
 		}
+		x, y = settingsPoint(w, settingsEnvironmentButton)
+		if !pointer(w, experience.PointerDown, x, y) || !pointer(w, experience.PointerUp, x, y) || w.settingsCategory != settingsEnvironment {
+			t.Fatal("scaled Environment category click did not select its controls")
+		}
+		environment := copiedVertices(w.Draw(dimensions.width, dimensions.height))
+		if reflect.DeepEqual(media, environment) || reflect.DeepEqual(terminal, environment) {
+			t.Fatal("Environment category did not render distinct controls")
+		}
 		x, y = settingsPoint(w, settingsTerminalButton)
 		pointer(w, experience.PointerDown, x, y)
 		pointer(w, experience.PointerUp, x, y)
 		if w.settingsCategory != settingsTerminal || w.Document() != before || w.historyPosition != history || len(w.history) != historyLength {
 			t.Fatal("category navigation changed persistent workspace state")
 		}
+	}
+}
+
+func TestEnvironmentSettingsPersistWithoutEnteringUndoHistory(t *testing.T) {
+	for _, dimensions := range []struct{ width, height int }{{1440, 900}, {2880, 1800}} {
+		w := desktop(t)
+		w.Draw(dimensions.width, dimensions.height)
+		beforeDocument, history, historyLength := w.Document(), w.historyPosition, len(w.history)
+		beforeState, err := w.SaveState()
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.openSettings()
+		x, y := settingsPoint(w, settingsEnvironmentButton)
+		pointer(w, experience.PointerDown, x, y)
+		pointer(w, experience.PointerUp, x, y)
+		for _, toggle := range []box{settingsDNAToggle, settingsCatToggle, settingsEyesToggle} {
+			x, y = settingsPoint(w, toggle)
+			if !pointer(w, experience.PointerDown, x, y) || !pointer(w, experience.PointerUp, x, y) {
+				t.Fatal("Environment switch did not consume its completed click")
+			}
+		}
+		if w.environment != (environmentSettings{}) {
+			t.Fatalf("Environment switches did not disable every layer: %+v", w.environment)
+		}
+		if w.Document() != beforeDocument || w.historyPosition != history || len(w.history) != historyLength || w.CanUndo() {
+			t.Fatal("Environment preferences entered the workspace document or Undo history")
+		}
+		afterState, err := w.SaveState()
+		if err != nil || bytes.Equal(beforeState, afterState) {
+			t.Fatal("Environment preferences did not change persisted desktop state")
+		}
+		loaded := desktop(t)
+		if err := loaded.LoadState(afterState); err != nil || loaded.environment != (environmentSettings{}) {
+			t.Fatalf("disabled Environment preferences did not round-trip: state=%+v err=%v", loaded.environment, err)
+		}
+	}
+}
+
+func TestEnvironmentSettingsRequireVisibleCompletedUnmovedClicks(t *testing.T) {
+	w := desktop(t)
+	w.Draw(1440, 900)
+	w.openSettings()
+	x, y := settingsPoint(w, settingsEnvironmentButton)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerUp, x, y)
+
+	x, y = settingsPoint(w, settingsDNAToggle)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerMove, x+12, y)
+	pointer(w, experience.PointerMove, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	if !w.environment.DNA {
+		t.Fatal("dragging away and back activated the DNA switch")
+	}
+	x, y = settingsPoint(w, settingsCatToggle)
+	pointer(w, experience.PointerDown, x, y)
+	w.Handle(experience.Event{Kind: experience.PointerCancel})
+	pointer(w, experience.PointerUp, x, y)
+	if !w.environment.Cat {
+		t.Fatal("a cancelled press activated the cat switch on a later release")
+	}
+	x, y = settingsPoint(w, settingsEyesToggle)
+	pointer(w, experience.PointerDown, x, y)
+	w.Draw(2880, 1800)
+	pointer(w, experience.PointerUp, x*2, y*2)
+	if !w.environment.Eyes {
+		t.Fatal("a resized Settings press activated the eyes switch using stale coordinates")
+	}
+
+	w.Draw(1440, 900)
+	x, y = settingsPoint(w, settingsTerminalButton)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	x, y = settingsPoint(w, settingsDNAToggle)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	if !w.environment.DNA {
+		t.Fatal("an invisible Environment switch activated from another category")
 	}
 }
 

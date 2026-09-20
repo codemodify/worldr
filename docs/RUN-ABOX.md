@@ -98,8 +98,9 @@ It does not create the general desktop's woven energy wall.
 The Cinematic presentation remains active during exploration and focus, with
 full ambient motion, spatial framing, and wire/rim accents. On the general
 desktop, electrical pulses travel across the woven wall, its springs breathe and
-carry impact waves, and the retained DNA turns more subtly in front of it while
-remaining behind applications. The model has a
+carry impact waves, the retained DNA turns more subtly, a 3D cat runs through
+the background volume, and three ambient eyes follow the pointer while remaining
+behind applications. The model has a
 blue/silver palette, light-responsive highlights and smoothly shaded cylinder
 walls. Its world-space grid and rings hide in Read/Overview. Selective depth-aware background
 glow, directional shadows, moving fill lights, opt-in final-frame highlight
@@ -145,8 +146,9 @@ or Ctrl+Alt+Space from any app, opens Tools + Spaces to launch tools, switch or
 create spaces, transfer a selection, and find windows across spaces. A compact
 scene controller continues the launcher rail at the bottom-right. Drag its
 reticle to orbit; the two unlabeled values show yaw and pitch. Its gear opens
-Settings, where Terminal and Media categories each provide a preview, and its
-Reset control restores the camera view.
+Settings, where Terminal and Media categories provide previews and Environment
+switches DNA, Cat, and Eyes independently; its Reset control restores the camera
+view.
 Ctrl+Alt+Enter creates an independent native shell
 and selects it; click its content or press a fresh Enter to read and type. The shortcut works from a focused
 native or legacy app, including with keypad Enter. This control is available even without `--terminal`

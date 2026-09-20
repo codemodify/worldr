@@ -77,8 +77,9 @@ and vertically without moving windows. Empty unmodified drags remain inert. A
 compact scene controller continues the right launcher rail at the bottom-right.
 Its small reticle owns scene orbiting, and two values report yaw and pitch
 without field labels. The adjacent gear opens a modal Settings surface with
-Terminal and Media categories and their previews; Reset sits inside the same
-controller and restores the camera view.
+Terminal and Media previews and an Environment category for independent DNA,
+Cat, and Eyes switches; Reset sits inside the same controller and restores the
+camera view.
 
 Workspace F1 exposes the current shortcuts in an on-screen guide. It owns input
 while open; closing it leaves typing focus with the workspace. Focused
@@ -103,11 +104,13 @@ periodic pressure cue gives it a gentle breathing motion, while electrical packe
 along its horizontal and vertical fibers. Window impacts produce a visible dent
 and spring wave at the collision point. The centered 3D DNA double helix remains
 as subdued retained geometry in front of the weave, rotating once every 30
-seconds; both layers remain behind application content at every placement depth.
-They are decorative and never participate in picking or pointer capture. Their
-motion is transient and independent of camera navigation, saved layouts, and
-Undo, and it continues during Read and other focused work. The standalone AXIAL
-experience does not create the energy wall.
+seconds. A retained low-poly cat follows a closed running route through X, Y,
+and depth, while three bloodshot ambient eyes track the host pointer. Every
+ambient layer remains behind application content and never participates in
+picking or pointer capture. Animation and gaze are transient and independent of
+camera navigation, saved layouts, and Undo; only the three visibility switches
+are saved. The effects continue during Read and other focused work. The
+standalone AXIAL experience does not create them.
 
 Opening a video from native Files starts playback in a new independent window
 without changing keyboard focus, selection, camera or Read mode. A new player
@@ -215,7 +218,7 @@ sidebar, footer, or main toolbar. The launcher stays on the right, and its compa
 scene controller sits directly below it at the bottom-right. The controller has
 no title or yaw/pitch field labels; it combines the orbit reticle and angle
 values with a Settings gear and Reset. Settings shows Terminal and Media
-categories with a preview of each.
+previews plus saved Environment switches for DNA, Cat, and Eyes.
 
 `--project` anchors a native Files browser at that directory. Select a file
 to preview UTF-8 text with line numbers. Enter, double-click or Open enters a

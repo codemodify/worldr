@@ -20,6 +20,10 @@ func (w *Workspace) initializeBackground() error {
 		Mesh: mesh, Unpickable: true,
 		Material: render.Material{Specular: .38, Roughness: .4, RimStrength: .2, RimColor: [3]float32{.08, .55, .7}},
 	})
+	w.ambientCat, err = newAmbientCat(w.backgroundScene)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -30,6 +34,7 @@ func (w *Workspace) updateBackground(dt time.Duration) {
 	// Integer elapsed time makes the pose independent of frame rate. Reduce
 	// the delta first so even a very long interruption cannot overflow it.
 	w.backgroundPhase = (w.backgroundPhase + dt%dnaRotationPeriod) % dnaRotationPeriod
+	w.ambientCat.update(dt)
 	w.updateEnergyNet(dt)
 }
 
@@ -39,7 +44,7 @@ func (w *Workspace) drawBackground() {
 		return
 	}
 	strand := w.backgroundScene.Node(w.dnaNode)
-	strand.Hidden = false
+	strand.Hidden = !w.environment.DNA
 	strand.Color = scene.ColorHex(0x90d8ed, .34)
 	strand.Glow = [3]float32{.01, .052, .075}
 	angle := float32(2 * math.Pi * float64(w.backgroundPhase) / float64(dnaRotationPeriod))
@@ -47,9 +52,11 @@ func (w *Workspace) drawBackground() {
 	// camera-independent framing keeps it a backdrop as windows move in depth or
 	// enter Read mode; rotating around its own axis never orbits it around UI.
 	strand.Transform = scene.RotateY(angle)
+	w.ambientCat.setVisible(w.environment.Cat)
 	camera := scene.Camera{Eye: scene.Vec3{Z: 15.5}, Up: scene.Vec3{Y: 1}, FOV: .69, Near: .1, Far: 40}
 	// Ordered camera passes clear depth separately. This pass is always before
 	// workspace content, so even a window placed far back covers the backdrop. The
 	// background scene is never consulted for picking or pointer capture.
 	w.backgroundScene.Draw(w.canvas, camera, w.viewport)
+	w.drawBackgroundEyes()
 }

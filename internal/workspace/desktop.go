@@ -12,12 +12,23 @@ import (
 // The desktop has its own persistence contract and experience identity. Shared
 // camera/application reducers still use Document internally, but no synthetic
 // study timeline, selection, geometry or instrument is part of desktop state.
+type environmentSettings struct {
+	DNA  bool `json:"dna"`
+	Cat  bool `json:"cat"`
+	Eyes bool `json:"eyes"`
+}
+
+func defaultEnvironmentSettings() environmentSettings {
+	return environmentSettings{DNA: true, Cat: true, Eyes: true}
+}
+
 type desktopDocument struct {
 	Version       int                  `json:"version"`
 	Camera        CameraState          `json:"camera"`
 	Presentation  presentation.Mode    `json:"presentation"`
 	ReducedMotion bool                 `json:"reduced_motion,omitempty"`
 	Applications  ApplicationViewState `json:"applications"`
+	Environment   environmentSettings  `json:"environment"`
 }
 
 func studyAction(kind ActionKind) bool {
@@ -30,22 +41,29 @@ func studyAction(kind ActionKind) bool {
 }
 
 func (w *Workspace) saveDesktopState() ([]byte, error) {
-	return marshalDesktopState(w.Document())
+	return marshalDesktopState(w.Document(), w.environment)
 }
 
-func marshalDesktopState(d Document) ([]byte, error) {
+func marshalDesktopState(d Document, environment environmentSettings) ([]byte, error) {
 	d.View.Presentation = presentation.Cinematic
 	d.View.ReducedMotion = false
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}
-	return json.MarshalIndent(desktopDocument{1, d.View.Camera, d.View.Presentation, d.View.ReducedMotion, d.View.Application}, "", "  ")
+	return json.MarshalIndent(desktopDocument{
+		Version:       1,
+		Camera:        d.View.Camera,
+		Presentation:  d.View.Presentation,
+		ReducedMotion: d.View.ReducedMotion,
+		Applications:  d.View.Application,
+		Environment:   environment,
+	}, "", "  ")
 }
 
 func (w *Workspace) loadDesktopState(data []byte) error {
 	base := initialModel().document()
 	base.Timeline.Playing = false
-	d := desktopDocument{Camera: base.View.Camera, Presentation: presentation.Cinematic}
+	d := desktopDocument{Camera: base.View.Camera, Presentation: presentation.Cinematic, Environment: defaultEnvironmentSettings()}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&d); err != nil {
@@ -70,6 +88,7 @@ func (w *Workspace) loadDesktopState(data []byte) error {
 		return err
 	}
 	w.installLoadedDocument(base)
+	w.environment = d.Environment
 	return nil
 }
 

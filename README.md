@@ -27,16 +27,18 @@ native viewer. The desktop has no left sidebar, footer, or main toolbar. Tool
 launching stays in the right rail, and a compact scene controller continues that
 rail at the bottom-right. Its reticle orbits the workspace, two unlabeled values
 show yaw and pitch, its gear opens Settings, and Reset restores the camera view.
-Settings provides Terminal and Media categories with a preview for each.
+Settings provides Terminal and Media previews plus an Environment category with
+independent DNA, running-cat, and cursor-eye switches.
 
 The general desktop's rear backdrop is a woven cyan energy wall. Its pinned
 25-by-15 spring lattice breathes gently, carries electrical pulses along both
 sets of fibers, and deforms when a window reaches the rear depth boundary. The
 window or explicit group then rebounds toward the camera instead of passing
-through the wall. The retained 3D DNA double helix still completes one rotation
-every 30 seconds, now subdued in front of the weave and behind all application
-content. Neither background layer captures input, and both remain active during
-normal workspace and Read views.
+through the wall. The retained 3D DNA double helix completes one rotation every
+30 seconds, a retained 3D cat runs a closed route across all three spatial axes,
+and three bloodshot ambient eyes follow the pointer. These effects remain behind
+application content, never capture input, and can be switched independently in
+Settings.
 
 **AXIAL / 07** is a hosted native 3D application in the general workspace; use
 its launcher-rail control or start with `--axial`. It can be moved, grouped, sent
@@ -321,7 +323,7 @@ input; click an app or press Enter to resume typing.
 | Open Tools + Spaces | First Launcher icon in the right rail, or Ctrl+Alt+Space from the workspace or a focused app |
 | Pan the spatial workspace | Super+primary drag on empty workspace |
 | Orbit the spatial scene | Drag the reticle in the scene controller below the right launcher rail |
-| Open Settings | Select the gear in the scene controller; choose Terminal or Media to see its preview |
+| Open Settings | Select the gear in the scene controller; choose Terminal or Media for previews, or Environment to switch DNA, Cat, and Eyes independently |
 | Zoom the spatial scene | Scroll over the scene; application scrolling keeps its usual behavior |
 | Move / throw a window | Drag its top grip, or use Super+primary drag where the host permits |
 | Change or throw through depth | Scroll with the drag held; release after a quick scroll to carry that recent motion into the throw |
@@ -354,8 +356,9 @@ Both experiences use the permanent **Cinematic** presentation. Spatial guides,
 mesh accents, authored glow, moving lights, transitions, and window throws keep
 their full motion during exploration and focused work. On the general desktop,
 electrical packets continue across the woven wall, its springs breathe and carry
-impact waves, and the subdued DNA turns in front of it. Content, placement,
-camera, and application pixels remain independent of those effects. The richer
+impact waves, the subdued DNA turns, the cat crosses three-dimensional routes,
+and the ambient eyes track the pointer. Content, placement, camera, and
+application pixels remain independent of those effects. The richer
 concept-art finish is still ahead; Space still pauses AXIAL playback.
 
 AXIAL now uses a cool blue/silver palette, highlights that respond to the camera

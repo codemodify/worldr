@@ -169,6 +169,71 @@ func TestDesktopStateRoundTripAndStudyStateRejection(t *testing.T) {
 	}
 }
 
+func TestDesktopEnvironmentSettingsStateCompatibilityAndTransactions(t *testing.T) {
+	w := desktop(t)
+	w.environment = environmentSettings{}
+	data, err := w.SaveState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var encoded map[string]any
+	if err := json.Unmarshal(data, &encoded); err != nil {
+		t.Fatal(err)
+	}
+	environment, ok := encoded["environment"].(map[string]any)
+	if !ok || len(environment) != 3 {
+		t.Fatalf("desktop state omitted its Environment settings: %#v", encoded["environment"])
+	}
+	for _, name := range []string{"dna", "cat", "eyes"} {
+		if value, present := environment[name]; !present || value != false {
+			t.Fatalf("desktop state did not encode %s=false explicitly: %#v", name, environment)
+		}
+	}
+
+	for _, snapshot := range []struct {
+		name string
+		make func() ([]byte, error)
+	}{
+		{name: "save", make: w.SaveState},
+		{name: "checkpoint", make: w.CheckpointState},
+	} {
+		t.Run(snapshot.name, func(t *testing.T) {
+			state, err := snapshot.make()
+			if err != nil {
+				t.Fatal(err)
+			}
+			restored := desktop(t)
+			if err := restored.LoadState(state); err != nil || restored.environment != (environmentSettings{}) {
+				t.Fatalf("disabled Environment settings did not round-trip: state=%+v err=%v", restored.environment, err)
+			}
+		})
+	}
+
+	delete(encoded, "environment")
+	legacy, err := json.Marshal(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyLoaded := desktop(t)
+	if err := legacyLoaded.LoadState(legacy); err != nil || legacyLoaded.environment != defaultEnvironmentSettings() {
+		t.Fatalf("legacy state did not receive enabled Environment defaults: state=%+v err=%v", legacyLoaded.environment, err)
+	}
+
+	invalid := make(map[string]any)
+	if err := json.Unmarshal(data, &invalid); err != nil {
+		t.Fatal(err)
+	}
+	invalid["environment"].(map[string]any)["unknown"] = true
+	malformed, err := json.Marshal(invalid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeDocument, beforeEnvironment, history := w.Document(), w.environment, w.historyPosition
+	if err := w.LoadState(malformed); err == nil || w.Document() != beforeDocument || w.environment != beforeEnvironment || w.historyPosition != history {
+		t.Fatal("invalid Environment state changed the live desktop")
+	}
+}
+
 func TestDesktopResetViewPreservesApplicationPlacementAndPreferences(t *testing.T) {
 	w := desktop(t)
 	desktopApplications(t, w)

@@ -160,6 +160,56 @@ func TestDNABackgroundMotionIsTransientAndAlwaysAdvances(t *testing.T) {
 	}
 }
 
+func TestEnvironmentVisibilityControlsRetainedBackdropWithoutRebuilding(t *testing.T) {
+	w := desktop(t)
+	dnaGeometry := w.backgroundScene.Node(w.dnaNode).Mesh.Geometry()
+	catRoot := w.ambientCat.root
+	catGeometry := map[*render.Geometry]bool{
+		w.ambientCat.bodyMesh.Geometry(): true,
+		w.ambientCat.limbMesh.Geometry(): true,
+		w.ambientCat.earMesh.Geometry():  true,
+	}
+	contains := func(frame render.Frame, geometry *render.Geometry) bool {
+		for _, command := range frame.Commands {
+			for _, draw := range command.Draws {
+				if draw.Geometry == geometry {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	initial := w.Draw(1440, 900)
+	if !contains(initial, dnaGeometry) || !contains(initial, w.ambientCat.bodyMesh.Geometry()) {
+		t.Fatal("enabled Environment defaults did not submit DNA and cat geometry")
+	}
+	w.environment.DNA, w.environment.Cat = false, false
+	dnaPhase, catPhase := w.backgroundPhase, w.ambientCat.phase
+	w.Update(time.Second)
+	disabled := w.Draw(1440, 900)
+	if contains(disabled, dnaGeometry) || !w.backgroundScene.Node(w.dnaNode).Hidden || !w.backgroundScene.Node(catRoot).Hidden {
+		t.Fatal("disabled Environment switches left retained backdrop geometry visible")
+	}
+	for _, command := range disabled.Commands {
+		for _, draw := range command.Draws {
+			if catGeometry[draw.Geometry] {
+				t.Fatal("disabled cat submitted a retained child mesh")
+			}
+		}
+	}
+	if w.backgroundPhase == dnaPhase || w.ambientCat.phase == catPhase {
+		t.Fatal("hidden ambient geometry stopped its transient clock")
+	}
+
+	w.environment.DNA, w.environment.Cat = true, true
+	restored := w.Draw(1440, 900)
+	if !contains(restored, dnaGeometry) || !contains(restored, w.ambientCat.bodyMesh.Geometry()) ||
+		w.ambientCat.root != catRoot || w.backgroundScene.Node(catRoot).Hidden {
+		t.Fatal("reenabling Environment geometry rebuilt resources or failed to reveal them")
+	}
+}
+
 func TestDNABackgroundReadAndApplicationLifecycleRetainGeometry(t *testing.T) {
 	w := desktop(t)
 	apps := desktopApplications(t, w)
