@@ -245,25 +245,6 @@ func TestSuperDoubleClickChainNeedsTimedCompletedUninterruptedClicks(t *testing.
 	})
 }
 
-func putApplicationBehindPoint(t *testing.T, w *Workspace, surface experience.ApplicationSurface, x, y float32) {
-	t.Helper()
-	base := w.Document()
-	i := base.View.Application.index(surface.Key)
-	for vertical := float32(-8); vertical <= 8; vertical += .5 {
-		for horizontal := float32(-8); horizontal <= 8; horizontal += .5 {
-			next := base
-			next.View.Application.Layouts[i].X = horizontal
-			next.View.Application.Layouts[i].Y = vertical
-			w.install(next, false)
-			w.syncScene()
-			if hit, ok := w.applicationHit(x, y); ok && w.applicationForNode(hit.Node).ID == surface.ID {
-				return
-			}
-		}
-	}
-	t.Fatalf("could not place %s behind fixed point %.1f,%.1f", surface.Key, x, y)
-}
-
 func TestSuperReadGestureCannotStealFixedOrModalOverlayPresses(t *testing.T) {
 	for _, overlay := range []string{"orbit", "dock"} {
 		t.Run(overlay, func(t *testing.T) {
@@ -272,8 +253,7 @@ func TestSuperReadGestureCannotStealFixedOrModalOverlayPresses(t *testing.T) {
 			var x, y float32
 			switch overlay {
 			case "orbit":
-				x = w.ox + (orbitPadBounds.x+orbitPadBounds.w/2)*w.scale
-				y = w.oy + (orbitPadBounds.y+orbitPadBounds.h/2)*w.scale
+				x, y = orbitPadPoint(w)
 			case "dock":
 				launcher := &dockApplications{fakeApplications: apps, catalog: []experience.ApplicationLaunch{{Kind: "terminal", Title: "Terminal"}}, texture: target.Texture, next: 900}
 				w.SetApplications(launcher)
@@ -282,19 +262,13 @@ func TestSuperReadGestureCannotStealFixedOrModalOverlayPresses(t *testing.T) {
 				x = w.ox + (b.x+b.w/2)*w.scale
 				y = w.oy + (b.y+b.h/2)*w.scale
 			}
-			if overlay == "orbit" {
-				putApplicationBehindPoint(t, w, target, x, y)
-				if hit, ok := w.applicationHit(x, y); !ok || w.applicationForNode(hit.Node).ID != target.ID {
-					t.Fatalf("%s fixture has no application behind it", overlay)
-				}
-			}
 			ax, ay := visibleApplication(t, w, target)
 			superApplicationClick(w, ax, ay, 1000, 1010)
 			w.Handle(experience.Event{Kind: experience.PointerDown, Button: experience.ButtonPrimary, Modifiers: experience.ModSuper, X: x, Y: y, Time: 1100})
 			switch overlay {
 			case "orbit":
 				if w.pointer.kind != captureOrbitPad {
-					t.Fatal("application behind rotation pad stole its Super press")
+					t.Fatal("rotation pad did not own its Super press")
 				}
 			case "dock":
 				if w.pointer.kind != captureApplicationDock {

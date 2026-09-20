@@ -41,6 +41,7 @@ func (w *Workspace) claimHelpStrokes() {
 }
 
 func (w *Workspace) openHelp() {
+	w.closeSettings()
 	w.resetApplicationReadClick()
 	w.finishWindowThrow()
 	w.cancelPointer()
@@ -222,8 +223,8 @@ func (w *Workspace) drawHelp() {
 	}
 	if w.desktop {
 		columns[0].rows = []helpEntry{
-			{"Super+drag space / rotation pad", "Pan the workspace / orbit from the bottom-left pad."},
-			{"Header Place / Group controls", "Arrange selections and make windows move together."},
+			{"Super+drag space / scene controller", "Pan the workspace / orbit from the bottom-right reticle."},
+			{"Controller gear / Reset", "Open Terminal or Media settings / restore the camera view."},
 			{"Super+wheel / scroll while dragging", "Move windows through depth."},
 			{"Ctrl+Z / Ctrl+Shift+Z", "Undo / redo workspace edits."},
 			{"Escape / R", "Cancel a gesture / reset the camera view."},

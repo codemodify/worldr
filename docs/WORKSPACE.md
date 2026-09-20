@@ -44,13 +44,11 @@ request closing that individual window. The square control performs the same
 Read action as Win/Super + double-click. The exact Win/Super+C chord requests
 closing the current active app even while it owns keyboard focus; its provider
 may keep it open to confirm unsaved work. Minimize hides the content and its
-complete frame; Overview reveals and restores minimized windows. Place mode
-also makes content draggable and offers Shift+click selection for groups. The
-streamlined top bar places Place / Group, Group Selected, Ungroup, and the Send
-selection to back / Bring selection forward depth toggle directly after Reset
-View. Scrolling during a held drag moves the selection through depth without
-introducing a lateral jump. Super+wheel changes the hovered window's depth
-without focusing it; an explicit group moves with that window. The grips follow
+complete frame; Overview reveals and restores minimized windows. The general
+desktop has no main toolbar: window placement uses the visible grip or the exact
+Super+primary gesture. Scrolling during a held drag moves the window through
+depth without introducing a lateral jump. Super+wheel changes the hovered
+window's depth without focusing it; an explicit group moves with that window. The grips follow
 perspective and visible scene occlusion, and hide in Read and Overview.
 
 Releasing a moving window throws it in the direction of the drag. Exponential
@@ -70,9 +68,12 @@ nearly face-on view for typing; exploration can use more dramatic perspective.
 Selection, keyboard focus, and camera focus are separate states with clear cues.
 Camera movement must never silently change where a keystroke goes.
 Super+primary dragging empty workspace pans the saved camera target horizontally
-and vertically without moving windows. Empty unmodified drags remain inert. A fixed rotation pad in the
-bottom-left corner owns that gesture and shows the current yaw and pitch; the
-former center reticle and floor grid live inside this compact control instead.
+and vertically without moving windows. Empty unmodified drags remain inert. A
+compact scene controller continues the right launcher rail at the bottom-right.
+Its small reticle owns scene orbiting, and two values report yaw and pitch
+without field labels. The adjacent gear opens a modal Settings surface with
+Terminal and Media categories and their previews; Reset sits inside the same
+controller and restores the camera view.
 
 Workspace F1 exposes the current shortcuts in an on-screen guide. It owns input
 while open; closing it leaves typing focus with the workspace. Focused
@@ -197,8 +198,11 @@ Photo, Media, Model, Research, Notes, and AXIAL. Photo, Media, Model, and
 Research reuse Files as a filtered chooser so the user can navigate folders
 before opening content in the native viewer. Ctrl+Alt+Space opens the same
 launcher for all tools, live windows, and named spaces. The desktop has no left
-sidebar or footer; global actions stay in the top bar, the launcher stays on the
-right, and the scene rotation pad stays at bottom left.
+sidebar, footer, or main toolbar. The launcher stays on the right, and its compact
+scene controller sits directly below it at the bottom-right. The controller has
+no title or yaw/pitch field labels; it combines the orbit reticle and angle
+values with a Settings gear and Reset. Settings shows Terminal and Media
+categories with a preview of each.
 
 `--project` anchors a native Files browser at that directory. Select a file
 to preview UTF-8 text with line numbers. Enter, double-click or Open enters a
@@ -247,7 +251,9 @@ stable application state survives workspace save/restore. Closing it retires
 its panel texture and all four procedural mesh buffers; reopening builds fresh
 resources, so an empty workspace does not retain a closed study. For the deterministic
 full-screen engineering demonstration, use `--experience=axial`; `--demo` selects
-that presentation automatically when no experience is explicitly supplied. It hosts
+that presentation automatically when no experience is explicitly supplied. Its
+standalone study toolbar remains available, including Reset and the placement,
+grouping, and depth controls used when it hosts applications. It hosts
 **multiple real terminals and a native 3D object** together. The general
 workspace contains no synthetic model, timeline or instrument allocations.
 Typing, free placement and throws, group movement, depth,

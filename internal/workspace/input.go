@@ -97,6 +97,10 @@ func (w *Workspace) Handle(event experience.Event) bool {
 		event.Kind == experience.PointerDown && w.commands != nil && w.commands.open {
 		w.resetApplicationReadClick()
 	}
+	if w.handleSettings(event) {
+		w.releaseWindowDragButton(event)
+		return true
+	}
 	if w.handleCommands(event) {
 		return true
 	}
@@ -375,23 +379,18 @@ func (w *Workspace) inViewport(x, y float32) bool {
 func (w *Workspace) buttonAction(x, y float32) (Action, bool) {
 	if w.application.ID != 0 {
 		switch {
-		case applicationPlaceButton.contains(x, y):
+		case !w.desktop && applicationPlaceButton.contains(x, y):
 			return Action{Kind: ToggleApplicationPlacement}, true
-		case applicationGroupButton.contains(x, y):
+		case !w.desktop && applicationGroupButton.contains(x, y):
 			return Action{Kind: GroupApplications}, true
-		case applicationUngroupButton.contains(x, y):
+		case !w.desktop && applicationUngroupButton.contains(x, y):
 			return Action{Kind: UngroupApplications}, true
-		case w.desktop && applicationDepthHeaderButton.contains(x, y):
-			return Action{Kind: ToggleApplicationDepth}, true
 		case !w.desktop && applicationDepthButton.contains(x, y):
 			return Action{Kind: ToggleApplicationDepth}, true
 		}
 	}
 	switch {
-	case resetViewButton.contains(x, y):
-		if w.desktop {
-			return Action{Kind: ResetView}, true
-		}
+	case !w.desktop && resetViewButton.contains(x, y):
 		return Action{Kind: ResetStudy}, true
 	case (box{1247, 30, 151, 37}).contains(x, y):
 		if w.desktop || w.application.ID != 0 {

@@ -2,18 +2,18 @@
 
 ## 0.10.0-dev — native scene architecture reset
 
-- Simplified desktop chrome to a top action bar, right launcher rail and
-  bottom-left scene rotation pad, removing the left sidebar and footer. The
-  depth-zone toggle now follows the grouping controls in the top bar. The
-  Tools + Spaces surface moved to the first Launcher icon and remains available through
-  Ctrl+Alt+Space. Removed the portal atlas and its Ctrl+Alt+G and
-  Ctrl+Alt+Left/Right shortcuts; Overview remains available through Ctrl+Alt+O.
+- Removed the general desktop's entire main toolbar at the top along with its Place / Group,
+  Group Selected, Ungroup, depth-zone and Reset View buttons. Fixed desktop
+  chrome now consists of the right launcher rail and its compact bottom-right
+  scene controller. The standalone AXIAL study retains its toolbar and hosted
+  application controls. Tools + Spaces remains on the first Launcher icon and
+  Ctrl+Alt+Space; Overview remains available through Ctrl+Alt+O. Removed the
+  portal atlas and its Ctrl+Alt+G and Ctrl+Alt+Left/Right shortcuts.
 - Made Cinematic presentation and full ambient motion permanent. Removed the
   Adaptive, Reduced Motion, Size, Depth −/+, New Terminal, Overview, Read
-  Selected and Close Selected controls from the prior desktop chrome.
-  Reset View is followed by Place / Group, Group Selected, Ungroup and the
-  depth-zone toggle; free resize, window chrome and reserved keyboard shortcuts
-  remain available.
+  Selected and Close Selected controls from the prior desktop chrome. Free
+  resize, window chrome, direct placement/depth gestures and reserved keyboard
+  shortcuts remain available.
 - Raised the private application server to XDG shell v3 and implemented copied
   explicit popup positioners, parent-size constraints, parent-configure
   metadata acceptance and reactive
@@ -51,10 +51,12 @@
   fail after two seconds. Real two-client coverage verifies UTF-8 payload,
   legacy completion, cancellation, owner/target lifetime and unmap cleanup.
 
-- Replaced desktop-wide empty-space orbiting with a dedicated bottom-left
-  scene rotation pad. The compact gridded reticle shows live yaw and pitch,
-  ordinary background drags leave the workspace still, and AXIAL retains its
-  direct model-orbit gesture.
+- Moved scene rotation into a compact controller directly below the right
+  launcher rail at the bottom-right. Its gridded reticle and two unlabeled
+  values expose live yaw and pitch; a gear opens Settings, whose Terminal and
+  Media categories include previews, and Reset restores the camera from inside
+  the controller. Ordinary background drags leave the workspace still, and
+  AXIAL retains its direct model-orbit gesture.
 - Gave generic, cinematic and open photo-bracket window frames real rearward
   side depth while keeping all geometry outside client pixels and out of input
   picking. Window momentum continues independently during camera rotation.
@@ -65,7 +67,8 @@
 - Changed managed window chrome so Minimize removes the window and all of its
   chrome from Space while keeping it recoverable through Overview.
   The square control now performs the same target-aware Read transition as
-  Win/Super+double-click, and the duplicate header Read button is gone.
+  Win/Super+double-click, and the duplicate Read button from the former header
+  is gone.
 - Added the exact Win/Super+C global shortcut for requesting that the current
   active app close, including while it owns keyboard focus. A provider may keep
   the app open for an unsaved-work confirmation; the shortcut targets only that

@@ -260,7 +260,7 @@ func TestForgetControlAndNoticeDoNotOverlap(t *testing.T) {
 	frame := w.Draw(1440, 900)
 	color := w.color(amber, 1)
 	for _, vertex := range frame.Vertices {
-		if vertex.Y >= 106 && vertex.Y < 125 && vertex.R == color.R && vertex.G == color.G && vertex.B == color.B && vertex.A == 1 && vertex.X >= forgetClosedPlacementsButton.x {
+		if vertex.Y >= 22 && vertex.Y < 41 && vertex.R == color.R && vertex.G == color.G && vertex.B == color.B && vertex.A == 1 && vertex.X >= forgetClosedPlacementsButton.x {
 			t.Fatal("wide error text covered the cleanup button")
 		}
 	}

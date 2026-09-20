@@ -7,7 +7,7 @@ import "github.com/codemodify/worldr/internal/experience"
 // button release; overview and placement use the workspace cursor.
 func (w *Workspace) Cursor() (experience.ApplicationCursor, bool) {
 	view := w.m.applicationState
-	if w.applications == nil || w.helpOpen || view.Overview || view.Placing || w.pointer.kind != captureNone {
+	if w.applications == nil || w.helpOpen || w.settingsOpen || view.Overview || view.Placing || w.pointer.kind != captureNone {
 		return experience.ApplicationCursor{}, false
 	}
 	id := w.applicationHoveredID

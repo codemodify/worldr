@@ -86,7 +86,9 @@ resets it. Ctrl+Z undoes an edit; Ctrl+Shift+Z or Ctrl+Y redoes it. A full drag 
 one edit. Escape cancels an active gesture or restores the normal view.
 Ctrl+Alt+Q or the host window close button exits; Ctrl+Q also exits when the
 workspace owns the keyboard. Ordinary shortcuts reach a focused application;
-Win/Super+C remains reserved for the active-app close request.
+Win/Super+C remains reserved for the active-app close request. The standalone
+`--experience=axial` presentation retains its top study toolbar, including
+Reset and the placement, grouping, and depth controls shown when it hosts apps.
 
 The Cinematic presentation remains active during exploration and focus, with
 full ambient motion, spatial framing, and wire/rim accents. The model has a
@@ -118,11 +120,10 @@ worldr regardless of who owns the keyboard; Ctrl+Q and Ctrl+S reach the terminal
 while it has focus. A foot process exiting withdraws its window and leaves other
 applications and the native workspace running.
 
-**Place / Group** enables dragging and Shift+click multi-selection. Grouped
-windows retain their relative positions when moved or sent deeper into space.
-The top bar places **Place / Group**, **Group selected**, **Ungroup**, and the
-**Send selection to back / Bring selection forward** depth toggle after
-**Reset View**. Ctrl+Alt+O from the workspace or any focused app retrieves obscured
+The general desktop has no main toolbar across the top. Drag a window's top grip, or use
+Super+primary where the host permits, to place and throw it. Scroll during the
+drag or use Super+wheel to move it through depth; an existing explicit group
+keeps its relative arrangement. Ctrl+Alt+O from the workspace or any focused app retrieves obscured
 apps. Unmodified arrows select thumbnails one step per fresh press; modified
 arrows are consumed. Enter/keypad Enter or Escape returns to the prior view
 without restoring application keyboard focus. A second fresh Enter opens Read
@@ -130,8 +131,11 @@ and grants typing focus to the selected app, even if it was obscured in space.
 Held overview keys and their releases cannot type into the returned application.
 The desktop has no left sidebar or footer. Its first right-rail **Launcher** icon,
 or Ctrl+Alt+Space from any app, opens Tools + Spaces to launch tools, switch or
-create spaces, transfer a selection, and find windows across spaces. The scene
-rotation pad is fixed at the bottom left.
+create spaces, transfer a selection, and find windows across spaces. A compact
+scene controller continues the launcher rail at the bottom-right. Drag its
+reticle to orbit; the two unlabeled values show yaw and pitch. Its gear opens
+Settings, where Terminal and Media categories each provide a preview, and its
+Reset control restores the camera view.
 Ctrl+Alt+Enter creates an independent native shell
 and selects it; click its content or press a fresh Enter to read and type. The shortcut works from a focused
 native or legacy app, including with keypad Enter. This control is available even without `--terminal`
@@ -183,12 +187,13 @@ windows; cross-protocol X11/Wayland drags are not implemented.
 
 At most 32 live windows and 32 saved placements are supported. Closed windows
 retain their saved placements, so old layout entries can fill the document with
-fewer live windows. Launch failures show a temporary notice below the header.
+fewer live windows. Launch failures show a temporary notice in the compact row
+near the top edge.
 If a new terminal cannot fit the saved layout, it is closed immediately and the
 prior layout is preserved. Reopening native launch slots reuses their placement;
 it starts a fresh shell rather than restoring process memory.
 
-Use **Forget Closed Placements** in the row below the header to free entries
+Use **Forget Closed Placements** in that top notification row to free entries
 belonging to closed windows. It appears only when such entries exist and works
 even with no live apps. Live positions, groups and selection remain intact.
 Ctrl+Z restores forgotten entries if the combined layout still fits; a capacity

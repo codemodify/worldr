@@ -41,57 +41,59 @@ func clickDesignButton(t *testing.T, w *Workspace, target box) {
 	}
 }
 
-func TestHeaderResetPlaceGroupUngroupAndDepthTargetsAtEveryScale(t *testing.T) {
+func TestDesktopFormerHeaderControlsAreInertAtEveryScale(t *testing.T) {
+	formerControls := map[string]box{
+		"reset-view":             resetViewButton,
+		"place-group":            applicationPlaceButton,
+		"group-selected":         applicationGroupButton,
+		"ungroup":                applicationUngroupButton,
+		"selection-depth-toggle": applicationDepthHeaderButton,
+	}
 	for _, dimensions := range []struct {
 		width, height int
 	}{{1440, 900}, {2880, 1800}} {
 		t.Run(fmt.Sprintf("%dx%d", dimensions.width, dimensions.height), func(t *testing.T) {
-			w, apps := headerDesktopApplications(t, 2)
+			w, _ := headerDesktopApplications(t, 2)
+			w.Draw(dimensions.width, dimensions.height)
+			for name, target := range formerControls {
+				t.Run(name, func(t *testing.T) {
+					x, y := target.x+target.w/2, target.y+target.h/2
+					if action, ok := w.buttonAction(x, y); ok {
+						t.Fatalf("removed desktop header control retained button action %+v", action)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestAxialHeaderResetAndApplicationControlsRemainAvailable(t *testing.T) {
+	for _, dimensions := range []struct {
+		width, height int
+	}{{1440, 900}, {2880, 1800}} {
+		t.Run(fmt.Sprintf("%dx%d", dimensions.width, dimensions.height), func(t *testing.T) {
+			w, apps := multipleApplications(t, 2)
 			w.Draw(dimensions.width, dimensions.height)
 			command(t, w, Action{Kind: PanCamera, DeltaX: 4, DeltaY: -2, DeltaDepth: 1})
-			if w.Document().View.Camera == initialModel().document().View.Camera {
-				t.Fatal("fixture did not move the camera before Reset View")
-			}
-
 			clickDesignButton(t, w, resetViewButton)
 			if w.Document().View.Camera != initialModel().document().View.Camera {
-				t.Fatal("Reset View header target did not restore the camera")
+				t.Fatal("AXIAL Reset header target no longer restores the study")
 			}
 
 			command(t, w, Action{Kind: SelectApplication, ApplicationKey: apps.surfaces[1].Key, Additive: true})
-			if w.Document().View.Application.Selected != 3 {
-				t.Fatal("fixture did not select both applications")
-			}
 			clickDesignButton(t, w, applicationPlaceButton)
 			if !w.Document().View.Application.Placing {
-				t.Fatal("Place / Group header target did not enter placement")
+				t.Fatal("AXIAL Place / Group header target no longer enters placement")
 			}
-
 			clickDesignButton(t, w, applicationGroupButton)
 			view := w.Document().View.Application
 			if view.Layouts[0].Group == 0 || view.Layouts[0].Group != view.Layouts[1].Group {
-				t.Fatal("Group Selected header target did not group the selection")
+				t.Fatal("AXIAL Group Selected header target no longer groups the selection")
 			}
-
 			clickDesignButton(t, w, applicationUngroupButton)
 			view = w.Document().View.Application
 			if view.Layouts[0].Group != 0 || view.Layouts[1].Group != 0 {
-				t.Fatal("Ungroup header target did not release the selection")
-			}
-
-			active := view.index(view.Active)
-			if active < 0 {
-				t.Fatal("fixture has no active application for the depth control")
-			}
-			clickDesignButton(t, w, applicationDepthHeaderButton)
-			view = w.Document().View.Application
-			if view.Layouts[active].Depth != -1.6 || !view.Behind {
-				t.Fatalf("Send Selection to Back header target did not move the active window: %+v", view.Layouts[active])
-			}
-			clickDesignButton(t, w, applicationDepthHeaderButton)
-			view = w.Document().View.Application
-			if view.Layouts[active].Depth != 1.9 || view.Behind {
-				t.Fatalf("Bring Selection Forward header target did not move the active window: %+v", view.Layouts[active])
+				t.Fatal("AXIAL Ungroup header target no longer releases the selection")
 			}
 		})
 	}

@@ -562,8 +562,9 @@ use the separate public `sdk/nativeapp/v1` retained-resource protocol rather
 than importing those workspace reducers.
 
 Window grips are retained scene meshes, picked with the same depth/occlusion
-rules as application content. Exact Super+primary and Place mode share the drag
-path. Ordinary client input retains its existing route. Release velocity comes
+rules as application content. Window-grip and exact Super+primary gestures share
+the desktop drag path; the standalone AXIAL toolbar's Place mode uses that path
+when it hosts applications. Ordinary client input retains its existing route. Release velocity comes
 from bounded recent input samples in fixed workspace coordinates. An analytic
 exponential decay makes resting positions independent of frame rate; grouped
 windows share a displacement and stop together at layout bounds. Independent
@@ -592,7 +593,12 @@ application focus. It lists tools, windows and named spaces, including windows
 outside the current space. Overview remains a separate retrieval view for the
 current space. The launcher consumes its own keys, including releases after
 closing. The desktop has no left sidebar or footer. Its fixed chrome consists
-of the top action bar, right launcher rail and bottom-left scene rotation pad.
+of the right launcher rail and the compact scene controller directly beneath it
+at the bottom-right; the general desktop has no main toolbar. The controller's
+reticle orbits the scene, two unlabeled values expose yaw and pitch, its gear
+opens the modal Settings surface, and Reset restores the camera. Settings has
+Terminal and Media categories with a preview for each. The standalone
+`--experience=axial` study retains its own toolbar and application controls.
 
 `nativeui` supplies Pango/HarfBuzz shaping, fallback fonts, reusable controls,
 grapheme editing and semantic focus snapshots. Nested text-input-v3 batches

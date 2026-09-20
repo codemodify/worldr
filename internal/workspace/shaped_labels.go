@@ -36,7 +36,7 @@ func (w *Workspace) beginShapedLabels() {
 	w.labels.images = w.labels.images[:0]
 }
 func (w *Workspace) shapedText(x, y, size, maxWidth float32, text string, c scene.Color) {
-	if w.helpOpen || maxWidth < 1 || text == "" {
+	if w.helpOpen || w.settingsOpen || maxWidth < 1 || text == "" {
 		return
 	}
 	if w.labels == nil {

@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -8,8 +9,13 @@ import (
 )
 
 func orbitPadPoint(w *Workspace) (float32, float32) {
-	return w.ox + (orbitPadBounds.x+orbitPadBounds.w/2)*w.scale,
-		w.oy + (orbitPadBounds.y+orbitPadBounds.h/2)*w.scale
+	return w.ox + (orbitPadDragBounds.x+orbitPadDragBounds.w/2)*w.scale,
+		w.oy + (orbitPadDragBounds.y+orbitPadDragBounds.h/2)*w.scale
+}
+
+func orbitControlPoint(w *Workspace, target box) (float32, float32) {
+	return w.ox + (target.x+target.w/2)*w.scale,
+		w.oy + (target.y+target.h/2)*w.scale
 }
 
 func TestDesktopEmptySpaceDoesNotOrbit(t *testing.T) {
@@ -35,8 +41,11 @@ func TestDesktopOrbitPadIsScaledAndOneUndoableGesture(t *testing.T) {
 	w := desktop(t)
 	w.Draw(1600, 900) // A horizontal letterbox gives the hit target a non-zero offset.
 	x, y := orbitPadPoint(w)
-	if (x-w.ox)/w.scale >= 720 {
-		t.Fatal("scene rotation pad is not on the left side")
+	if orbitPadBounds.x != applicationDockBounds.x || orbitPadBounds.w != applicationDockBounds.w || orbitPadBounds.y < applicationDockBounds.y+applicationDockBounds.h {
+		t.Fatal("scene controller is not a compact continuation below the launcher rail")
+	}
+	if (x-w.ox)/w.scale <= 720 {
+		t.Fatal("scene rotation reticle is not on the right side")
 	}
 	before, history := w.Document(), w.historyPosition
 
@@ -68,10 +77,10 @@ func TestDesktopOrbitPadIsScaledAndOneUndoableGesture(t *testing.T) {
 	}
 }
 
-func TestDesktopFormerBottomRightOrbitPadAreaIsInert(t *testing.T) {
+func TestDesktopFormerBottomLeftOrbitPadAreaIsInert(t *testing.T) {
 	w := desktop(t)
 	w.Draw(1440, 900)
-	former := box{1162, 633, 172, 144}
+	former := box{32, 706, 172, 144}
 	x, y := former.x+former.w/2, former.y+former.h/2
 	before, history, historyLength := w.Document(), w.historyPosition, len(w.history)
 
@@ -81,11 +90,76 @@ func TestDesktopFormerBottomRightOrbitPadAreaIsInert(t *testing.T) {
 		{Kind: experience.PointerUp, Button: experience.ButtonPrimary, X: x + 70, Y: y - 24},
 	} {
 		if w.Handle(event) {
-			t.Fatalf("former bottom-right scene rotation area consumed input: %+v", event)
+			t.Fatalf("former bottom-left scene rotation area consumed input: %+v", event)
 		}
 	}
 	if w.pointer.kind != captureNone || w.Document() != before || w.historyPosition != history || len(w.history) != historyLength {
-		t.Fatal("former bottom-right scene rotation area changed camera or history")
+		t.Fatal("former bottom-left scene rotation area changed camera or history")
+	}
+}
+
+func TestDesktopOrbitPadGearAndResetDoNotStartOrbit(t *testing.T) {
+	for name, target := range map[string]box{
+		"settings": orbitSettingsButton,
+		"reset":    desktopResetButton,
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := desktop(t)
+			w.Draw(2880, 1800)
+			x, y := orbitControlPoint(w, target)
+			before, history, historyLength := w.Document(), w.historyPosition, len(w.history)
+
+			if !pointer(w, experience.PointerDown, x, y) || w.pointer.kind != captureNone || !w.orbitControl.active {
+				t.Fatal("scene-controller button did not acquire its non-orbit press")
+			}
+			if w.Document() != before || w.historyPosition != history || len(w.history) != historyLength {
+				t.Fatal("pressing a scene-controller button previewed an orbit or edited history")
+			}
+			if !w.Handle(experience.Event{Kind: experience.PointerCancel}) || w.pointer.kind != captureNone || w.orbitControl.active {
+				t.Fatal("scene-controller button press did not cancel cleanly")
+			}
+			if w.Document() != before || w.historyPosition != history || len(w.history) != historyLength {
+				t.Fatal("cancelling a scene-controller button changed the document")
+			}
+		})
+	}
+}
+
+func TestDesktopResetButtonIsScaledAndOneUndoableEdit(t *testing.T) {
+	for _, dimensions := range []struct {
+		width, height int
+	}{{1440, 900}, {2880, 1800}} {
+		t.Run(fmt.Sprintf("%dx%d", dimensions.width, dimensions.height), func(t *testing.T) {
+			w := desktop(t)
+			w.Draw(dimensions.width, dimensions.height)
+			command(t, w, Action{Kind: PanCamera, DeltaX: 4, DeltaY: -2, DeltaDepth: 1})
+			before, history, historyLength := w.Document(), w.historyPosition, len(w.history)
+			if before.View.Camera == initialModel().document().View.Camera {
+				t.Fatal("fixture did not move the camera before Reset")
+			}
+			x, y := orbitControlPoint(w, desktopResetButton)
+			if !pointer(w, experience.PointerDown, x, y) || w.pointer.kind != captureNone || w.orbitControl.target != orbitControlReset {
+				t.Fatal("scaled Reset button did not acquire its completed-click gesture")
+			}
+			if !pointer(w, experience.PointerUp, x, y) || w.orbitControl.active {
+				t.Fatal("scaled Reset button did not complete its click")
+			}
+			after := w.Document()
+			if after.View.Camera != initialModel().document().View.Camera {
+				t.Fatal("Reset did not restore the initial camera")
+			}
+			if w.historyPosition != history+1 || len(w.history) != historyLength+1 {
+				t.Fatal("Reset was not recorded as exactly one edit")
+			}
+			command(t, w, Action{Kind: Undo})
+			if w.Document() != before {
+				t.Fatal("undo did not restore the view before Reset")
+			}
+			command(t, w, Action{Kind: Redo})
+			if w.Document() != after {
+				t.Fatal("redo did not restore the reset view")
+			}
+		})
 	}
 }
 
@@ -105,6 +179,26 @@ func TestDesktopOrbitPadCancelRestoresPreviewWithoutHistory(t *testing.T) {
 	}
 	if w.pointer.kind != captureNone || w.Document() != before || w.historyPosition != history || len(w.history) != historyLength {
 		t.Fatal("cancelled orbit-pad drag retained camera state or edit history")
+	}
+}
+
+func TestDesktopOrbitReticleIsInertWhileSceneCameraIsFramed(t *testing.T) {
+	for _, mode := range []ActionKind{ToggleApplicationReading, ToggleApplicationOverview, ToggleApplicationPlacement} {
+		t.Run(string(mode), func(t *testing.T) {
+			w, _ := headerDesktopApplications(t, 1)
+			command(t, w, Action{Kind: mode})
+			w.Draw(1440, 900)
+			before, history, historyLength := w.Document(), w.historyPosition, len(w.history)
+			x, y := orbitPadPoint(w)
+			if !pointer(w, experience.PointerDown, x, y) || w.pointer.kind != captureNone {
+				t.Fatal("disabled reticle did not consume its press without starting an orbit")
+			}
+			pointer(w, experience.PointerMove, x+40, y+18)
+			pointer(w, experience.PointerUp, x+40, y+18)
+			if w.Document() != before || w.historyPosition != history || len(w.history) != historyLength {
+				t.Fatal("disabled reticle changed a hidden camera or history")
+			}
+		})
 	}
 }
 

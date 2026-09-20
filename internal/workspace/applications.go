@@ -45,7 +45,7 @@ func (w *Workspace) SetApplications(applications experience.Applications) {
 
 func (w *Workspace) OwnsKeyboard() bool {
 	w.syncApplications()
-	return w.applicationKeyboard || w.commands != nil && w.commands.open
+	return w.applicationKeyboard || w.settingsOpen || w.commands != nil && w.commands.open
 }
 
 // CheckApplicationPlacement checks saved slots and current provider surfaces

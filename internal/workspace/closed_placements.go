@@ -2,7 +2,7 @@ package workspace
 
 import "fmt"
 
-var forgetClosedPlacementsButton = box{1034, 100, 300, 25}
+var forgetClosedPlacementsButton = box{1034, 16, 300, 25}
 
 // Consult the complete provider list, including live surfaces excluded by the
 // layout limit or waiting for an image. Hidden is not the same as closed.
@@ -157,6 +157,6 @@ func (w *Workspace) drawApplicationNotice() {
 		}
 		notice = string(text) + "…"
 	}
-	w.rect(noticeX, 100, width, 25, amber, .12)
-	w.text(noticeX+13, 106, 12, notice, amber, 1)
+	w.rect(noticeX, 16, width, 25, amber, .12)
+	w.text(noticeX+13, 22, 12, notice, amber, 1)
 }

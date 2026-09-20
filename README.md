@@ -23,9 +23,11 @@ tools: Files, Terminal, Photo, Media, Model, Research, Notes, and AXIAL. Files,
 Terminal, Notes, and AXIAL open directly. Photo, Media, Model, and Research
 focus Files in a matching choose-file mode; folders remain navigable, Escape
 restores the full listing, and opening a supported file hands it to the selected
-native viewer. The desktop has no left sidebar or footer: workspace actions stay
-in the top bar, tool launching stays in the right rail, and scene rotation stays
-in the bottom-left pad.
+native viewer. The desktop has no left sidebar, footer, or main toolbar. Tool
+launching stays in the right rail, and a compact scene controller continues that
+rail at the bottom-right. Its reticle orbits the workspace, two unlabeled values
+show yaw and pitch, its gear opens Settings, and Reset restores the camera view.
+Settings provides Terminal and Media categories with a preview for each.
 
 A centered, vertical cyan 3D DNA double helix turns slowly behind the workspace, completing one
 rotation every 30 seconds. It stays behind application content and never captures
@@ -35,9 +37,10 @@ normal workspace and Read views.
 **AXIAL / 07** is a hosted native 3D application in the general workspace; use
 its launcher-rail control or start with `--axial`. It can be moved, grouped, sent
 through depth, saved and restored like the other tools. `--experience=axial`
-retains the deterministic standalone presentation used by demonstrations. This interactive
-turbine study lets you rotate an assembly, inspect components, animate an
-exploded view, and scrub a timeline connected to the model and response chart.
+retains the deterministic standalone presentation used by demonstrations,
+including its study toolbar and application placement/grouping controls. This
+interactive turbine study lets you rotate an assembly, inspect components,
+animate an exploded view, and scrub a timeline connected to the model and response chart.
 Geometry is procedural and signals are synthetic; it demonstrates interaction,
 not a physics solver. Its live instrument panel shares the model's space: bring
 it forward or send it behind the assembly, and use its playback and scrub
@@ -96,15 +99,14 @@ the client logical size follow the gesture, and the saved layout restores that
 size after reconnecting. **Win/Super + double-click** toggles the window's Read
 view. **Win/Super+C** requests that the current active app close, including
 while that app owns keyboard focus. The provider may keep it open to present an
-unsaved-work confirmation. **Place / Group** also enables content dragging;
-Shift+click selects several apps and **Group selected** makes them move together.
-The top bar places **Place / Group**, **Group selected**, **Ungroup**, and the
-**Send selection to back / Bring selection forward** depth toggle directly
-after **Reset View**. Scroll during a drag to move the selection through space;
+unsaved-work confirmation. Scroll during a drag to move the window through space;
 **Super+wheel** moves the hovered window (and its explicit group) without
 focusing it. **Super+primary drag** on empty workspace pans left, right, up or
 down. **Ctrl+Alt+O** retrieves hidden apps. Resize freely with the bottom-right
-grip or **Super+secondary drag**.
+grip or **Super+secondary drag**. The general desktop has no top action bar;
+Reset is inside the scene controller below the launcher rail. The standalone
+AXIAL experience retains its own toolbar, including Place / Group, Group
+Selected, Ungroup, and its depth control when it hosts applications.
 
 Native terminals, foot and Konsole use cyan frames with chamfered corners,
 layered rails and an integrated top drag plate. The frame stays outside the
@@ -117,7 +119,7 @@ Escape from the workspace stops gliding windows. A grouped selection travels
 together, and each drag plus its glide forms one undoable move. Escape during
 a held drag cancels that gesture.
 Full motion remains active: ordinary content dragging and scrolling stay with
-the application outside Place mode and the exact Super+primary shortcut.
+the application outside the exact Super+primary shortcut.
 
 `--project=.` opens native Files rooted at the current directory.
 Select a file to preview UTF-8 text with line numbers; Enter, double-click or
@@ -245,8 +247,9 @@ endpoints, with TARGETS negotiation and bounded transfers. XDND versions 3–5
 route copy-only drags between exact managed X11 source and destination windows.
 X11 windows remain separate workspace surfaces.
 
-**Forget Closed Placements** appears below the header when closed windows have
-saved positions. It explicitly frees those entries while preserving all live
+**Forget Closed Placements** appears in the compact notification row near the
+top edge when closed windows have saved positions. It explicitly frees those
+entries while preserving all live
 windows, their groups and selection. Ctrl+Z restores forgotten entries when
 capacity permits; undo never drops a newly opened window to make room. Redo
 keeps any window that has reopened in the meantime.
@@ -307,12 +310,12 @@ input; click an app or press Enter to resume typing.
 | Open / close the workspace shortcut guide | F1 from the workspace; Escape closes |
 | Open Tools + Spaces | First Launcher icon in the right rail, or Ctrl+Alt+Space from the workspace or a focused app |
 | Pan the spatial workspace | Super+primary drag on empty workspace |
-| Orbit the spatial scene | Drag the scene rotation pad in the bottom-left corner |
+| Orbit the spatial scene | Drag the reticle in the scene controller below the right launcher rail |
+| Open Settings | Select the gear in the scene controller; choose Terminal or Media to see its preview |
 | Zoom the spatial scene | Scroll over the scene; application scrolling keeps its usual behavior |
-| Move / throw a window | Drag its top grip; Super+primary drag where the host permits; or drag content in Place mode |
+| Move / throw a window | Drag its top grip, or use Super+primary drag where the host permits |
 | Change depth while dragging | Scroll with the drag held |
 | Change a hovered window's depth | Super+wheel; grouped windows stay together |
-| Send a selection back / bring it forward | Use the depth toggle at the right end of the top bar; selected groups preserve their relative depth |
 | Resize a window | Drag its bottom-right grip, or Super+secondary drag over its content |
 | Toggle a window's Read view | Win/Super + double-click its content |
 | Minimize / Read / close a window | Use the three controls on its top grip; minimize hides all window chrome but remains recoverable through Overview, while the square opens the same Read view as Win/Super + double-click |
@@ -330,7 +333,7 @@ input; click an app or press Enter to resume typing.
 | Request closing the active window | Win/Super+C from workspace or app focus; the provider may keep it open for an unsaved-work prompt |
 | Remove saved positions belonging only to closed windows | Forget Closed Placements; Ctrl+Z to undo |
 | Focus the object / read the selected app | F |
-| Reset workspace view / reset AXIAL study | R |
+| Reset workspace view / reset AXIAL study | Scene-controller Reset or R in the desktop; standalone AXIAL Reset or R |
 | Undo / redo | Ctrl+Z / Ctrl+Shift+Z or Ctrl+Y |
 | Cancel an active gesture / reset the view | Escape |
 | Save a configured document | Ctrl+S |

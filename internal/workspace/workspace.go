@@ -84,7 +84,13 @@ type Workspace struct {
 	helpKeys                                                          map[helpKey]bool
 	helpButtons                                                       map[uint32]bool
 	helpPointer                                                       helpPointerCapture
+	settingsOpen                                                      bool
+	settingsCategory                                                  settingsCategory
+	settingsKeys                                                      map[helpKey]bool
+	settingsButtons                                                   map[uint32]bool
+	settingsPointer                                                   settingsPointerCapture
 	applicationDockHover                                              int
+	orbitControl                                                      orbitControlPointer
 }
 
 func New() (*Workspace, error) {
@@ -186,7 +192,7 @@ func (w *Workspace) Update(dt time.Duration) {
 }
 func (w *Workspace) Info() experience.Info {
 	if w.desktop {
-		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the right launcher rail to search or open native tools · Super+drag empty space to pan · drag the bottom-left scene pad to orbit · drag a window grip or Super+primary to move and throw · use the square window control or Super+double-click to enter or leave Read · drag a window's bottom-right grip or Super+secondary to resize · use the other top-grip controls to minimize or close · Super+C closes the active app · Super+wheel changes hovered-window depth · Ctrl+Alt+Enter opens a shell · Ctrl+Alt+O finds windows · Enter reads the selected app · F1 opens Help"}
+		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the right launcher rail to search or open native tools · Super+drag empty space to pan · drag the bottom-right scene controller to orbit · use its gear for Terminal and Media settings or Reset to restore the camera · drag a window grip or Super+primary to move and throw · use the square window control or Super+double-click to enter or leave Read · drag a window's bottom-right grip or Super+secondary to resize · use the other top-grip controls to minimize or close · Super+C closes the active app · Super+wheel changes hovered-window depth · Ctrl+Alt+Enter opens a shell · Ctrl+Alt+O finds windows · Enter reads the selected app · F1 opens Help"}
 	}
 	if w.applications != nil {
 		return experience.Info{ID: "worldr.axial", Title: "worldr — AXIAL / 07", Controls: "Ctrl+Alt+Enter opens a shell · click app or press Enter from workspace to read and type · Ctrl+Alt+O overview from any app · overview: arrows select, Enter or Esc returns · drag scene to orbit, scroll scene to zoom · Place: drag apps, Shift+click to select, scroll for depth · Group moves selected apps together · Super+C requests closing the active window · click workspace to use native shortcuts"}
@@ -213,9 +219,9 @@ func (w *Workspace) layout(width, height int) {
 	w.oy = (float32(height) - 900*w.scale) / 2
 	x, y, vw, vh := float32(253), float32(172), float32(877), float32(570)
 	if w.desktop {
-		// Keep the fixed notice/cleanup strip below the header outside scene
-		// picking, while using the full width and the space freed by the footer.
-		w.viewport = scene.Viewport{X: w.ox + 24*w.scale, Y: w.oy + 128*w.scale, Width: 1310 * w.scale, Height: 728 * w.scale}
+		// The right rail stays outside scene picking. A compact notification row
+		// is reserved above the scene after removing the desktop toolbar.
+		w.viewport = scene.Viewport{X: w.ox + 24*w.scale, Y: w.oy + 48*w.scale, Width: 1310 * w.scale, Height: 828 * w.scale}
 		return
 	}
 	if w.m.focused && w.application.ID == 0 {
@@ -317,15 +323,16 @@ func (w *Workspace) Draw(width, height int) render.Frame {
 	w.scene.Draw(w.canvas, w.camera, w.viewport)
 	w.drawSpatialApplicationLabels()
 	w.drawApplicationOverviewLabels()
-	w.drawHeader()
 	if w.desktop {
 		w.drawDesktop()
 		w.drawOrbitPad()
 		w.drawApplicationDock()
 		w.drawApplicationNotice()
+		w.drawSettings()
 		w.drawHelp()
 		return w.commandFrame(w.shapedFrame(w.canvas.Frame()))
 	}
+	w.drawHeader()
 	if w.application.ID != 0 {
 		w.drawAssembly()
 		if !w.m.applicationReading && !w.m.applicationState.Overview && !w.m.applicationState.Placing {
@@ -353,16 +360,9 @@ func (w *Workspace) drawHeader() {
 	w.text(78, 30, 26, "worldr", ink, 1)
 	w.line(199, 32, 199, 62, 1, muted, 0.24)
 	w.text(226, 30, 12, "NATIVE WORKSPACE", muted, 1)
-	subtitle := "Engineering / Axial study"
-	if w.desktop {
-		subtitle = "SPACE / " + w.m.applicationState.spaceName(w.m.applicationState.Space)
-	}
-	w.shapedText(w.ox+226*w.scale, w.oy+49*w.scale, 17*w.scale, 300*w.scale, subtitle, w.color(ink, 1))
+	w.shapedText(w.ox+226*w.scale, w.oy+49*w.scale, 17*w.scale, 300*w.scale, "Engineering / Axial study", w.color(ink, 1))
 	resetLabel := "RESET  R"
-	if w.desktop {
-		resetLabel = "RESET VIEW"
-	}
-	if w.applicationKeyboard && !w.desktop {
+	if w.applicationKeyboard {
 		resetLabel = "RESET"
 	}
 	w.button(resetViewButton, resetLabel, false)
@@ -374,15 +374,8 @@ func (w *Workspace) drawHeader() {
 		w.button(applicationPlaceButton, place, w.m.applicationState.Placing)
 		w.button(applicationGroupButton, "GROUP SELECTED", bits.OnesCount32(w.m.applicationState.Selected) > 1)
 		w.button(applicationUngroupButton, "UNGROUP", false)
-		if w.desktop {
-			depth := "SEND SELECTION TO BACK"
-			if w.m.applicationState.Behind {
-				depth = "BRING SELECTION FORWARD"
-			}
-			w.button(applicationDepthHeaderButton, depth, !w.m.applicationState.Behind)
-		}
 	}
-	if w.application.ID == 0 && !w.desktop {
+	if w.application.ID == 0 {
 		w.button(box{1247, 30, 151, 37}, "FOCUS  F", w.m.focused)
 	}
 	w.line(42, 96, 1398, 96, 1, muted, 0.22)

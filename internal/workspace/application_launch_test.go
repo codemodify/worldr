@@ -199,10 +199,10 @@ func assertApplicationNoticeVisible(t *testing.T, w *Workspace) {
 	frame := w.Draw(1440, 900)
 	color := w.color(amber, 1)
 	for _, vertex := range frame.Vertices {
-		if vertex.X >= 266 && vertex.X < 1388 && vertex.Y >= 106 && vertex.Y < 125 &&
+		if vertex.X >= 266 && vertex.X < 1388 && vertex.Y >= 22 && vertex.Y < 41 &&
 			vertex.R == color.R && vertex.G == color.G && vertex.B == color.B && vertex.A == 1 {
 			return
 		}
 	}
-	t.Fatal("application notice did not render visible text below the header")
+	t.Fatal("application notice did not render visible text above the scene")
 }
