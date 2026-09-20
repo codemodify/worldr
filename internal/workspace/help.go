@@ -225,7 +225,7 @@ func (w *Workspace) drawHelp() {
 		columns[0].rows = []helpEntry{
 			{"Super+drag space / scene controller", "Pan the workspace / orbit from the bottom-right reticle."},
 			{"Controller gear / Reset", "Open Terminal or Media settings / restore the camera view."},
-			{"Super+wheel / scroll while dragging", "Move windows through depth."},
+			{"Super+wheel / drag held + rearward scroll; release", "Move through depth / throw into the rear energy wall."},
 			{"Ctrl+Z / Ctrl+Shift+Z", "Undo / redo workspace edits."},
 			{"Escape / R", "Cancel a gesture / reset the camera view."},
 			{"Ctrl+S", "Save when started with a document path."},
@@ -236,7 +236,7 @@ func (w *Workspace) drawHelp() {
 			{"Ctrl+Alt+O", "Find windows, including those behind objects."},
 			{"Overview: arrows, then Enter", "Select a window and return to its workspace."},
 			{"Super+double-click / top square", "Enter or leave Read for the pointed-to window."},
-			{"Top grip / Super+primary", "Move or throw a window; grab it again to stop."},
+			{"Top grip / Super+primary", "Move or throw laterally; grab the window again to stop."},
 			{"Corner grip / Super+secondary", "Resize a window freely; Escape cancels the gesture."},
 			{"Right launcher rail / Ctrl+Alt+Space", "Open tools directly / search every tool, window and space."},
 			{"Top − / □ / × or Super+C", "Hide / Read / close the active window."},

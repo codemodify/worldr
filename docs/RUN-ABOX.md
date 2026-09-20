@@ -61,11 +61,15 @@ specified. `--demo` selects AXIAL automatically unless an experience was explici
 selected; it cannot be combined with `--experience=workspace`.
 
 Drag a window’s top grip to move it; release while moving to throw it. The window
-coasts smoothly to a stop. Grab again or press Escape to stop a coast. Scroll
-while dragging to change depth; Ctrl+Z restores the whole gesture. Super+drag
-also moves content planes
+coasts smoothly to a stop. Grab again or press Escape to stop a coast. To throw
+through depth, keep the drag held, scroll, then release while that depth input is
+still recent; a slow release below the usual motion threshold simply commits the
+new depth. A rearward throw that reaches the woven energy wall deforms its spring
+lattice and rebounds toward the camera. Groups preserve their arrangement, and
+Ctrl+Z restores the complete drag, flight, collision, and rebound. Super+drag also moves content planes
 when the host does not reserve that chord. Super+drag on empty workspace pans the
-camera, and Super+wheel changes the hovered window's depth without focusing it.
+camera, and Super+wheel changes the hovered window's depth without focusing it;
+the same rear wall prevents direct wheel movement from passing through.
 Resize with the bottom-right grip or Super+secondary drag over window content;
 the logical client size and saved spatial frame update together. The three
 controls on a window's top grip hide it completely, toggle its Read view, or
@@ -89,9 +93,13 @@ workspace owns the keyboard. Ordinary shortcuts reach a focused application;
 Win/Super+C remains reserved for the active-app close request. The standalone
 `--experience=axial` presentation retains its top study toolbar, including
 Reset and the placement, grouping, and depth controls shown when it hosts apps.
+It does not create the general desktop's woven energy wall.
 
 The Cinematic presentation remains active during exploration and focus, with
-full ambient motion, spatial framing, and wire/rim accents. The model has a
+full ambient motion, spatial framing, and wire/rim accents. On the general
+desktop, electrical pulses travel across the woven wall, its springs breathe and
+carry impact waves, and the retained DNA turns more subtly in front of it while
+remaining behind applications. The model has a
 blue/silver palette, light-responsive highlights and smoothly shaded cylinder
 walls. Its world-space grid and rings hide in Read/Overview. Selective depth-aware background
 glow, directional shadows, moving fill lights, opt-in final-frame highlight
@@ -121,9 +129,12 @@ while it has focus. A foot process exiting withdraws its window and leaves other
 applications and the native workspace running.
 
 The general desktop has no main toolbar across the top. Drag a window's top grip, or use
-Super+primary where the host permits, to place and throw it. Scroll during the
-drag or use Super+wheel to move it through depth; an existing explicit group
-keeps its relative arrangement. Ctrl+Alt+O from the workspace or any focused app retrieves obscured
+Super+primary where the host permits, to place and throw it. Scroll while
+holding the drag, then release after a quick scroll to turn recent wheel input
+into a depth throw. Super+wheel moves a hovered window directly through depth;
+the woven rear wall constrains both paths, visibly flexes on contact, and sends a
+throw back toward the camera. An existing explicit group keeps its relative
+arrangement. Ctrl+Alt+O from the workspace or any focused app retrieves obscured
 apps. Unmodified arrows select thumbnails one step per fresh press; modified
 arrows are consumed. Enter/keypad Enter or Escape returns to the prior view
 without restoring application keyboard focus. A second fresh Enter opens Read
@@ -250,8 +261,10 @@ and window sizes persist; AXIAL also saves its study timeline. Retired
 presentation and motion fields load as Cinematic with full motion.
 Workspace and AXIAL documents have distinct identities and cannot be interchanged.
 Undo history does not persist. Saving cancels a held pointer gesture and settles
-a released throw at its current position; velocity is never saved. No default document file is
-written when the option is absent. Invalid/mismatched state files are rejected.
+a released throw at its current position; velocity is never saved. The energy
+wall's spring motion and electrical phase are ambient and are never written to
+the document. No default document file is written when the option is absent.
+Invalid/mismatched state files are rejected.
 
 ## Headless rendering and capture
 

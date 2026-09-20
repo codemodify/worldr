@@ -112,6 +112,18 @@ commands with screen controls. AXIAL's [input](../internal/workspace/input.go)
 maps interaction into [typed actions](../internal/workspace/actions.go), so
 buttons, shortcuts and demonstrations share validated behavior and undo rules.
 
+The general desktop's woven wall is implemented in
+[energy_net.go](../internal/workspace/energy_net.go). It is deliberately a
+screen-space `Canvas` layer rather than retained scene geometry: `Line` and
+`Circle` commands draw a 25-by-15 over-under weave and its moving electrical
+packets. A fixed 120 Hz simulation integrates pinned points with structural,
+shear, and bending springs; a long suspension settles the lattice instead of
+running an unbounded catch-up. [drawBackground](../internal/workspace/dna_background.go)
+queues this overlay first, then the background scene draw flushes it before the
+subdued retained DNA pass. The normal workspace scene follows, leaving the wall
+at the rear, the DNA in front of it, and applications in front of both. The
+standalone AXIAL experience does not allocate this wall.
+
 Experience calls belong to one host goroutine. A frame returned by `Draw` is
 borrowed: finish submission before another `Draw` or `Close`. Atlas pixels remain
 immutable for that lifetime. Keep polling and updates bounded so one tool cannot
@@ -244,9 +256,17 @@ owns file I/O. AXIAL's [document](../internal/workspace/document.go) validates b
 installation and persists stable application keys and placement, never runtime
 IDs, GPU handles, active captures or process state. The general workspace uses a separate [document](../internal/workspace/desktop.go)
 without study data. The shared action reducer records domain edits; playback
-ticks and presentation interpolation remain transient. A drag and its inertial
-throw share one undo record. Timestamp-derived release velocity and analytic
-exponential friction remain transient; manual saving settles at the current position.
+ticks and presentation interpolation remain transient. Window drag samples
+include X, Y, and depth, so scrolling while the drag remains held can contribute
+depth velocity when the user releases. Release motion below the normal threshold
+commits without inertia. For a rearward throw, the host solves the collision
+time against the same analytic exponential friction used for lateral motion,
+deforms the wall once at impact, and reflects the remaining depth motion toward
+the camera. Direct wheel depth movement is also constrained by the wall and
+reflects any overshoot. A drag, inertial throw, collision, and rebound share one
+undo record; redo restores the final placement without replaying momentum.
+Timestamp-derived velocity, the wall's spring state and electrical phase remain
+transient, and manual saving settles a throw at its current position.
 
 The host's [session coordinator](../internal/app/session.go) records provider
 resource references in a version-2 envelope alongside the experience payload.

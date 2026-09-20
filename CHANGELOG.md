@@ -2,6 +2,11 @@
 
 ## 0.10.0-dev — native scene architecture reset
 
+- Added a living woven energy wall behind the general desktop. Its pinned
+  spring lattice carries traveling electrical pulses, deforms at the impact
+  location, and sends depth-thrown windows or rigid groups back toward the
+  camera. Direct depth gestures cannot tunnel through it, while old saved
+  placements migrate in front of the new rear boundary.
 - Removed the general desktop's entire main toolbar at the top along with its Place / Group,
   Group Selected, Ungroup, depth-zone and Reset View buttons. Fixed desktop
   chrome now consists of the right launcher rail and its compact bottom-right

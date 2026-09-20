@@ -47,19 +47,24 @@ may keep it open to confirm unsaved work. Minimize hides the content and its
 complete frame; Overview reveals and restores minimized windows. The general
 desktop has no main toolbar: window placement uses the visible grip or the exact
 Super+primary gesture. Scrolling during a held drag moves the window through
-depth without introducing a lateral jump. Super+wheel changes the hovered
-window's depth without focusing it; an explicit group moves with that window. The grips follow
+depth without introducing a lateral jump. Keep the drag held, scroll, then
+release while the depth input is still recent to throw through depth; the normal
+minimum release speed still applies. Super+wheel changes the hovered window's
+depth without focusing it; an explicit group moves with that window. Rearward
+wheel movement is constrained by the woven energy wall. The grips follow
 perspective and visible scene occlusion, and hide in Read and Overview.
 
 Releasing a moving window throws it in the direction of the drag. Exponential
-deceleration slows it to a crawl before it stops; grouped windows keep their
-relative arrangement. Clicking a moving window or its grip stops that window
-or group; selecting, typing in, dragging or throwing another window leaves its
-glide running. Multiple windows can coast independently. Escape from the
-workspace stops gliding windows, while Escape in a focused terminal stays with
-the terminal. Each held drag and subsequent glide form one undoable move in
-gesture order. Escape during a held drag restores only that gesture's starting
-placement. Normal client dragging and scrolling
+deceleration slows lateral and depth motion to a crawl before it stops. A
+rearward throw that reaches the wall deforms the spring weave and rebounds
+toward the camera; grouped windows keep their relative arrangement through the
+impact. Clicking a moving window or its grip stops that window or group;
+selecting, typing in, dragging or throwing another window leaves its glide
+running. Multiple windows can coast independently. Escape from the workspace
+stops gliding windows, while Escape in a focused terminal stays with the
+terminal. Each held drag, subsequent glide, wall collision, and rebound form one
+undoable move in gesture order. Escape during a held drag restores only that
+gesture's starting placement. Normal client dragging and scrolling
 retain their application meaning outside the reserved workspace gestures.
 
 Focusing an object brings it into a comfortable working view. Returning from
@@ -92,11 +97,17 @@ output, pinned results, and explicitly dispatched task recipes now extend the PT
 should use the engine directly. Compatibility provides access to existing
 software alongside those new experiences.
 
-The workspace background includes a centered, vertical 3D DNA double helix rotating once
-every 30 seconds. It is decorative retained geometry, rendered before application
-content, so windows always cover it at any placement depth. Its pose is transient
-and independent of camera navigation, saved layouts and Undo. It keeps rotating
-during Read and other focused work.
+The general desktop's rear background is a woven cyan energy wall: a pinned
+25-by-15 lattice joined by structural, shear, and bending springs. A subtle
+periodic pressure cue gives it a gentle breathing motion, while electrical packets travel independently
+along its horizontal and vertical fibers. Window impacts produce a visible dent
+and spring wave at the collision point. The centered 3D DNA double helix remains
+as subdued retained geometry in front of the weave, rotating once every 30
+seconds; both layers remain behind application content at every placement depth.
+They are decorative and never participate in picking or pointer capture. Their
+motion is transient and independent of camera navigation, saved layouts, and
+Undo, and it continues during Read and other focused work. The standalone AXIAL
+experience does not create the energy wall.
 
 Opening a video from native Files starts playback in a new independent window
 without changing keyboard focus, selection, camera or Read mode. A new player
@@ -128,7 +139,9 @@ or moves the workspace camera.
 Both experiences use one permanent Cinematic presentation. Expressive spatial
 framing, lighting, visible instruments, transitions, window throws, and ambient
 animation retain full motion during exploration and focused work. Study playback
-and application content keep their own controls; Space pauses the study.
+and application content keep their own controls; Space pauses the study. On the
+general desktop, this ambient motion includes the wall's traveling electrical
+pulses and spring response as well as the subdued rotating DNA in front of it.
 
 The current material pass adds camera/light-responsive highlights, metal tint,
 cyan rim accents, two bounded moving fill lights and smooth cylindrical shading
@@ -319,7 +332,7 @@ both the cinematic presentation and ordinary work remaining reliable.
 | Legacy application host (implemented subset) | Private Wayland/Xwayland hosts, SHM and supported DMA-BUF content, raw input, depth gestures, Read controls and free resize | Real foot/Chromium/Konsole/xmessage output, input, popup, DnD, resize, clipboard and disconnect tests |
 | Native terminal workflow (implemented) | Independent PTY/libvterm shells, Ctrl+Alt+Enter and Win/Super+C lifecycle shortcuts, and text clipboard | Real shell/Vim, job control, resize, GPU display, close/reopen, private GUI launch and clipboard tests |
 | Resume actual work (implemented) | Versioned native session manifest, Files/viewer restoration, fresh shells in saved folders, autosave recovery and one-writer session lock | CPU/GPU/real-media/compatibility suites and race checks; repeated state-only startup and forced-stop recovery without duplicate terminals |
-| Spatial interaction (implemented) | Visible grips, direct dragging and throwing, depth movement, grouping, overview, focus/return, and local-coordinate input mapping | Direct-drag ownership/occlusion/cancellation tests, timed throw deceleration and frame-rate independence, one-edit group undo, real two-foot GPU workflow, saved layout round-trip and sibling exit |
+| Spatial interaction (implemented) | Visible grips, direct lateral and depth throwing, woven-wall collision and rebound, grouping, overview, focus/return, and local-coordinate input mapping | Direct-drag ownership/occlusion/cancellation tests, timed throw and wall-collision frame-rate independence, one-edit group undo, real two-foot GPU workflow, saved layout round-trip and sibling exit |
 | Browser compatibility (selected workflows tested) | Chromium/Konsole content, typing, popup menus, DnD, separate dialogs, fractional scaling and teardown | Isolated real-client tests; broader everyday browser workflows still need acceptance |
 | Cinematic finish (bounded SDR slice implemented) | Directional and point-light highlights, metal/rim/thin-glass materials, bounded opaque-backdrop refraction/frost, continuously animated depth-composited holographic projections, smooth normals, world-space guides and authored glow; opt-in renderer bloom/SDR grading stay neutral on mixed compositor frames; physical HDR/ICC and volumetric scattering remain | GPU material/output/scene tests and reviewed captures; the default one-hour, three-process restart trial records sustained frame/resource timing, while physical input-to-photon measurement remains |
 
@@ -356,7 +369,9 @@ study time, component selection and panel depth belong only to AXIAL.
 Manual saving cancels an unfinished held drag, or stops a released throw at its
 current position. Autosave excludes unfinished gestures and captures released
 windows at their current positions without stopping them. Throw velocity is
-never persisted or replayed; Files navigation belongs to the session manifest.
+never persisted or replayed. The woven wall's spring state and electrical phase
+are ambient: neither is persisted nor added to Undo history. Files navigation
+belongs to the session manifest.
 AXIAL's live instrument panel shares the model's depth buffer, supports
 playback and scrubbing, and can move between front and rear placements with B.
 Surface pixels update independently of scene geometry and camera movement.

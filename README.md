@@ -29,9 +29,13 @@ rail at the bottom-right. Its reticle orbits the workspace, two unlabeled values
 show yaw and pitch, its gear opens Settings, and Reset restores the camera view.
 Settings provides Terminal and Media categories with a preview for each.
 
-A centered, vertical cyan 3D DNA double helix turns slowly behind the workspace, completing one
-rotation every 30 seconds. It stays behind application content and never captures
-input. The cinematic presentation and its ambient motion remain active during
+The general desktop's rear backdrop is a woven cyan energy wall. Its pinned
+25-by-15 spring lattice breathes gently, carries electrical pulses along both
+sets of fibers, and deforms when a window reaches the rear depth boundary. The
+window or explicit group then rebounds toward the camera instead of passing
+through the wall. The retained 3D DNA double helix still completes one rotation
+every 30 seconds, now subdued in front of the weave and behind all application
+content. Neither background layer captures input, and both remain active during
 normal workspace and Read views.
 
 **AXIAL / 07** is a hosted native 3D application in the general workspace; use
@@ -99,8 +103,12 @@ the client logical size follow the gesture, and the saved layout restores that
 size after reconnecting. **Win/Super + double-click** toggles the window's Read
 view. **Win/Super+C** requests that the current active app close, including
 while that app owns keyboard focus. The provider may keep it open to present an
-unsaved-work confirmation. Scroll during a drag to move the window through space;
-**Super+wheel** moves the hovered window (and its explicit group) without
+unsaved-work confirmation. Scroll during a drag to move the window through space.
+To throw it through depth, keep the drag held, scroll, then release while that
+depth motion is still recent; the combined release motion must clear the normal
+throw threshold. A rearward throw that reaches the woven energy wall deforms it
+and rebounds toward the camera. Direct depth movement is constrained by the same
+wall. **Super+wheel** moves the hovered window (and its explicit group) without
 focusing it. **Super+primary drag** on empty workspace pans left, right, up or
 down. **Ctrl+Alt+O** retrieves hidden apps. Resize freely with the bottom-right
 grip or **Super+secondary drag**. The general desktop has no top action bar;
@@ -112,12 +120,14 @@ Native terminals, foot and Konsole use cyan frames with chamfered corners,
 layered rails and an integrated top drag plate. The frame stays outside the
 terminal content and follows its depth and placement.
 
-Release a moving window to throw it: its motion decays exponentially, slows to a
-crawl, and stops. Clicking or grabbing it again stops its glide; other windows
-keep moving independently while you select, type in, drag or throw another one.
-Escape from the workspace stops gliding windows. A grouped selection travels
-together, and each drag plus its glide forms one undoable move. Escape during
-a held drag cancels that gesture.
+Release a moving window to throw it: its lateral and depth motion decays
+exponentially, slows to a crawl, and stops. A group reaches the rear wall as one
+arrangement, drives one impact into the spring weave, and rebounds without
+changing its relative layout. Clicking or grabbing it again stops its glide;
+other windows keep moving independently while you select, type in, drag or throw
+another one. Escape from the workspace stops gliding windows. Each drag, glide,
+wall collision, and rebound forms one undoable move. Escape during a held drag
+cancels that gesture.
 Full motion remains active: ordinary content dragging and scrolling stay with
 the application outside the exact Super+primary shortcut.
 
@@ -314,8 +324,9 @@ input; click an app or press Enter to resume typing.
 | Open Settings | Select the gear in the scene controller; choose Terminal or Media to see its preview |
 | Zoom the spatial scene | Scroll over the scene; application scrolling keeps its usual behavior |
 | Move / throw a window | Drag its top grip, or use Super+primary drag where the host permits |
-| Change depth while dragging | Scroll with the drag held |
+| Change or throw through depth | Scroll with the drag held; release after a quick scroll to carry that recent motion into the throw |
 | Change a hovered window's depth | Super+wheel; grouped windows stay together |
+| Meet the rear energy wall | Move or throw rearward; the window or group deforms the weave and rebounds instead of passing through |
 | Resize a window | Drag its bottom-right grip, or Super+secondary drag over its content |
 | Toggle a window's Read view | Win/Super + double-click its content |
 | Minimize / Read / close a window | Use the three controls on its top grip; minimize hides all window chrome but remains recoverable through Overview, while the square opens the same Read view as Win/Super + double-click |
@@ -341,7 +352,9 @@ input; click an app or press Enter to resume typing.
 
 Both experiences use the permanent **Cinematic** presentation. Spatial guides,
 mesh accents, authored glow, moving lights, transitions, and window throws keep
-their full motion during exploration and focused work. Content, placement,
+their full motion during exploration and focused work. On the general desktop,
+electrical packets continue across the woven wall, its springs breathe and carry
+impact waves, and the subdued DNA turns in front of it. Content, placement,
 camera, and application pixels remain independent of those effects. The richer
 concept-art finish is still ahead; Space still pauses AXIAL playback.
 
@@ -414,8 +427,10 @@ for a later launch. Files falls back to its root if its saved subfolder is gone.
 
 Undo history and animation interpolation are not persisted. Manual saving cancels an
 unfinished held drag and stops a released window's glide at its current position
-before writing. Throw velocity is never saved or replayed. Without `--state`,
-worldr does not create document, recovery or lock files.
+before writing. Throw velocity is never saved or replayed. The woven wall's
+spring motion and electrical phase are ambient state and are not stored in the
+workspace document or Undo history. Without `--state`, worldr does not create
+document, recovery or lock files.
 
 Older documents with retired presentation or motion settings still load. Those
 fields normalize to permanent Cinematic presentation and full motion.

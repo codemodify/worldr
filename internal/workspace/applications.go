@@ -658,7 +658,17 @@ func (w *Workspace) handleApplication(event experience.Event) bool {
 		if view.Overview || view.Placing {
 			if event.Kind == experience.PointerScroll && view.Placing {
 				if _, ok := w.applicationHit(event.X, event.Y); ok {
-					_ = w.Dispatch(Action{Kind: MoveApplications, DeltaDepth: -event.ScrollY * .035})
+					delta := -event.ScrollY * .035
+					collision := false
+					if w.desktop {
+						delta, collision = energyWallDepthDelta(view, view.movementSelection(), delta)
+					}
+					selected := view.movementSelection()
+					if err := w.Dispatch(Action{Kind: MoveApplications, DeltaDepth: delta}); err == nil && collision {
+						if x, y, ok := energyWallImpactPosition(w.m.applicationState, selected); ok {
+							w.impactEnergyWall(x, y, min(float32(1.5), abs(event.ScrollY)*.08))
+						}
+					}
 					return true
 				}
 			}

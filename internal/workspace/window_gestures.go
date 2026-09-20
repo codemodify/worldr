@@ -76,7 +76,19 @@ func (w *Workspace) handleWindowDepthWheel(event experience.Event) bool {
 	if !ok {
 		return false
 	}
-	_ = w.Dispatch(Action{Kind: MoveApplication, ApplicationKey: surface.Key, DeltaDepth: -event.ScrollY * .035})
+	selected := view.movementSelectionFor(surface.Key)
+	delta, collision := -event.ScrollY*.035, false
+	if w.desktop {
+		delta, collision = energyWallDepthDelta(view, selected, delta)
+	}
+	if err := w.Dispatch(Action{Kind: MoveApplication, ApplicationKey: surface.Key, DeltaDepth: delta}); err != nil {
+		return true
+	}
+	if collision {
+		if x, y, ok := energyWallImpactPosition(w.m.applicationState, selected); ok {
+			w.impactEnergyWall(x, y, min(float32(1.5), abs(event.ScrollY)*.08))
+		}
+	}
 	return true
 }
 

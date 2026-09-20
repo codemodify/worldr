@@ -30,16 +30,18 @@ func (w *Workspace) updateBackground(dt time.Duration) {
 	// Integer elapsed time makes the pose independent of frame rate. Reduce
 	// the delta first so even a very long interruption cannot overflow it.
 	w.backgroundPhase = (w.backgroundPhase + dt%dnaRotationPeriod) % dnaRotationPeriod
+	w.updateEnergyNet(dt)
 }
 
 func (w *Workspace) drawBackground() {
+	w.drawEnergyNet()
 	if w.backgroundScene == nil {
 		return
 	}
 	strand := w.backgroundScene.Node(w.dnaNode)
 	strand.Hidden = false
-	strand.Color = scene.ColorHex(0x90d8ed, .57)
-	strand.Glow = [3]float32{.015, .085, .12}
+	strand.Color = scene.ColorHex(0x90d8ed, .34)
+	strand.Glow = [3]float32{.01, .052, .075}
 	angle := float32(2 * math.Pi * float64(w.backgroundPhase) / float64(dnaRotationPeriod))
 	// Keep the helix's long axis vertical at the center of the viewport. The
 	// camera-independent framing keeps it a backdrop as windows move in depth or

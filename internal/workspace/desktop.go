@@ -60,6 +60,12 @@ func (w *Workspace) loadDesktopState(data []byte) error {
 	}
 	base.View.Camera, base.View.Presentation = d.Camera, presentation.Cinematic
 	base.View.ReducedMotion, base.View.Application = false, d.Applications
+	// Reject malformed documents against the historical contract before the
+	// compatibility migration adjusts otherwise-valid placements for the wall.
+	if err := base.Validate(); err != nil {
+		return err
+	}
+	constrainEnergyWallPlacements(&base.View.Application)
 	if err := base.Validate(); err != nil {
 		return err
 	}
@@ -71,6 +77,10 @@ func (w *Workspace) drawDesktop() {
 	if w.application.ID != 0 {
 		return
 	}
+	// Keep first-run guidance legible as bright electrical packets and the DNA
+	// landmark pass behind it. The unframed translucent scrim preserves both
+	// ambient layers instead of turning the empty state into another window.
+	w.rect(390, 292, 570, 142, bg, .76)
 	w.text(410, 318, 36, "A place for your next idea.", ink, 1)
 	w.text(412, 372, 16, "Bring your tools together. Keep the whole picture in view.", muted, 1)
 	w.text(412, 407, 13, "Choose Launcher on the right to open a tool or space.", teal, .9)

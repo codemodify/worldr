@@ -27,6 +27,8 @@ type Workspace struct {
 	backgroundScene                                                   *scene.Scene
 	dnaNode                                                           scene.NodeID
 	backgroundPhase                                                   time.Duration
+	energyNet                                                         *energyNet
+	energyWallImpacts                                                 []energyWallImpact
 	hologramPhase                                                     time.Duration
 	nodes                                                             [3]scene.NodeID
 	stageNode                                                         scene.NodeID
@@ -122,6 +124,7 @@ func newWorkspace(desktop bool) (*Workspace, error) {
 	}
 	if desktop {
 		w.m.playing = false
+		w.energyNet = newEnergyNet()
 		if err := w.initializeBackground(); err != nil {
 			c.Close()
 			return nil, fmt.Errorf("build workspace background: %w", err)
@@ -192,7 +195,7 @@ func (w *Workspace) Update(dt time.Duration) {
 }
 func (w *Workspace) Info() experience.Info {
 	if w.desktop {
-		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the right launcher rail to search or open native tools · Super+drag empty space to pan · drag the bottom-right scene controller to orbit · use its gear for Terminal and Media settings or Reset to restore the camera · drag a window grip or Super+primary to move and throw · use the square window control or Super+double-click to enter or leave Read · drag a window's bottom-right grip or Super+secondary to resize · use the other top-grip controls to minimize or close · Super+C closes the active app · Super+wheel changes hovered-window depth · Ctrl+Alt+Enter opens a shell · Ctrl+Alt+O finds windows · Enter reads the selected app · F1 opens Help"}
+		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the right launcher rail to search or open native tools · Super+drag empty space to pan · drag the bottom-right scene controller to orbit · use its gear for Terminal and Media settings or Reset to restore the camera · drag a window grip or Super+primary to move and throw · scroll while holding it and release to throw into the rear energy wall · use the square window control or Super+double-click to enter or leave Read · drag a window's bottom-right grip or Super+secondary to resize · use the other top-grip controls to minimize or close · Super+C closes the active app · Super+wheel changes hovered-window depth · Ctrl+Alt+Enter opens a shell · Ctrl+Alt+O finds windows · Enter reads the selected app · F1 opens Help"}
 	}
 	if w.applications != nil {
 		return experience.Info{ID: "worldr.axial", Title: "worldr — AXIAL / 07", Controls: "Ctrl+Alt+Enter opens a shell · click app or press Enter from workspace to read and type · Ctrl+Alt+O overview from any app · overview: arrows select, Enter or Esc returns · drag scene to orbit, scroll scene to zoom · Place: drag apps, Shift+click to select, scroll for depth · Group moves selected apps together · Super+C requests closing the active window · click workspace to use native shortcuts"}

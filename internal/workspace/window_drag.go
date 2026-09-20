@@ -151,15 +151,38 @@ func (w *Workspace) handleWindowDrag(event experience.Event) bool {
 				if w.pointer.dragFromView {
 					return true
 				}
-				w.preview(Action{Kind: MoveApplications, DeltaDepth: -event.ScrollY * .035})
+				selected := w.m.applicationState.movementSelection()
+				active := w.m.applicationState.index(w.m.applicationState.Active)
+				before := ApplicationPlacement{}
+				if active >= 0 {
+					before = w.m.applicationState.Layouts[active]
+				}
+				delta, collision := -event.ScrollY*.035, false
+				if w.desktop {
+					delta, collision = energyWallDepthDelta(w.m.applicationState, selected, delta)
+				}
+				w.preview(Action{Kind: MoveApplications, DeltaDepth: delta})
+				w.pointer.dragged = w.pointer.dragged || delta != 0
+				if collision {
+					if x, y, ok := energyWallImpactPosition(w.m.applicationState, selected); ok {
+						w.impactEnergyWall(x, y, min(float32(1.5), abs(event.ScrollY)*.08))
+					}
+					// The instantaneous wheel move already reflected at the wall. Start a
+					// fresh velocity history so release cannot infer another inward throw
+					// from the pre-collision samples.
+					w.pointer.dragSampleCount = 0
+				} else if active >= 0 && delta != 0 {
+					w.sampleWindowDepthStep(event, before, w.m.applicationState.Layouts[active])
+				}
 				// Rebase on the shifted plane so the next motion cannot acquire
 				// lateral displacement solely from a perspective depth change.
 				w.syncScene()
 				if hit, _, ok := w.scene.MapCapturedSurface(w.camera, w.viewport, event.X, event.Y, w.pointer.surface); ok {
 					w.pointer.lastWorld = hit.Point
 				}
-				w.pointer.dragSampleCount = 0
-				w.sampleWindowDrag(event, false)
+				if collision || delta == 0 {
+					w.sampleWindowDrag(event, false)
+				}
 				return true
 			case experience.PointerUp:
 				if button == 272 {
