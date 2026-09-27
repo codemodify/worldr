@@ -39,6 +39,9 @@ func (d *DRM) PresentBGRA(bgra []byte, stride uint32) error { return ErrUnavaila
 func OpenVKWayland(display, surface unsafe.Pointer, w, h uint32) (*VK, error) {
 	return nil, ErrUnavailable
 }
+func OpenVKWaylandTransparent(display, surface unsafe.Pointer, w, h uint32) (*VK, error) {
+	return nil, ErrUnavailable
+}
 func (v *VK) Resize(w, h uint32) error { return ErrUnavailable }
 
 func (v *VK) SetMemoryBudget(bytes uint64) error { return ErrUnavailable }

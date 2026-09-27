@@ -50,6 +50,12 @@ func overviewNavigationKey(event experience.Event) uint8 {
 			return overviewLeft
 		case experience.KeyRight:
 			return overviewRight
+		case experience.KeyUp:
+			return overviewUp
+		case experience.KeyDown:
+			return overviewDown
+		case experience.KeyEnter:
+			return overviewEnter
 		}
 	}
 	return 0

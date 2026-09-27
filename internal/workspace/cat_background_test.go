@@ -117,6 +117,135 @@ func TestAmbientCatRouteIsClosedBoundedAndUsesEveryAxis(t *testing.T) {
 	if forward.Dot(startTangent.Normalize()) < .999 {
 		t.Fatalf("cat did not face its route tangent: forward=%+v tangent=%+v", forward, startTangent.Normalize())
 	}
+	for _, axis := range []scene.Vec3{{X: 1}, {Y: 1}, {Z: 1}} {
+		if got := background.Node(cat.root).Transform.TransformVector(axis).Length(); math.Abs(float64(got-ambientCatScale)) > 1e-5 {
+			t.Fatalf("cat root scale = %g, want %g", got, ambientCatScale)
+		}
+	}
+}
+
+func TestAmbientCatBehaviorRunsPausesNapsAndClosesExactly(t *testing.T) {
+	tests := []struct {
+		phase    time.Duration
+		activity ambientCatActivity
+		route    time.Duration
+	}{
+		{4 * time.Second, ambientCatRunning, 5 * time.Second},
+		{9 * time.Second, ambientCatPaused, 10 * time.Second},
+		{14 * time.Second, ambientCatRunning, 15 * time.Second},
+		{20 * time.Second, ambientCatNapping, 20 * time.Second},
+		{26500 * time.Millisecond, ambientCatRunning, 25 * time.Second},
+		{ambientCatCycle, ambientCatRunning, 0},
+	}
+	for _, test := range tests {
+		state := ambientCatBehavior(test.phase)
+		if state.activity != test.activity || state.routePhase != test.route {
+			t.Fatalf("behavior at %v = activity %d route %v, want %d/%v", test.phase, state.activity, state.routePhase, test.activity, test.route)
+		}
+	}
+
+	cat, background := ambientCatFixture(t)
+	cat.phase = 8500 * time.Millisecond
+	cat.syncPose()
+	pauseStart := background.Node(cat.root).Transform.TransformPoint(scene.Vec3{})
+	cat.phase = 9500 * time.Millisecond
+	cat.syncPose()
+	pauseEnd := background.Node(cat.root).Transform.TransformPoint(scene.Vec3{})
+	if pauseStart.Sub(pauseEnd).Length() > 1e-5 {
+		t.Fatal("standing pause drifted along the route")
+	}
+	cat.phase = 18 * time.Second
+	cat.syncPose()
+	upright := background.Node(cat.root).Transform
+	cat.phase = 20 * time.Second
+	cat.syncPose()
+	if background.Node(cat.root).Transform == upright || background.Node(cat.legs[0].hip).Transform == scene.Identity() {
+		t.Fatal("nap did not lower/curl the retained rig")
+	}
+}
+
+func TestAmbientCatSwatUsesOneFrontPawAndExpires(t *testing.T) {
+	cat, background := ambientCatFixture(t)
+	cat.phase = 3 * time.Second
+	cat.syncPose()
+	baseline := ambientCatTransforms(cat)
+	cat.triggerSwat(1)
+	cat.swatRemaining = ambientCatSwatDuration / 2
+	cat.syncPose()
+	if background.Node(cat.legs[1].hip).Transform == baseline[indexOfCatNode(cat, cat.legs[1].hip)] {
+		t.Fatal("swat did not move the selected front leg")
+	}
+	if background.Node(cat.legs[0].hip).Transform != baseline[indexOfCatNode(cat, cat.legs[0].hip)] {
+		t.Fatal("swat moved the other front leg")
+	}
+	cat.swatRemaining, cat.swatLeg = 0, -1
+	cat.syncPose()
+	for index, transform := range ambientCatTransforms(cat) {
+		if transform != baseline[index] {
+			t.Fatalf("expired swat left node %d displaced", index)
+		}
+	}
+}
+
+func TestAmbientCatRestTransitionsBlendJointAnglesWithoutStrideSweeps(t *testing.T) {
+	cat, background := ambientCatFixture(t)
+	transitions := []struct {
+		name       string
+		start, end time.Duration
+	}{
+		{"pause entry", 7800 * time.Millisecond, 8500 * time.Millisecond},
+		{"pause exit", 9500 * time.Millisecond, 10200 * time.Millisecond},
+		{"nap entry", 17800 * time.Millisecond, 18500 * time.Millisecond},
+		{"nap exit", 22500 * time.Millisecond, 23200 * time.Millisecond},
+	}
+	jointAngles := func() [8]float64 {
+		var angles [8]float64
+		for index, leg := range cat.legs {
+			hip, knee := background.Node(leg.hip).Transform, background.Node(leg.knee).Transform
+			angles[index*2] = math.Atan2(float64(hip[1]), float64(hip[0]))
+			angles[index*2+1] = math.Atan2(float64(knee[1]), float64(knee[0]))
+		}
+		return angles
+	}
+	angleDelta := func(a, b float64) float64 {
+		return math.Mod(b-a+math.Pi, 2*math.Pi) - math.Pi
+	}
+
+	for _, transition := range transitions {
+		t.Run(transition.name, func(t *testing.T) {
+			cat.phase = transition.start
+			cat.syncPose()
+			previous := jointAngles()
+			var travel [8]float64
+			for phase := transition.start + 10*time.Millisecond; phase <= transition.end; phase += 10 * time.Millisecond {
+				cat.phase = phase
+				cat.syncPose()
+				current := jointAngles()
+				for joint := range current {
+					delta := math.Abs(angleDelta(previous[joint], current[joint]))
+					if delta > .16 {
+						t.Fatalf("joint %d swept %g radians in 10ms at %v", joint, delta, phase)
+					}
+					travel[joint] += delta
+				}
+				previous = current
+			}
+			for joint, distance := range travel {
+				if distance > 6 {
+					t.Fatalf("joint %d accumulated %g radians across one rest transition", joint, distance)
+				}
+			}
+		})
+	}
+}
+
+func indexOfCatNode(cat *ambientCat, id scene.NodeID) int {
+	for index, candidate := range cat.nodes {
+		if candidate == id {
+			return index
+		}
+	}
+	return -1
 }
 
 func TestAmbientCatTimingIsFrameIndependentBoundedAndDrawPure(t *testing.T) {

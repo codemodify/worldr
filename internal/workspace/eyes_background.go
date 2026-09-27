@@ -45,9 +45,26 @@ type backgroundEye struct {
 }
 
 var backgroundEyes = [...]backgroundEye{
-	{x: 165, y: 157, radius: 36, veinPhase: .17},
-	{x: 247, y: 124, radius: 29, veinPhase: .73},
-	{x: 329, y: 166, radius: 40, veinPhase: 1.31},
+	{radius: 18, veinPhase: .17},
+	{radius: 18, veinPhase: .73},
+	{radius: 18, veinPhase: 1.31},
+}
+
+func (w *Workspace) placedBackgroundEyes() [len(backgroundEyes)]backgroundEye {
+	eyes := backgroundEyes
+	if w.scale <= 0 {
+		return eyes
+	}
+	// Anchor the ornament to the scene viewport rather than the framebuffer.
+	// Letterboxing and future dock changes can then move without leaving the eyes
+	// stranded at an old absolute desktop coordinate.
+	right := (w.viewport.X + w.viewport.Width - w.ox) / w.scale
+	top := (w.viewport.Y - w.oy) / w.scale
+	for index := range eyes {
+		eyes[index].x = right - 24 - float32(len(eyes)-1-index)*44
+		eyes[index].y = top + 32
+	}
+	return eyes
 }
 
 // eyeGazePoint keeps the iris inside its sclera while retaining fine motion
@@ -68,11 +85,11 @@ func eyeGazePoint(cx, cy, radius, targetX, targetY float32) (float32, float32) {
 }
 
 func (w *Workspace) drawBackgroundEyes() {
-	if !w.desktop || !w.environment.Eyes || w.canvas == nil || w.scale <= 0 {
+	if !w.desktop || !w.environment.Eyes || w.ambientQuiet() || w.canvas == nil || w.scale <= 0 {
 		return
 	}
 	targetX, targetY, tracking := w.ambientPointer.designPoint(w.ox, w.oy, w.scale)
-	for index, eye := range backgroundEyes {
+	for index, eye := range w.placedBackgroundEyes() {
 		irisX, irisY := eye.x, eye.y
 		if tracking {
 			irisX, irisY = eyeGazePoint(eye.x, eye.y, eye.radius, targetX, targetY)

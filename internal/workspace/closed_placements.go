@@ -2,23 +2,13 @@ package workspace
 
 import "fmt"
 
-var forgetClosedPlacementsButton = box{1034, 16, 300, 25}
-
 // Consult the complete provider list, including live surfaces excluded by the
 // layout limit or waiting for an image. Hidden is not the same as closed.
 func (w *Workspace) liveApplicationKeys() map[string]bool {
-	live := make(map[string]bool)
-	if w.applications != nil {
-		for _, surface := range w.applications.Surfaces() {
-			key := surface.Key
-			if key == "" {
-				key = w.applicationKeys[surface.ID]
-			}
-			if key != "" {
-				live[key] = true
-			}
-		}
+	if w.applications == nil {
+		return make(map[string]bool)
 	}
+	_, live, _ := w.resolvedApplicationSurfaceKeys(w.applications.Surfaces())
 	return live
 }
 
@@ -132,24 +122,16 @@ func (w *Workspace) restoreEdit(entry edit, undo bool) (Document, error) {
 }
 
 func (w *Workspace) drawApplicationNotice() {
-	closed := w.closedPlacementMask() != 0
 	const noticeX = float32(24)
-	width := float32(1310)
-	if closed {
-		width = forgetClosedPlacementsButton.x - noticeX - 12
-		b := forgetClosedPlacementsButton
-		w.rect(b.x, b.y, b.w, b.h, teal, .10)
-		w.text(b.x+12, b.y+6, 11, "FORGET CLOSED PLACEMENTS", teal, 1)
-	}
+	const width = float32(1310)
 	notice := w.applicationNotice
 	if notice == "" && w.applicationLayoutFull {
-		notice = "Workspace limit reached: at most 32 application windows or saved placements."
+		notice = "Workspace capacity reached: at most 32 live or opening application windows."
 	}
 	if notice == "" {
 		return
 	}
-	// Error details share the row with the explicit cleanup control. Fit actual
-	// glyph widths so even wide characters cannot cover its label or hit target.
+	// Fit actual glyph widths so notices remain inside the desktop viewport.
 	text := []rune(notice)
 	if w.canvas.MeasureText(12, notice) > width-26 {
 		for len(text) > 0 && w.canvas.MeasureText(12, string(text)+"…") > width-26 {

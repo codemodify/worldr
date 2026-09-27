@@ -74,8 +74,8 @@ func buildApplicationResizeHandleMeshFor(style windowBorderStyle) (*scene.Mesh, 
 	palette := chromePaletteFor(style)
 	plate, edge, detail := palette.plate, palette.edge, palette.detail
 	if style == windowBorderInstrument {
-		plate = scene.ColorHex(0x103744, .96)
-		edge = scene.ColorHex(0x75e9f7, .96)
+		plate = scene.ColorHex(0x2c3c4c, .96)
+		edge = scene.ColorHex(0xd5e0e8, .92)
 	}
 	// The clipped corner is visibly different from the top drag grip. Its full
 	// plate remains pickable, while the inset diagonals communicate resize.
@@ -130,6 +130,14 @@ func (w *Workspace) syncApplicationWindowControls(surface experience.Application
 	style := w.selectedWindowBorderStyle()
 	control.Mesh = w.windowBorderControlMesh(style)
 	control.Hidden = surface.Frameless || surface.DragContent || minimized || w.m.applicationState.Overview || w.m.applicationState.Reading
+	if w.activeSkin != nil && !photoFrameSurface(surface) {
+		applyWindowSkinPart(control, w.skinWindowMeshes(surface).controls)
+		if control.Hidden {
+			control.Glow = [3]float32{}
+		}
+		return
+	}
+	resetWindowSkinMaterial(control, false)
 	control.Color = scene.Color{R: 1, G: 1, B: 1, A: 1}
 	if control.Hidden {
 		control.Glow = [3]float32{}
@@ -150,6 +158,14 @@ func (w *Workspace) syncApplicationResizeHandle(surface experience.ApplicationSu
 	view := w.m.applicationState
 	style := w.selectedWindowBorderStyle()
 	handle.Hidden = surface.Frameless || surface.DragContent || minimized || view.Overview || view.Reading
+	if w.activeSkin != nil && !photoFrameSurface(surface) {
+		applyWindowSkinPart(handle, w.skinWindowMeshes(surface).resize)
+		if handle.Hidden {
+			handle.Glow = [3]float32{}
+		}
+		return
+	}
+	resetWindowSkinMaterial(handle, false)
 	handle.Mesh = w.windowBorderResizeMesh(style)
 	handle.Color = scene.Color{R: 1, G: 1, B: 1, A: 1}
 	if surface.Key == view.Active {
@@ -189,7 +205,7 @@ func (w *Workspace) applicationWindowControlAt(x, y float32) (experience.Applica
 		if !valid {
 			break
 		}
-		kind := applicationWindowControlAtPoint(inverse.TransformPoint(hit.Point))
+		kind := w.windowSkinControlAtPoint(surface, inverse.TransformPoint(hit.Point))
 		return surface, kind, node, kind != windowControlNone
 	}
 	return experience.ApplicationSurface{}, windowControlNone, 0, false

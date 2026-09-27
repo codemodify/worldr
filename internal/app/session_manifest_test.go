@@ -228,7 +228,7 @@ func TestSessionCheckpointEncodingUsesNonDisruptiveContract(t *testing.T) {
 	}
 }
 
-func TestSessionRestorePlacementCountsSavedAndUnattachedLiveKeys(t *testing.T) {
+func TestSessionRestorePlacementRecyclesClosedSlotsAndCountsUnattachedLiveKeys(t *testing.T) {
 	for _, savedCount := range []int{31, 32} {
 		t.Run(fmt.Sprintf("%d remembered placements", savedCount), func(t *testing.T) {
 			work, err := workspace.NewDesktop()
@@ -254,19 +254,20 @@ func TestSessionRestorePlacementCountsSavedAndUnattachedLiveKeys(t *testing.T) {
 			if err := checkSessionPlacement(work, hub, "remembered:0"); err != nil {
 				t.Fatalf("existing saved key could not reuse its slot: %v", err)
 			}
-			if savedCount == 31 {
-				if err := checkSessionPlacement(work, hub, "native:terminal-4"); err != nil {
-					t.Fatal("the final free slot was rejected before restoration", err)
-				}
-				// A previous restore publishes its loading surface before the host
-				// attaches the hub to the workspace. It already needs that slot.
-				provider.surfaces = []experience.ApplicationSurface{{ID: 1, Key: "native:terminal-4"}}
-				if err := checkSessionPlacement(work, hub, "native:terminal-4"); err != nil {
-					t.Fatal("published key was double-counted against its existing slot", err)
-				}
+			if err := checkSessionPlacement(work, hub, "native:terminal-4"); err != nil {
+				t.Fatal("a closed remembered slot was not recyclable before restoration", err)
+			}
+			// A previous restore publishes its loading surface before the host
+			// attaches the hub to the workspace. Its own key remains admissible.
+			provider.surfaces = []experience.ApplicationSurface{{ID: 1, Key: "native:terminal-4"}}
+			if err := checkSessionPlacement(work, hub, "native:terminal-4"); err != nil {
+				t.Fatal("published key was double-counted against live capacity", err)
+			}
+			for i := 1; i < workspace.MaxApplicationLayouts; i++ {
+				provider.surfaces = append(provider.surfaces, experience.ApplicationSurface{ID: uint64(i + 1), Key: fmt.Sprintf("opening:%d", i)})
 			}
 			if err := checkSessionPlacement(work, hub, "native:terminal-7"); err == nil {
-				t.Fatal("restore overbooked saved placements and previously published surfaces")
+				t.Fatal("restore admitted a 33rd live or opening surface")
 			}
 			if work.Document() != before || work.OwnsKeyboard() || work.CanUndo() || provider.focused != 0 || provider.sent != 0 || provider.resized != 0 {
 				t.Fatal("capacity preflight attached/reconciled the workspace or changed focus/history")

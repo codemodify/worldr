@@ -2,6 +2,51 @@
 
 ## 0.10.0-dev — native scene architecture reset
 
+- Added versioned, extensible skin packages shared by window chrome and native
+  controls. Merrick, Advanced, Hologram and Plasma provide distinct geometry,
+  window-button placement and glyphs, typography, palettes and material recipes.
+  Settings → Skins previews the public SDK painter and edits accents, control
+  shapes and type size; `--skin` loads presets or validated JSON packages, which
+  persist intact with the workspace. Legacy Windows/Themes choices remain.
+- Added a working Skin Studio application, shared gallery, optional native-app
+  skin protocol, and live propagation through Files, Notes, Models, Research
+  and Terminal controls. Skin changes preserve application state and native text
+  editing. Embedded assets are supported by the public CPU painter; procedural
+  host chrome and native Pango controls use documented fallbacks.
+- Corrected public nativeui transparency, scalable typography, and range input
+  mapping so slider/controller geometry agrees with the painted track. Host
+  chrome uses the same authored layout for meshes and hit targets and retires
+  replaced geometry from its bounded cache.
+- DNA and the cat are landmarks in the room, drawn with the same camera as
+  the windows, so looking around carries them along and looking back finds
+  them. Read hides the weave, the cat, and the eyes and keeps only a faint helix.
+- The desktop scene controller now looks around from a fixed standing point.
+  Windows stay pinned in the room, and the rear weave is in that same space, so
+  turning the view carries the mesh with the windows and turning back finds them.
+- Replaced the coarse diagonal energy-wall weave with a finer, dimmer hexagonal
+  thread sheet. The 25-by-15 spring lattice still carries impacts and rebound;
+  the visible mesh samples it so the openings stay small and recede behind the
+  workspace.
+- Tightened the right launcher rail and scene controller, removed the empty
+  workspace card and closed-placement cleanup chrome, moved camera reset to an
+  upper-left X, removed its angle readout, and reversed controller orbit deltas
+  so dragging feels like looking from inside the scene.
+- Made closed placements demand-recyclable. They retain exact positions for a
+  same-key reopen while capacity exists; a genuinely new window reuses the
+  lowest closed slot only after empty slots run out. Preflight reserves distinct
+  live and loading provider keys, and sync never evicts a live layout.
+- Added a saved Themes category with Instrument, Aperture, Glass, and Telemetry
+  control palettes; independently selectable Chamfered, Bracketed, Slab, and
+  Notched shape grammars; and a live gallery of complete control states. The new
+  public `sdk/nativeui/v1` painter and controller expose the same vocabulary and
+  full control set. An additive native-app v1 preference path broadcasts changes
+  to apps that advertise theme support; the native-instrument example updates
+  live, while older and non-theme-aware apps keep their own presentation.
+- Made the retained cat smaller and gave its deterministic route running, pause,
+  and nap phases. Optional paw contact now adds a physical impulse to a window
+  without stopping other throws. Three equal, smaller cursor-following eyes stay
+  aligned at the workspace's upper-right; DNA, Cat, cat/window physics, and Eyes
+  are separate saved Environment switches.
 - Added a saved Windows appearance category with four live-selectable native
   chrome families derived from the FUI reference set: sparse Aperture rails,
   the layered Instrument chassis, a translucent Glass slab, and asymmetric
@@ -64,10 +109,10 @@
   legacy completion, cancellation, owner/target lifetime and unmap cleanup.
 
 - Moved scene rotation into a compact controller directly below the right
-  launcher rail at the bottom-right. Its gridded reticle and two unlabeled
-  values expose live yaw and pitch; a gear opens Settings, whose Terminal and
-  Media categories include previews, and Reset restores the camera from inside
-  the controller. Ordinary background drags leave the workspace still, and
+  launcher rail at the bottom-right. Its gridded reticle turns the view from
+  inside the scene; a gear opens the five-category Settings surface, and an X
+  restores the camera from inside the controller.
+  Ordinary background drags leave the workspace still, and
   AXIAL retains its direct model-orbit gesture.
 - Gave generic, cinematic and open photo-bracket window frames real rearward
   side depth while keeping all geometry outside client pixels and out of input
@@ -308,15 +353,12 @@
   keypad Enter returns without typing focus; another fresh Enter explicitly
   opens Read and focuses the selected app. Held commands and their releases
   remain consumed across view/focus changes; ordinary focused-app Enter is intact.
-- Added transient launch-error notices and visible capacity feedback. The live
-  workspace and saved layout each have a 32-window limit; a newly launched
-  terminal excluded by old saved placements is closed without changing those
-  placements. Launch/close and notices remain outside document undo.
-- Added explicit Forget Closed Placements cleanup, preserving live positions,
-  groups and selection even for currently unrenderable provider surfaces. Undo
-  retains subsequently registered keys and refuses capacity conflicts without
-  partial changes; redo protects reopened windows. The control remains available
-  in an empty workspace and does not overlap launch/error notices.
+- Added transient launch-error notices and visible 32-live-window capacity
+  feedback. Launch/close and notices remain outside document undo.
+- Retained the compatibility-only closed-placement reducer for state maintenance,
+  preserving live positions, groups and selection even for currently unrenderable
+  provider surfaces. Undo retains subsequently registered keys and refuses
+  capacity conflicts without partial changes; redo protects reopened windows.
 - Added multiple application surfaces, free placement, depth controls, grouping,
   overview retrieval, and persisted stable layout keys. Repeated `--app` launches
   share arguments; `--apps` profiles provide independent arguments and named IDs.

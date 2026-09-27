@@ -3,6 +3,7 @@
 #include "text_input.h"
 #include "viewporter-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
+#include "xdg-decoration-client-protocol.h"
 #include <errno.h>
 #include <poll.h>
 #include <stdio.h>
@@ -12,6 +13,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <wayland-client.h>
+#include <wayland-cursor.h>
 #include <xkbcommon/xkbcommon.h>
 
 #define EVENT_CAPACITY 512
@@ -30,6 +32,11 @@ struct worldr_host {
   struct xdg_wm_base *wm;
   struct xdg_surface *xdg_surface;
   struct xdg_toplevel *toplevel;
+  struct zxdg_decoration_manager_v1 *decoration_manager;
+  struct zxdg_toplevel_decoration_v1 *decoration;
+  struct wl_shm *shm;
+  struct wl_surface *cursor_surface;
+  struct wl_cursor_theme *cursor_themes[8];
   struct wl_seat *seat;
   struct wl_pointer *pointer;
   struct wl_keyboard *keyboard;
@@ -56,7 +63,35 @@ struct worldr_host {
   unsigned char buttons[0x300];
   worldr_host_event events[EVENT_CAPACITY];
   int count;
+  uint32_t options, decoration_name, pointer_serial, enter_serial;
+  int maximized;
 };
+
+static void update_cursor(worldr_host *h) {
+  if (!(h->options & HOST_OPTION_SYSTEM_CURSOR) || !h->pointer_inside ||
+      !h->pointer || !h->shm || !h->compositor)
+    return;
+  int scale = (h->scale120 + 119) / 120;
+  if (scale < 1) scale = 1;
+  if (scale > 8) scale = 8;
+  if (!h->cursor_themes[scale - 1])
+    h->cursor_themes[scale - 1] = wl_cursor_theme_load(NULL, 24 * scale, h->shm);
+  struct wl_cursor_theme *theme = h->cursor_themes[scale - 1];
+  struct wl_cursor *cursor = theme ? wl_cursor_theme_get_cursor(theme, "left_ptr") : NULL;
+  if (!cursor || !cursor->image_count) return;
+  struct wl_cursor_image *image = cursor->images[0];
+  struct wl_buffer *buffer = wl_cursor_image_get_buffer(image);
+  if (!buffer) return;
+  if (!h->cursor_surface)
+    h->cursor_surface = wl_compositor_create_surface(h->compositor);
+  if (!h->cursor_surface) return;
+  wl_surface_set_buffer_scale(h->cursor_surface, scale);
+  wl_pointer_set_cursor(h->pointer, h->enter_serial, h->cursor_surface,
+                        image->hotspot_x / scale, image->hotspot_y / scale);
+  wl_surface_attach(h->cursor_surface, buffer, 0, 0);
+  wl_surface_damage(h->cursor_surface, 0, 0, INT32_MAX, INT32_MAX);
+  wl_surface_commit(h->cursor_surface);
+}
 
 static void event_free(worldr_host_event e) {
   free(e.keymap);
@@ -76,6 +111,7 @@ static void emit_text(void *data, worldr_host_event e) {
 }
 static void cancel_pointer(worldr_host *h) {
   memset(h->buttons, 0, sizeof(h->buttons));
+  h->pointer_serial = 0;
   push(h, (worldr_host_event){.kind = HOST_CANCEL});
 }
 static void push_keymap(worldr_host *h) {
@@ -118,6 +154,7 @@ static void update_scale(worldr_host *h) {
     wp_viewport_set_destination(h->viewport, h->width, h->height);
   if (effective != h->scale120) {
     h->scale120 = effective;
+    update_cursor(h);
     cancel_pointer(h);
     if (h->pointer_inside)
       push(h, (worldr_host_event){.kind = HOST_MOVE,
@@ -229,8 +266,11 @@ static const struct xdg_surface_listener xdg_listener = {.configure =
 static void top_configure(void *d, struct xdg_toplevel *t, int32_t w, int32_t h,
                           struct wl_array *states) {
   (void)t;
-  (void)states;
   worldr_host *host = d;
+  host->maximized = 0;
+  uint32_t *state;
+  wl_array_for_each(state, states)
+    if (*state == XDG_TOPLEVEL_STATE_MAXIMIZED) host->maximized = 1;
   if (w > 0 && w <= 32768)
     host->width = w;
   if (h > 0 && h <= 32768)
@@ -245,19 +285,29 @@ static void top_close(void *d, struct xdg_toplevel *t) {
 }
 static const struct xdg_toplevel_listener top_listener = {
     .configure = top_configure, .close = top_close};
+static void decoration_configure(void *d, struct zxdg_toplevel_decoration_v1 *decoration,
+                                  uint32_t mode) {
+  (void)d; (void)decoration; (void)mode;
+}
+static const struct zxdg_toplevel_decoration_v1_listener decoration_listener = {
+    .configure = decoration_configure};
 static void ptr_enter(void *d, struct wl_pointer *p, uint32_t serial,
                       struct wl_surface *s, wl_fixed_t x, wl_fixed_t y) {
   (void)s;
   worldr_host *h = d;
   h->pointer_inside = 1;
+  h->enter_serial = serial;
   h->x = wl_fixed_to_double(x);
   h->y = wl_fixed_to_double(y);
   push(h, (worldr_host_event){.kind = HOST_MOVE,
                               .x = pointer_x(h),
                               .y = pointer_y(h),
                               .mods = h->mods});
-  // A null host cursor is intentional: the native renderer draws the pointer.
-  wl_pointer_set_cursor(p, serial, NULL, 0, 0);
+  if (h->options & HOST_OPTION_SYSTEM_CURSOR)
+    update_cursor(h);
+  else
+    // A null host cursor is intentional: the desktop renderer draws the pointer.
+    wl_pointer_set_cursor(p, serial, NULL, 0, 0);
 }
 static void ptr_leave(void *d, struct wl_pointer *p, uint32_t serial,
                       struct wl_surface *s) {
@@ -283,13 +333,14 @@ static void ptr_motion(void *d, struct wl_pointer *p, uint32_t time,
 static void ptr_button(void *d, struct wl_pointer *p, uint32_t serial,
                        uint32_t time, uint32_t button, uint32_t state) {
   (void)p;
-  (void)serial;
   worldr_host *h = d;
   if (button >= sizeof(h->buttons))
     return;
   int pressed = state == WL_POINTER_BUTTON_STATE_PRESSED;
-  if (pressed)
+  if (pressed) {
+    h->pointer_serial = serial;
     worldr_host_clipboard_serial(h->clipboard, serial);
+  }
   // A canceled capture must not receive an orphan release after focus loss.
   if (!pressed && !h->buttons[button])
     return;
@@ -521,6 +572,12 @@ static void global(void *d, struct wl_registry *r, uint32_t name,
     h->compositor = wl_registry_bind(r, name, &wl_compositor_interface,
                                      version < 4 ? version : 4);
     h->compositor_name = name;
+  } else if (!strcmp(iface, "wl_shm") && !h->shm && (h->options & HOST_OPTION_SYSTEM_CURSOR)) {
+    h->shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
+  } else if (!strcmp(iface, "zxdg_decoration_manager_v1") && !h->decoration_manager &&
+             (h->options & HOST_OPTION_CLIENT_DECORATED)) {
+    h->decoration_manager = wl_registry_bind(r, name, &zxdg_decoration_manager_v1_interface, 1);
+    h->decoration_name = name;
   } else if (!strcmp(iface, "xdg_wm_base") && !h->wm) {
     h->wm = wl_registry_bind(r, name, &xdg_wm_base_interface, 1);
     h->wm_name = name;
@@ -564,6 +621,11 @@ static void removed(void *d, struct wl_registry *r, uint32_t name) {
   worldr_host *h = d;
   worldr_host_clipboard_removed(h->clipboard, name);
   worldr_host_text_input_removed(h->text_input, name);
+  if (name == h->decoration_name && h->decoration_manager) {
+    zxdg_decoration_manager_v1_destroy(h->decoration_manager);
+    h->decoration_manager = NULL;
+    h->decoration_name = 0;
+  }
   if (name == h->fractional_name && h->fractional_manager) {
     detach_scaling(h);
     wp_fractional_scale_manager_v1_destroy(h->fractional_manager);
@@ -667,7 +729,7 @@ static int await_flag(worldr_host *h, const int *flag, int64_t deadline) {
   }
   return 0;
 }
-int worldr_host_open(const char *title, int w, int height, int fullscreen,
+int worldr_host_open(const char *title, int w, int height, uint32_t options,
                      int timeout_ms, worldr_host **out, char *err, int errlen) {
   const char *stage = "connection";
   int64_t deadline = now_ms() + timeout_ms;
@@ -681,6 +743,7 @@ int worldr_host_open(const char *title, int w, int height, int fullscreen,
   }
   h->width = w;
   h->height = height;
+  h->options = options;
   h->scale = 1;
   h->scale120 = 120;
   h->display = wl_display_connect(NULL);
@@ -725,10 +788,17 @@ int worldr_host_open(const char *title, int w, int height, int fullscreen,
   if (!h->toplevel)
     goto fail;
   xdg_toplevel_add_listener(h->toplevel, &top_listener, h);
+  if (h->decoration_manager) {
+    h->decoration = zxdg_decoration_manager_v1_get_toplevel_decoration(h->decoration_manager, h->toplevel);
+    zxdg_toplevel_decoration_v1_add_listener(h->decoration, &decoration_listener, h);
+    zxdg_toplevel_decoration_v1_set_mode(h->decoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+  }
+  if (options & HOST_OPTION_TRANSPARENT)
+    wl_surface_set_opaque_region(h->surface, NULL);
   xdg_toplevel_set_title(h->toplevel, title);
   xdg_toplevel_set_app_id(h->toplevel, "worldr");
   xdg_toplevel_set_min_size(h->toplevel, 640, 480);
-  if (fullscreen)
+  if (options & HOST_OPTION_FULLSCREEN)
     xdg_toplevel_set_fullscreen(h->toplevel, NULL);
   wl_surface_commit(h->surface);
   stage = "initial surface configure";
@@ -755,6 +825,16 @@ void worldr_host_close(worldr_host *h) {
     wl_keyboard_destroy(h->keyboard);
   if (h->seat)
     wl_seat_destroy(h->seat);
+  if (h->cursor_surface)
+    wl_surface_destroy(h->cursor_surface);
+  for (int i = 0; i < 8; i++)
+    if (h->cursor_themes[i]) wl_cursor_theme_destroy(h->cursor_themes[i]);
+  if (h->shm)
+    wl_shm_destroy(h->shm);
+  if (h->decoration)
+    zxdg_toplevel_decoration_v1_destroy(h->decoration);
+  if (h->decoration_manager)
+    zxdg_decoration_manager_v1_destroy(h->decoration_manager);
   if (h->toplevel)
     xdg_toplevel_destroy(h->toplevel);
   if (h->xdg_surface)
@@ -786,6 +866,38 @@ void worldr_host_close(worldr_host *h) {
   free(h);
 }
 void *worldr_host_display(worldr_host *h) { return h ? h->display : NULL; }
+int worldr_host_move(worldr_host *h) {
+  if (!h || h->closed || !h->toplevel || !h->seat || !h->pointer_serial) return 0;
+  xdg_toplevel_move(h->toplevel, h->seat, h->pointer_serial);
+  cancel_pointer(h);
+  return 1;
+}
+int worldr_host_resize(worldr_host *h, uint32_t edge) {
+  if (!h || h->closed || !h->toplevel || !h->seat || !h->pointer_serial) return 0;
+  switch (edge) {
+  case XDG_TOPLEVEL_RESIZE_EDGE_TOP: case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM:
+  case XDG_TOPLEVEL_RESIZE_EDGE_LEFT: case XDG_TOPLEVEL_RESIZE_EDGE_RIGHT:
+  case XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT: case XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT:
+  case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT: case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT:
+    break;
+  default: return 0;
+  }
+  xdg_toplevel_resize(h->toplevel, h->seat, h->pointer_serial, edge);
+  cancel_pointer(h);
+  return 1;
+}
+void worldr_host_minimize(worldr_host *h) {
+  if (h && !h->closed && h->toplevel) xdg_toplevel_set_minimized(h->toplevel);
+}
+void worldr_host_set_maximized(worldr_host *h, int maximized) {
+  if (!h || h->closed || !h->toplevel) return;
+  if (maximized) xdg_toplevel_set_maximized(h->toplevel);
+  else xdg_toplevel_unset_maximized(h->toplevel);
+}
+int worldr_host_maximized(worldr_host *h) { return h ? h->maximized : 0; }
+void worldr_host_title(worldr_host *h, const char *title) {
+  if (h && !h->closed && h->toplevel && title) xdg_toplevel_set_title(h->toplevel, title);
+}
 void *worldr_host_surface(worldr_host *h) { return h ? h->surface : NULL; }
 worldr_host_clipboard *worldr_host_clipboard_state(worldr_host *h) {
   return h ? h->clipboard : NULL;

@@ -71,6 +71,9 @@ static int scene_output_prepare(worldr_vk *vk, char *err, int errlen);
 static void scene_output_render(worldr_vk *vk, uint32_t index, const float *transform);
 typedef struct scene_glow scene_glow;
 static void scene_glow_release(worldr_vk *vk);
+static void scene_glow_invalidate(worldr_vk *vk);
+typedef struct scene_fluid scene_fluid;
+static void scene_fluid_release(worldr_vk *vk);
 
 struct worldr_scene {
 	VkCommandPool pool;
@@ -107,6 +110,7 @@ struct worldr_scene {
 	int atlas_ready;
 	int failed;
 	scene_glow *glow;
+	scene_fluid *fluid;
 };
 
 static void scene_drop_image(worldr_vk *vk, scene_image *image)
@@ -137,6 +141,7 @@ static void scene_release_targets(worldr_vk *vk)
 	worldr_scene *s = vk->scene;
 	if (!s) return;
 	scene_glow_release(vk);
+	scene_fluid_release(vk);
 	scene_shadow_release(vk);
 	scene_transparency_release(vk);
 	scene_output_release(vk);
@@ -617,6 +622,7 @@ static int scene_submit(worldr_vk *vk, VkSemaphore wait, VkSemaphore signal, cha
 	return scene_wait(vk, err, errlen);
 fail:
 	s->failed = 1;
+	scene_glow_invalidate(vk);
 	seterr(err, errlen, "scene command submission failed", r);
 	return -1;
 }
@@ -746,7 +752,7 @@ int worldr_vk_release_geometry(worldr_vk *vk,uint64_t id,char *err,int errlen)
 	scene_geometry **link=&vk->scene->geometry;
 	while (*link) {
 		scene_geometry *g=*link;
-		if (g->id==id) { *link=g->next;scene_drop_buffer(vk,&g->storage);free(g);return 0; }
+		if (g->id==id) { scene_glow_invalidate(vk);*link=g->next;scene_drop_buffer(vk,&g->storage);free(g);return 0; }
 		link=&g->next;
 	}
 	return 0;
@@ -859,6 +865,7 @@ static void scene_set_viewport(worldr_vk *vk,const float *v)
 }
 
 #include "vk_glow.h"
+#include "vk_fluid.h"
 #include "vk_output.h"
 #include "vk_dmabuf.h"
 #include "vk_shadow.h"
@@ -866,9 +873,10 @@ static void scene_set_viewport(worldr_vk *vk,const float *v)
 
 int worldr_vk_render_frame(worldr_vk *vk,int linear_color,const float *output_transform,
 	const worldr_scene_vertex *vertices,uint32_t vertex_count,const worldr_frame_draw *draws,
-	uint32_t draw_count,const float *clear,uint8_t *out_bgra,char *err,int errlen)
+	uint32_t draw_count,const worldr_fluid_field *fluids,uint32_t fluid_count,
+	const float *clear,uint8_t *out_bgra,char *err,int errlen)
 {
-	if (!vk || !vk->device || !clear || (vertex_count&&!vertices) || (draw_count&&!draws)) {
+	if (!vk || !vk->device || !clear || (vertex_count&&!vertices) || (draw_count&&!draws) || (fluid_count&&!fluids)) {
 		seterr(err,errlen,"invalid scene frame",VK_SUCCESS);return -1;
 	}
 	if (out_bgra && vk->mode!=WORLDR_VK_HEADLESS) {
@@ -903,6 +911,7 @@ int worldr_vk_render_frame(worldr_vk *vk,int linear_color,const float *output_tr
 	}
 	if (scene_wait(vk,err,errlen)) return -1;
 	if (scene_glow_prepare(vk,(unsigned)glow_count,err,errlen)) return -1;
+	if (scene_fluid_prepare(vk,fluids,fluid_count,err,errlen)) return -1;
 	if (vertex_count) {
 		VkDeviceSize bytes=(VkDeviceSize)vertex_count*sizeof(*vertices);
 		if (scene_buffer_reserve(vk,&s->vertices,bytes,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,err,errlen)) return -1;
@@ -922,6 +931,7 @@ int worldr_vk_render_frame(worldr_vk *vk,int linear_color,const float *output_tr
 	}
 	for (uint32_t i=0;i<draw_count;i++) {
 		const worldr_frame_draw *draw=&draws[i];
+		if(draw->kind==7 && draw->first>=fluid_count){seterr(err,errlen,"fluid field index invalid",VK_SUCCESS);return -1;}
 		if ((draw->kind==0) && ((uint64_t)draw->first+draw->count>vertex_count||draw->count%3)) {
 			seterr(err,errlen,"overlay vertex range invalid",VK_SUCCESS);return -1;
 		}
@@ -971,7 +981,9 @@ int worldr_vk_render_frame(worldr_vk *vk,int linear_color,const float *output_tr
 			for(int slot=0;slot<transparency_count;slot++)if(transparency_scopes[slot].first==i)scene_transparency_composite(vk,draw->viewport,(unsigned)slot);
 			continue;
 		}
-		if (draw->kind==0) {
+		if (draw->kind==7) {
+			scene_fluid_render(vk,&fluids[draw->first],draw->first);
+		} else if (draw->kind==0) {
 			if (!draw->count) continue;
 			scene_set_viewport(vk,full);
 			vkCmdBindPipeline(s->cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,s->overlay_pipeline);

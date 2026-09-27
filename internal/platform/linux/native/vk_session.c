@@ -25,6 +25,7 @@ static void scene_mark_failed(worldr_vk *vk);
 
 struct worldr_vk {
 	int mode;
+	int transparent;
 	int needs_recovery;
 	uint64_t memory_budget,memory_used,memory_peak;
 	uint32_t memory_images,memory_buffers;
@@ -492,7 +493,13 @@ static int create_swapchain(worldr_vk *vk, char *err, int errlen)
 	ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 	ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	ci.preTransform = caps.currentTransform;
-	for (uint32_t bit = 1; bit <= VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR; bit <<= 1) {
+	if (vk->transparent) {
+		if (!(caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)) {
+			seterr(err, errlen, "Wayland surface does not support premultiplied transparency", VK_ERROR_FEATURE_NOT_PRESENT);
+			return -1;
+		}
+		ci.compositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+	} else for (uint32_t bit = 1; bit <= VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR; bit <<= 1) {
 		if (caps.supportedCompositeAlpha & bit) { ci.compositeAlpha = bit; break; }
 	}
 	ci.presentMode = VK_PRESENT_MODE_FIFO_KHR; ci.clipped = VK_TRUE;
@@ -551,7 +558,7 @@ static int acquire_drm_display(worldr_vk *vk, int drm_fd, uint32_t connector_id,
 	return 0;
 }
 
-static int vk_create_ex(int mode, uint32_t prefer_w, uint32_t prefer_h, int drm_fd, uint32_t connector_id, void *wl_display, void *wl_surface,
+static int vk_create_ex(int mode, uint32_t prefer_w, uint32_t prefer_h, int drm_fd, uint32_t connector_id, void *wl_display, void *wl_surface, int transparent,
 			worldr_vk **out, char *err, int errlen)
 {
 	worldr_vk *vk = (worldr_vk *)calloc(1, sizeof(*vk));
@@ -560,6 +567,7 @@ static int vk_create_ex(int mode, uint32_t prefer_w, uint32_t prefer_h, int drm_
 		return -1;
 	}
 	vk->mode = mode;
+	vk->transparent = !!transparent;
 	vk->memory_budget=WORLDR_MEMORY_BUDGET;
 	vk->width = prefer_w;
 	vk->height = prefer_h;
@@ -626,7 +634,7 @@ static int vk_create_ex(int mode, uint32_t prefer_w, uint32_t prefer_h, int drm_
 
 int worldr_vk_create(int mode, uint32_t prefer_w, uint32_t prefer_h, worldr_vk **out, char *err, int errlen)
 {
-	return vk_create_ex(mode, prefer_w, prefer_h, -1, 0, NULL, NULL, out, err, errlen);
+	return vk_create_ex(mode, prefer_w, prefer_h, -1, 0, NULL, NULL, 0, out, err, errlen);
 }
 
 int worldr_vk_create_on_drm(int drm_fd, uint32_t connector_id, uint32_t prefer_w, uint32_t prefer_h,
@@ -636,14 +644,21 @@ int worldr_vk_create_on_drm(int drm_fd, uint32_t connector_id, uint32_t prefer_w
 		seterr(err, errlen, "VK_EXT_acquire_drm_display needs a master DRM fd and connector", VK_SUCCESS);
 		return -1;
 	}
-	return vk_create_ex(WORLDR_VK_DISPLAY, prefer_w, prefer_h, drm_fd, connector_id, NULL, NULL, out, err, errlen);
+	return vk_create_ex(WORLDR_VK_DISPLAY, prefer_w, prefer_h, drm_fd, connector_id, NULL, NULL, 0, out, err, errlen);
 }
 
 int worldr_vk_create_wayland(void *display, void *surface, uint32_t w, uint32_t h,
 	worldr_vk **out, char *err, int errlen)
 {
 	if (!display || !surface || !w || !h) { seterr(err, errlen, "invalid Wayland surface", VK_SUCCESS); return -1; }
-	return vk_create_ex(WORLDR_VK_WAYLAND, w, h, -1, 0, display, surface, out, err, errlen);
+	return vk_create_ex(WORLDR_VK_WAYLAND, w, h, -1, 0, display, surface, 0, out, err, errlen);
+}
+
+int worldr_vk_create_wayland_transparent(void *display, void *surface, uint32_t w, uint32_t h,
+	worldr_vk **out, char *err, int errlen)
+{
+	if (!display || !surface || !w || !h) { seterr(err, errlen, "invalid Wayland surface", VK_SUCCESS); return -1; }
+	return vk_create_ex(WORLDR_VK_WAYLAND, w, h, -1, 0, display, surface, 1, out, err, errlen);
 }
 
 int worldr_vk_resize(worldr_vk *vk,uint32_t w,uint32_t h,char *err,int errlen)

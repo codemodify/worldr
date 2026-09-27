@@ -25,7 +25,6 @@ const (
 	captureSurfaceButton
 	captureSurfaceTimeline
 	captureApplicationPlacement
-	captureForgetClosedPlacements
 	captureApplicationDock
 	captureWorkspacePan
 	captureApplicationResize
@@ -78,6 +77,9 @@ func (p pointerCapture) mask() fields {
 }
 
 func (w *Workspace) Handle(event experience.Event) bool {
+	if w.navigation != nil {
+		return w.handleNavigation(event)
+	}
 	// Ambient cursor effects observe the host-space pointer before modal,
 	// application, or workspace routing consumes it. Observation never claims
 	// the event or changes input ownership.
@@ -168,9 +170,6 @@ func (w *Workspace) Handle(event experience.Event) bool {
 		return true
 	}
 	if w.handleOverviewNavigation(event) {
-		return true
-	}
-	if w.handleApplicationControl(event) {
 		return true
 	}
 	if w.handleApplication(event) {
@@ -299,8 +298,13 @@ func (w *Workspace) movePointer(px, py float32) {
 	if p.kind == captureSurfaceTimeline {
 		w.scrubSurface(px, py)
 	}
-	if (p.kind == captureOrbit || p.kind == captureOrbitPad) && p.dragged {
+	if p.kind == captureOrbit && p.dragged {
 		w.preview(Action{Kind: OrbitCamera, DeltaX: x - p.lastX, DeltaY: y - p.lastY})
+	}
+	if p.kind == captureOrbitPad && p.dragged {
+		// The desktop controller is an inside-sphere look control: the view follows
+		// the hand instead of turning an object as if it were held from outside.
+		w.preview(Action{Kind: OrbitCamera, DeltaX: p.lastX - x, DeltaY: p.lastY - y})
 	}
 	if p.kind == captureWorkspacePan && p.dragged {
 		delta := p.panHorizontal.Mul(x - p.lastX).Add(p.panVertical.Mul(y - p.lastY))

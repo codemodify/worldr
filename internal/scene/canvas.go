@@ -70,6 +70,18 @@ func NewCanvas() (*Canvas, error) {
 	c.Reset(1, 1)
 	return c, nil
 }
+
+// NewCanvasWithFont uses an application-supplied OpenType font for retained GPU
+// text. The font is parsed once; drawing submits glyph quads without repainting
+// a framebuffer. The caller may release fontData after this returns.
+func NewCanvasWithFont(fontData []byte) (*Canvas, error) {
+	c := &Canvas{vertices: make([]render.Vertex, 0, 16384)}
+	if err := c.buildAtlasFont(fontData); err != nil {
+		return nil, err
+	}
+	c.Reset(1, 1)
+	return c, nil
+}
 func (c *Canvas) Atlas() render.Atlas { return c.atlas }
 func (c *Canvas) Reset(width, height int) {
 	c.width, c.height = width, height
@@ -85,6 +97,22 @@ func (c *Canvas) SetLinearColor(enabled bool) { c.linearColor = enabled }
 // SetOutputTransform selects the display-referred SDR finish. Reset retains it
 // alongside the frame-wide linear-color choice.
 func (c *Canvas) SetOutputTransform(output render.OutputTransform) { c.output = output }
+
+// Image records a retained image between the preceding and following canvas
+// operations. Bounds may extend outside the canvas, for example for a cover
+// wallpaper; the renderer clips them to the framebuffer.
+func (c *Canvas) Image(texture *render.Texture, x, y, width, height float32) {
+	if texture.ID() == 0 || width <= 0 || height <= 0 {
+		return
+	}
+	for _, v := range [...]float32{x, y, width, height, x + width, y + height} {
+		if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+			return
+		}
+	}
+	c.flushUI()
+	c.commands = append(c.commands, render.Command{Kind: render.ImageCommand, Image: render.Image{Texture: texture, Bounds: [4]float32{x, y, width, height}}})
+}
 
 func (c *Canvas) Size() (int, int) { return c.width, c.height }
 
@@ -109,6 +137,20 @@ func (c *Canvas) quad(x0, y0, x1, y1, depth, u0, v0, u1, v1 float32, col Color) 
 	c.triangle(a, b, d)
 	c.triangle(a, d, e)
 }
+
+// FillConvex fills a convex polygon in canvas pixels. The first point is the fan origin.
+func (c *Canvas) FillConvex(col Color, points ...[2]float32) {
+	if len(points) < 3 || col.A <= 0 {
+		return
+	}
+	origin := c.vertex(points[0][0], points[0][1], 0, c.whiteU, c.whiteV, col)
+	for i := 1; i+1 < len(points); i++ {
+		c.triangle(origin,
+			c.vertex(points[i][0], points[i][1], 0, c.whiteU, c.whiteV, col),
+			c.vertex(points[i+1][0], points[i+1][1], 0, c.whiteU, c.whiteV, col))
+	}
+}
+
 func (c *Canvas) Rect(x, y, width, height float32, col Color) {
 	if width <= 0 || height <= 0 || col.A <= 0 {
 		return
@@ -118,6 +160,41 @@ func (c *Canvas) Rect(x, y, width, height float32, col Color) {
 
 func (c *Canvas) Line(x1, y1, x2, y2, width float32, col Color) {
 	c.ShadedLine(x1, y1, x2, y2, width, col, col)
+}
+
+// SolidLine is a two-triangle stroke without an antialiased fringe. Dense
+// background sheets use it so a frame does not rebuild thousands of shaded edges.
+func (c *Canvas) SolidLine(x1, y1, x2, y2, width float32, col Color) {
+	if width <= 0 || col.A <= 0 {
+		return
+	}
+	dx, dy := x2-x1, y2-y1
+	length := float32(math.Hypot(float64(dx), float64(dy)))
+	if length < 1e-5 {
+		return
+	}
+	nx, ny := -dy/length*width/2, dx/length*width/2
+	a := c.vertex(x1+nx, y1+ny, 0, c.whiteU, c.whiteV, col)
+	b := c.vertex(x1-nx, y1-ny, 0, c.whiteU, c.whiteV, col)
+	d := c.vertex(x2-nx, y2-ny, 0, c.whiteU, c.whiteV, col)
+	e := c.vertex(x2+nx, y2+ny, 0, c.whiteU, c.whiteV, col)
+	c.triangle(a, b, d)
+	c.triangle(a, d, e)
+}
+
+// AppendVertices replays a previously recorded overlay sheet.
+func (c *Canvas) AppendVertices(verts []render.Vertex) {
+	c.vertices = append(c.vertices, verts...)
+}
+
+func (c *Canvas) VertexCount() int { return len(c.vertices) }
+
+// VertexSnapshot copies vertices appended since start.
+func (c *Canvas) VertexSnapshot(start int) []render.Vertex {
+	if start < 0 || start > len(c.vertices) {
+		return nil
+	}
+	return append([]render.Vertex(nil), c.vertices[start:]...)
 }
 
 // ShadedLine draws an antialiased line whose color changes across its width.

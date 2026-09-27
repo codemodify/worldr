@@ -1,5 +1,114 @@
 # Renderer performance observations
 
+## Skinned desktop optimizations, 2026-09-25
+
+The Advanced, Hologram and Merrick reference applications exposed two distinct
+costs: CPU repainting during interaction and repeated Vulkan effect passes even
+when window geometry was unchanged. Profiling the host's update/layout/scene
+recording alone took tens of microseconds per frame, so this pass concentrated
+on the more expensive painters and effects.
+
+The shared native UI painter now preserves concrete image types when clipping
+and blends directly into RGBA storage with the same integer rounding as the
+generic path. This lets Go's optimized glyph compositor work and removes
+hundreds of thousands of temporary color-interface allocations per repaint.
+Arbitrary `draw.Image` destinations retain the generic implementation.
+
+Advanced retains the latest two scaled photograph crops. Merrick retains its
+current composited portrait, including the panel beneath transparent portraits.
+Hologram retains its particle background and four non-overlapping composition
+bands; only affected bands repaint after an interaction. Its text halo uses
+summed areas to compute the same box filter. Resizing and skin replacement
+invalidate dependent caches, and published texture snapshots still own their
+pixels. These caches keep current results, not an expanding history of states.
+
+The Vulkan renderer retains glow seed/blur results when their exact shader
+inputs match. Geometry, transforms, viewport, emission and alpha participate in
+the key; client texture revisions do not affect the opaque glow occluder.
+Target recreation and geometry retirement invalidate results. Storage for keys
+is bounded to 640 KiB across four views; larger scenes and allocation failure
+use the original render path. Resolution, MSAA, shaders, blur radius and
+transparency settings are unchanged.
+
+Local evidence lives in `dist/performance/baseline` and
+`dist/performance/optimized`. The baseline application and shell executables
+were retained before editing. The repeated SDK baseline executable was rebuilt
+with an isolated overlay restoring its three original painter functions;
+benchmark workloads were identical. Measurements use an Intel Core Ultra 7
+265U and Intel Graphics (ARL), with Go 1.27.1 on Linux. CPU timings are short
+local observations, not a frame-rate or physical input-latency guarantee.
+The repeated application benchmarks use retained pre-cache test executables;
+some already contain the painter fast path. They measure the additional
+application cache benefit conservatively and are separate from the SDK table.
+
+Sequential benchmark runs used three samples per workload and a 300 ms target;
+the tables report medians. Application timings include repaint and `Snapshot`.
+Selection represents a complete pointer down/up interaction with two snapshots.
+
+| Application workload | Before | After | Speedup |
+| --- | ---: | ---: | ---: |
+| Advanced hover change | 70.57 ms | 7.15 ms | 9.9× |
+| Advanced selection | 121.22 ms | 15.04 ms | 8.1× |
+| Advanced reel update | 52.48 ms | 11.49 ms | 4.6× |
+| Hologram hover change | 53.00 ms | 5.70 ms | 9.3× |
+| Hologram selection | 104.05 ms | 29.13 ms | 3.6× |
+| Merrick hover change | 22.59 ms | 1.59 ms | 14.2× |
+| Merrick selection | 43.98 ms | 3.20 ms | 13.7× |
+| Merrick slider update | 22.77 ms | 1.61 ms | 14.2× |
+
+Idle `Update` plus `Snapshot` remains about 1–2 µs for Advanced/Hologram and
+2–3 µs for Merrick. An unchanged pointer position already avoided painting.
+Bytes allocated per hover update fell from 36.06 to 6.24 MB for Advanced,
+21.91 to 6.17 MB for Hologram, and 10.02 to 1.26 MB for Merrick. The additional
+retained image storage is bounded: two current composition framebuffers for
+Hologram and the current image crops for Advanced/Merrick.
+
+| Shared SDK workload | Before | After | Allocations before → after |
+| --- | ---: | ---: | ---: |
+| 18 Advanced controls | 7.78 ms | 1.90 ms | 320,825 → 344 |
+| 18 Hologram controls | 9.63 ms | 2.78 ms | 426,785 → 360 |
+| 18 Plasma controls | 9.81 ms | 2.65 ms | 417,827 → 344 |
+| 640×360 Hologram panel | 14.62 ms | 2.80 ms | 702,443 → 11 |
+| 20 text labels | 2.69 ms | 0.95 ms | 76,200 → 60 |
+
+All nine initial application PNGs and all three complete desktop captures are
+byte-identical between the retained baseline and optimized executables.
+The isolated glow fixture's five 60-frame trials had median render-return
+times of 4.180 ms with forced seed/blur work and 2.673 ms with retention (36%
+lower). A Hologram workspace fixture using the real layout, frame, title and
+transparency settings achieved 100% warm cache hits and medians of 16.02 versus
+15.34 ms, but the timing ranges overlapped. The complete desktop runs were also
+noisy and did not establish a reliable whole-frame improvement; the isolated
+percentage must not be applied to those desktops. Render-return measurements
+include driver submission and waiting, not GPU timestamps or input-to-photon
+latency. Earlier isolated samples had much lower absolute times but the same
+relative gain, another reason to avoid treating these as a hardware guarantee.
+
+Reproduce the CPU workloads with:
+
+```sh
+go test ./sdk/nativeui/v1 -run '^$' -bench BenchmarkPainter -benchmem -count=3
+go test ./examples/advanced-desktop ./examples/hologram-desktop ./examples/merrick-desktop \
+  -run '^$' -bench BenchmarkDesktop -benchmem -count=3
+go test ./internal/workspace -run '^$' -bench BenchmarkSkinnedDesktopFrame -benchmem
+```
+
+The isolated GPU comparison forces the original glow work on each frame in one
+case and permits retention in the other, at 1584×1248 with readback disabled:
+
+```sh
+WORLDR_TEST_GPU=1 go test ./internal/platform/linux/native -run '^$' \
+  -bench '^BenchmarkRetainedGlow(Workspace)?GPU$' -benchtime=60x -count=5
+```
+
+Set `CGO_CFLAGS=-I/path/to/Vulkan-Headers/include` for native builds when Vulkan
+headers are not installed system-wide. Pixel tests cover all four skins,
+clipping and translucent destinations, resized/cached application frames,
+GPU glow invalidation, camera isolation and target recreation.
+The final native `go test ./...` and `go vet ./...` passed, as did race checks
+for `sdk/nativeui/v1` and all three reference applications. The updated shell,
+reference application and skin-studio binaries were rebuilt in `bin/`.
+
 ## Hosted-AXIAL restart gate, 2026-09-18
 
 After AXIAL moved into the general application contract, the current CI-sized

@@ -19,6 +19,10 @@ func desktop(t *testing.T) *Workspace {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Most workspace tests exercise deterministic document and input behavior.
+	// Opt them out of autonomous ambient impacts; dedicated cat-collision tests
+	// enable the production-default preference explicitly.
+	w.environment.CatCollisions = false
 	t.Cleanup(func() { _ = w.Close() })
 	return w
 }
@@ -170,6 +174,15 @@ func TestDesktopStateRoundTripAndStudyStateRejection(t *testing.T) {
 }
 
 func TestDesktopEnvironmentSettingsStateCompatibilityAndTransactions(t *testing.T) {
+	raw, err := NewDesktop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !raw.environment.CatCollisions {
+		t.Fatal("desktop did not enable requested cat collision physics by default")
+	}
+	_ = raw.Close()
+
 	w := desktop(t)
 	w.environment = environmentSettings{}
 	data, err := w.SaveState()
@@ -181,10 +194,10 @@ func TestDesktopEnvironmentSettingsStateCompatibilityAndTransactions(t *testing.
 		t.Fatal(err)
 	}
 	environment, ok := encoded["environment"].(map[string]any)
-	if !ok || len(environment) != 3 {
+	if !ok || len(environment) != 4 {
 		t.Fatalf("desktop state omitted its Environment settings: %#v", encoded["environment"])
 	}
-	for _, name := range []string{"dna", "cat", "eyes"} {
+	for _, name := range []string{"dna", "cat", "cat_collisions", "eyes"} {
 		if value, present := environment[name]; !present || value != false {
 			t.Fatalf("desktop state did not encode %s=false explicitly: %#v", name, environment)
 		}
@@ -217,6 +230,23 @@ func TestDesktopEnvironmentSettingsStateCompatibilityAndTransactions(t *testing.
 	legacyLoaded := desktop(t)
 	if err := legacyLoaded.LoadState(legacy); err != nil || legacyLoaded.environment != defaultEnvironmentSettings() {
 		t.Fatalf("legacy state did not receive enabled Environment defaults: state=%+v err=%v", legacyLoaded.environment, err)
+	}
+
+	// Documents written before paw physics have an Environment object but no
+	// collision member. Decoding into the preinitialized defaults enables the new
+	// requested behavior without changing the desktop document version.
+	withLegacyEnvironment := make(map[string]any)
+	if err := json.Unmarshal(data, &withLegacyEnvironment); err != nil {
+		t.Fatal(err)
+	}
+	delete(withLegacyEnvironment["environment"].(map[string]any), "cat_collisions")
+	legacyEnvironment, err := json.Marshal(withLegacyEnvironment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyLoaded = desktop(t)
+	if err := legacyLoaded.LoadState(legacyEnvironment); err != nil || !legacyLoaded.environment.CatCollisions {
+		t.Fatalf("legacy Environment object did not receive enabled cat collision default: state=%+v err=%v", legacyLoaded.environment, err)
 	}
 
 	invalid := make(map[string]any)

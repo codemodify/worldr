@@ -293,11 +293,13 @@ func checkSessionPlacement(work experience.Experience, hub *applicationHub, key 
 		live = live || surface.Key == key
 	}
 	if !live && len(hub.Surfaces()) >= 32 {
-		return fmt.Errorf("workspace has reached its 32-window limit")
+		return fmt.Errorf("workspace already has 32 live or opening windows")
 	}
-	// At startup the experience is not attached yet. Reserve the union of
-	// remembered keys and surfaces already restored into the hub, not just
-	// the saved layout's currently empty slots.
+	if checker, ok := work.(experience.ApplicationPlacementChecker); ok {
+		return checker.CheckApplicationPlacement(key)
+	}
+	// Experiences without the placement-check contract retain the conservative
+	// legacy behavior because they do not advertise closed-slot recycling.
 	if layouts, ok := work.(interface{ SavedApplicationKeys() []string }); ok {
 		keys := make(map[string]bool)
 		for _, saved := range layouts.SavedApplicationKeys() {
@@ -309,9 +311,6 @@ func checkSessionPlacement(work experience.Experience, hub *applicationHub, key 
 		if !keys[key] && len(keys) >= 32 {
 			return fmt.Errorf("saved layout has reached its 32-window limit")
 		}
-	}
-	if checker, ok := work.(experience.ApplicationPlacementChecker); ok {
-		return checker.CheckApplicationPlacement(key)
 	}
 	return nil
 }

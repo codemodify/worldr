@@ -20,7 +20,11 @@ type glyph struct {
 }
 
 func (c *Canvas) buildAtlas() error {
-	parsed, err := opentype.Parse(goregular.TTF)
+	return c.buildAtlasFont(goregular.TTF)
+}
+
+func (c *Canvas) buildAtlasFont(data []byte) error {
+	parsed, err := opentype.Parse(data)
 	if err != nil {
 		return fmt.Errorf("parse embedded Go font: %w", err)
 	}
@@ -44,7 +48,7 @@ func (c *Canvas) buildAtlas() error {
 	}
 	penX, penY, rowHeight := 6, 2, 0
 	runes := make([]rune, 0, 850)
-	for _, span := range [][2]rune{{32, 126}, {160, 383}, {880, 1023}, {8192, 8303}, {8592, 8703}, {8704, 8959}, {0xfffd, 0xfffd}} {
+	for _, span := range [][2]rune{{32, 126}, {160, 383}, {768, 879}, {880, 1279}, {8192, 8303}, {8592, 8703}, {8704, 8959}, {9472, 9727}, {0xfffd, 0xfffd}} {
 		for r := span[0]; r <= span[1]; r++ {
 			runes = append(runes, r)
 		}
@@ -92,6 +96,10 @@ func (c *Canvas) buildAtlas() error {
 	}
 	return nil
 }
+
+// HasGlyph lets an application use a retained fallback image for scripts that
+// are not in the bounded atlas, without replacing unsupported text with blanks.
+func (c *Canvas) HasGlyph(r rune) bool { _, ok := c.glyphs[r]; return ok }
 
 // Close releases the font's glyph cache. It does not own GPU atlas resources.
 func (c *Canvas) Close() error {

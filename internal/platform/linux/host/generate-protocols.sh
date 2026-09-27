@@ -10,3 +10,5 @@ wayland-scanner client-header "$protocol_root/staging/fractional-scale/fractiona
 wayland-scanner private-code "$protocol_root/staging/fractional-scale/fractional-scale-v1.xml" fractional-scale-v1-protocol.c
 wayland-scanner client-header "$protocol_root/stable/viewporter/viewporter.xml" viewporter-client-protocol.h
 wayland-scanner private-code "$protocol_root/stable/viewporter/viewporter.xml" viewporter-protocol.c
+wayland-scanner client-header "$protocol_root/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml" xdg-decoration-client-protocol.h
+wayland-scanner private-code "$protocol_root/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml" xdg-decoration-protocol.c

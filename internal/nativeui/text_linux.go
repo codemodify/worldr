@@ -11,7 +11,7 @@ static PangoLayout *ui_layout(const char*text,const char*family,double size,int 
     PangoFontMap*map=pango_cairo_font_map_get_default();if(!map)return NULL;
     PangoContext*context=pango_font_map_create_context(map);if(!context)return NULL;
     PangoLayout*layout=pango_layout_new(context);g_object_unref(context);if(!layout)return NULL;
-    PangoFontDescription*font=pango_font_description_new();pango_font_description_set_family(font,family);pango_font_description_set_absolute_size(font,size*PANGO_SCALE);
+    PangoFontDescription*font=pango_font_description_from_string(family);pango_font_description_set_absolute_size(font,size*PANGO_SCALE);
     pango_layout_set_font_description(layout,font);pango_font_description_free(font);
     pango_layout_set_text(layout,text,-1);pango_layout_set_single_paragraph_mode(layout,TRUE);pango_layout_set_auto_dir(layout,TRUE);
     if(width>=0){pango_layout_set_width(layout,width*PANGO_SCALE);pango_layout_set_ellipsize(layout,PANGO_ELLIPSIZE_END);}

@@ -1,14 +1,139 @@
 package app
 
 import (
+	"encoding/json"
 	"io"
 	"path/filepath"
 	"testing"
 
 	"github.com/codemodify/worldr/internal/experience"
+	"github.com/codemodify/worldr/internal/plasma"
 	"github.com/codemodify/worldr/internal/platform/linux/host"
 	"github.com/codemodify/worldr/internal/workspace"
 )
+
+func TestPlatformEventsNormalizePlaygroundKeys(t *testing.T) {
+	for _, tc := range []struct {
+		symbol, code uint32
+		key          experience.Key
+	}{
+		{'m', 50, experience.KeyM}, {'M', 50, experience.KeyM},
+		{0xff0d, 28, experience.KeyEnter}, {0xff8d, 96, experience.KeyEnter},
+		{0xff09, 15, experience.KeyTab}, {0xfe20, 15, experience.KeyTab},
+		{0xff52, 103, experience.KeyUp}, {0xff54, 108, experience.KeyDown},
+	} {
+		var direct keyState
+		for _, pressed := range []bool{true, false} {
+			nested := hostEvent(host.Event{Kind: host.Key, Code: tc.symbol, Keycode: tc.code, Pressed: pressed, Time: 192})
+			for _, e := range []experience.Event{nested, direct.event(tc.code, pressed)} {
+				if e.Kind != experience.KeyInput || e.Key != tc.key || e.Keycode != tc.code || e.Pressed != pressed {
+					t.Fatalf("symbol %x / evdev %d did not preserve semantic key and raw edge: %+v", tc.symbol, tc.code, e)
+				}
+			}
+			if nested.Time != 192 {
+				t.Fatal("semantic normalization lost the native timestamp")
+			}
+		}
+	}
+}
+
+func TestPlatformEventsNormalizeNavigatorKeysAndModifierRelease(t *testing.T) {
+	for _, tc := range []struct {
+		lower, upper, code uint32
+		key                experience.Key
+	}{
+		{'h', 'H', 35, experience.KeyH},
+		{'j', 'J', 36, experience.KeyJ},
+		{'k', 'K', 37, experience.KeyK},
+	} {
+		for _, mods := range []experience.Modifiers{0, experience.ModShift, experience.ModControl | experience.ModAlt, experience.ModControl | experience.ModAlt | experience.ModShift} {
+			var direct keyState
+			for _, modifier := range []struct {
+				mask experience.Modifiers
+				code uint32
+			}{{experience.ModControl, 29}, {experience.ModAlt, 56}, {experience.ModShift, 42}} {
+				if mods.Has(modifier.mask) {
+					direct.event(modifier.code, true)
+				}
+			}
+			for _, pressed := range []bool{true, false} {
+				physical := direct.event(tc.code, pressed)
+				for _, symbol := range []uint32{tc.lower, tc.upper} {
+					nested := hostEvent(host.Event{Kind: host.Key, Code: symbol, Keycode: tc.code, Modifiers: uint8(mods), Pressed: pressed, Time: 194})
+					for _, event := range []experience.Event{nested, physical} {
+						if event.Kind != experience.KeyInput || event.Key != tc.key || event.Keycode != tc.code || event.Pressed != pressed || event.Modifiers != mods {
+							t.Fatalf("navigator key %s lost semantic identity, edge or modifiers: %+v", tc.key, event)
+						}
+					}
+					if nested.Time != 194 {
+						t.Fatal("normalizing navigator keys discarded the native timestamp")
+					}
+				}
+			}
+			// Shortcut ownership must not depend on modifiers still being held
+			// when the command key comes up.
+			direct.event(tc.code, true)
+			for _, code := range []uint32{29, 56, 42} {
+				direct.event(code, false)
+			}
+			event := direct.event(tc.code, false)
+			if event.Key != tc.key || event.Pressed || event.Modifiers != 0 || event.Depressed != 0 {
+				t.Fatalf("navigator key release retained old modifiers: %+v", event)
+			}
+		}
+	}
+}
+
+func TestPlaygroundBindingsWorkThroughNativeInputConversion(t *testing.T) {
+	for _, path := range []string{"nested", "direct"} {
+		t.Run(path, func(t *testing.T) {
+			p, err := plasma.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer p.Close()
+			var direct keyState
+			stroke := func(symbol, code uint32) {
+				t.Helper()
+				for _, pressed := range []bool{true, false} {
+					e := hostEvent(host.Event{Kind: host.Key, Code: symbol, Keycode: code, Pressed: pressed})
+					if path == "direct" {
+						e = direct.event(code, pressed)
+					}
+					if handled := p.Handle(e); pressed && !handled {
+						t.Fatalf("playground did not consume native %s press (%d)", e.Key, code)
+					}
+				}
+			}
+			check := func(wantRead bool) {
+				t.Helper()
+				data, err := p.SaveState()
+				if err != nil {
+					t.Fatal(err)
+				}
+				var state struct {
+					Read   bool
+					Layout struct {
+						Motion bool
+						Active int
+					}
+				}
+				if err := json.Unmarshal(data, &state); err != nil {
+					t.Fatal(err)
+				}
+				if state.Layout.Motion || state.Layout.Active != 0 || state.Read != wantRead {
+					t.Fatalf("native Tab/M/Enter did not select Inbox, disable motion and toggle Read: %+v", state)
+				}
+			}
+			stroke(0xff09, 15)
+			stroke('m', 50)
+			stroke(0xff0d, 28)
+			check(true)
+			stroke(0xff8d, 96)
+			check(false)
+		})
+	}
+}
 
 func TestPlatformEventsUseSemanticKeys(t *testing.T) {
 	for _, code := range []uint32{'z', 'Z'} {

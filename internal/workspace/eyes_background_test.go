@@ -108,8 +108,18 @@ func TestBackgroundEyesRenderThreeDeterministicToggleableOrnaments(t *testing.T)
 	defer canvas.Close()
 	w := &Workspace{
 		desktop: true, canvas: canvas, scale: 1,
+		viewport:       scene.Viewport{X: 24, Y: 48, Width: 1310, Height: 828},
 		environment:    environmentSettings{Eyes: true},
 		ambientPointer: ambientPointerState{x: 1260, y: 780, valid: true},
+	}
+	placed := w.placedBackgroundEyes()
+	for index, eye := range placed {
+		if eye.radius != 18 || eye.x < 1200 || eye.y > 100 || eye.x+eye.radius+5 > 1334 {
+			t.Fatalf("eye %d is not a small uniform upper-right ornament: %+v", index, eye)
+		}
+		if index > 0 && eye.y != placed[0].y {
+			t.Fatal("eyes did not share one aligned top-right row")
+		}
 	}
 
 	renderEyes := func() []render.Vertex {
@@ -165,6 +175,8 @@ func TestBackgroundEyesObserveApplicationMotionWithoutTakingCapture(t *testing.T
 
 func TestBackgroundEyesDrawAfterBackdropAndBeforeApplications(t *testing.T) {
 	w := desktop(t)
+	w.environment.DNA = true
+	w.environment.Eyes = true
 	apps := desktopApplications(t, w)
 	frame := w.Draw(1440, 900)
 	backdropIndex, _, _ := dnaBackgroundCommand(t, w, frame)

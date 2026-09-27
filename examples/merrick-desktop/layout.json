@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "experience_id": "worldr.workspace",
+  "state": {
+    "version": 1,
+    "camera": {
+      "yaw": 0.93,
+      "pitch": 0.32,
+      "zoom": 0.27
+    },
+    "presentation": "cinematic",
+    "applications": {
+      "behind": false,
+      "reading": false,
+      "wide": false,
+      "active": "sdk:dev.worldr.merrick-desktop/records",
+      "selected": 2,
+      "layouts": [
+        {
+          "key": "sdk:dev.worldr.merrick-desktop/calendar",
+          "x": -4.18639,
+          "y": 0.17923,
+          "depth": 0,
+          "width": 190,
+          "height": 720
+        },
+        {
+          "key": "sdk:dev.worldr.merrick-desktop/records",
+          "x": -1.21718,
+          "y": 1.15765,
+          "depth": -0.25,
+          "width": 890,
+          "height": 320
+        },
+        {
+          "key": "sdk:dev.worldr.merrick-desktop/archive",
+          "x": 0.74525,
+          "y": -0.86524,
+          "depth": 0.1,
+          "width": 340,
+          "height": 460
+        },
+        {
+          "key": "sdk:dev.worldr.merrick-desktop/report",
+          "x": 1.84298,
+          "y": -1.22436,
+          "depth": -0.05,
+          "width": 340,
+          "height": 460
+        },
+        {
+          "key": "sdk:dev.worldr.merrick-desktop/notes",
+          "x": 2.90497,
+          "y": -0.88069,
+          "depth": -0.2,
+          "width": 340,
+          "height": 460
+        },
+        {
+          "key": "sdk:dev.worldr.merrick-desktop/programs",
+          "x": 4.58327,
+          "y": 2.28523,
+          "depth": 0,
+          "width": 460,
+          "height": 86
+        },
+        {
+          "key": "sdk:dev.worldr.merrick-desktop/messages",
+          "x": 4.39123,
+          "y": -1.99718,
+          "depth": 0,
+          "width": 230,
+          "height": 120
+        }
+      ]
+    },
+    "environment": {
+      "dna": true,
+      "cat": true,
+      "cat_collisions": true,
+      "eyes": true
+    }
+  }
+}

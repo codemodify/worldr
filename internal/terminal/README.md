@@ -34,6 +34,17 @@ Cursor snapshots preserve application-requested visibility, shape and blink
 state. The native provider honors blinking and steady block, underline and bar
 styles from DECSCUSR, while unfocused cursors remain steady outlines.
 
+`Search(query, caseSensitive)` streams primary screen and scrollback rows into a
+bounded, immutable result set (4096 matches, queries up to 4096 UTF-8 bytes).
+Literal matching supports Unicode simple case folding, overlapping matches,
+and correct terminal columns for wide and combining characters. Physical wraps
+remain separate; canonical normalization and multi-code-point folding are not
+inferred. `results.Next(current, backwards)` cycles results, starting with -1.
+`RevealMatch` validates the retained row before scrolling, so evicted or repainted
+matches cannot jump to unrelated content. Poll afterward for the new viewport.
+Searching does not poll, send shell input, or move the cursor; alternate-screen
+applications return no search results and reject history navigation.
+
 Tests use real PTYs, shell line discipline, foreground job control, bracketed
 paste, XKB composition, mouse reporting and Vim editing. Tests skip optional Vim
 or Bash integrations when those executables are unavailable.

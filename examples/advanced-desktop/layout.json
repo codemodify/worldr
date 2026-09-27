@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "experience_id": "worldr.workspace",
+  "state": {
+    "version": 1,
+    "camera": {
+      "yaw": 0.93,
+      "pitch": 0.32,
+      "zoom": 0.3
+    },
+    "presentation": "cinematic",
+    "applications": {
+      "behind": false,
+      "reading": false,
+      "wide": false,
+      "active": "sdk:dev.worldr.advanced-desktop/studio",
+      "selected": 1,
+      "layouts": [
+        {
+          "key": "sdk:dev.worldr.advanced-desktop/studio",
+          "x": 0,
+          "y": 0,
+          "depth": 0,
+          "width": 1200,
+          "height": 960
+        }
+      ]
+    },
+    "environment": {
+      "dna": true,
+      "cat": true,
+      "cat_collisions": true,
+      "eyes": true
+    }
+  }
+}

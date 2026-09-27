@@ -28,6 +28,14 @@ func (w *Workspace) initializeBackground() error {
 }
 
 func (w *Workspace) updateBackground(dt time.Duration) {
+	// Hidden ambient actors must not collide with the authored desktop's
+	// windows. Drop old visual events and contact baselines even on a zero-time
+	// update, so returning to the ambient desktop starts with fresh contacts.
+	if w.skinBackdropVisible() {
+		w.energyWallImpacts = w.energyWallImpacts[:0]
+		w.resetAmbientCatCollisions()
+		return
+	}
 	if dt <= 0 {
 		return
 	}
@@ -35,28 +43,82 @@ func (w *Workspace) updateBackground(dt time.Duration) {
 	// the delta first so even a very long interruption cannot overflow it.
 	w.backgroundPhase = (w.backgroundPhase + dt%dnaRotationPeriod) % dnaRotationPeriod
 	w.ambientCat.update(dt)
+	w.updateAmbientCatCollisions()
 	w.updateEnergyNet(dt)
 }
 
+// roomPlacement maps a landmark's local axes onto the desktop. Local X runs
+// along the window plane, local Y stands up in the view, and local Z points
+// toward the rear wall. The result turns with the room because the same camera
+// draws the windows.
+func roomPlacement(center scene.Vec3) scene.Mat4 {
+	right, up, normal := applicationBasis()
+	return scene.Mat4{
+		right.X, right.Y, right.Z, 0,
+		up.X, up.Y, up.Z, 0,
+		normal.X, normal.Y, normal.Z, 0,
+		center.X, center.Y, center.Z, 1,
+	}
+}
+
+func dnaLandmarkCenter() scene.Vec3 {
+	right, _, normal := applicationBasis()
+	// Left of the working plane and in front of the rear weave, so the helix is
+	// a place you can turn toward rather than a picture stuck to the glass.
+	return right.Mul(-4.4).Add(normal.Mul(-1.5))
+}
+
+func catLandmarkCenter() scene.Vec3 {
+	_, _, normal := applicationBasis()
+	return normal.Mul(-0.6)
+}
+
+func (w *Workspace) ambientQuiet() bool {
+	return w.desktop && (w.m.applicationState.Reading || w.m.applicationReading)
+}
+
 func (w *Workspace) drawBackground() {
-	w.drawEnergyNet()
+	if w.drawSkinBackdrop() {
+		return
+	}
+	quiet := w.ambientQuiet()
+	if !quiet {
+		w.drawEnergyNet()
+	}
 	if w.backgroundScene == nil {
 		return
 	}
 	strand := w.backgroundScene.Node(w.dnaNode)
 	strand.Hidden = !w.environment.DNA
-	strand.Color = scene.ColorHex(0x90d8ed, .34)
-	strand.Glow = [3]float32{.01, .052, .075}
+	alpha := float32(.28)
+	glow := [3]float32{.008, .04, .06}
+	if quiet {
+		// Read keeps a faint landmark so the page still has a room behind it.
+		alpha = .06
+		glow = [3]float32{.002, .01, .016}
+	}
+	strand.Color = scene.ColorHex(0x90d8ed, alpha)
+	strand.Glow = glow
 	angle := float32(2 * math.Pi * float64(w.backgroundPhase) / float64(dnaRotationPeriod))
-	// Keep the helix's long axis vertical at the center of the viewport. The
-	// camera-independent framing keeps it a backdrop as windows move in depth or
-	// enter Read mode; rotating around its own axis never orbits it around UI.
-	strand.Transform = scene.RotateY(angle)
-	w.ambientCat.setVisible(w.environment.Cat)
-	camera := scene.Camera{Eye: scene.Vec3{Z: 15.5}, Up: scene.Vec3{Y: 1}, FOV: .69, Near: .1, Far: 40}
-	// Ordered camera passes clear depth separately. This pass is always before
-	// workspace content, so even a window placed far back covers the backdrop. The
-	// background scene is never consulted for picking or pointer capture.
-	w.backgroundScene.Draw(w.canvas, camera, w.viewport)
-	w.drawBackgroundEyes()
+	strand.Transform = roomPlacement(dnaLandmarkCenter()).Mul(scene.RotateY(angle)).Mul(scene.Scale(.38, .38, .38))
+	local := scene.Identity()
+	var catRoot *scene.Node
+	if w.ambientCat != nil {
+		w.ambientCat.setVisible(w.environment.Cat && !quiet)
+		catRoot = w.backgroundScene.Node(w.ambientCat.root)
+		if catRoot != nil {
+			w.ambientCat.syncPose()
+			local = catRoot.Transform
+			catRoot.Transform = roomPlacement(catLandmarkCenter()).Mul(local)
+		}
+	}
+	// This pass is before workspace content and is never picked. It uses the
+	// desktop camera, so looking around carries the landmarks with the windows.
+	w.backgroundScene.Draw(w.canvas, w.camera, w.viewport)
+	if catRoot != nil {
+		catRoot.Transform = local
+	}
+	if !quiet {
+		w.drawBackgroundEyes()
+	}
 }

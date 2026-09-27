@@ -304,7 +304,7 @@ func TestApplicationDockActivatesExistingFilesWithoutMovingItsSpace(t *testing.T
 	}
 }
 
-func TestApplicationDockRollsBackNewSurfaceWhenSavedLayoutIsFull(t *testing.T) {
+func TestApplicationDockRecyclesOneClosedSlotWhenSavedLayoutIsFull(t *testing.T) {
 	w, apps := desktopDock(t, "note")
 	d := w.Document()
 	for i := range d.View.Application.Layouts {
@@ -313,15 +313,25 @@ func TestApplicationDockRollsBackNewSurfaceWhenSavedLayoutIsFull(t *testing.T) {
 	d.View.Application.Active = d.View.Application.Layouts[0].Key
 	d.View.Application.Selected = 1
 	w.install(d, false)
-	before := w.Document()
+	beforeKeys := w.SavedApplicationKeys()
 
 	x, y := dockPoint(w, 7)
 	pointer(w, experience.PointerDown, x, y)
 	pointer(w, experience.PointerUp, x, y)
-	if len(apps.closed) != 1 || len(apps.surfaces) != 0 || w.Document() != before {
-		t.Fatalf("failed dock launch leaked a hidden surface or changed the view: closed=%v surfaces=%d", apps.closed, len(apps.surfaces))
+	if len(apps.closed) != 0 || len(apps.surfaces) != 1 || w.m.applicationState.index(apps.surfaces[0].Key) < 0 {
+		t.Fatalf("dock launch did not use a recyclable slot: closed=%v surfaces=%d", apps.closed, len(apps.surfaces))
 	}
-	if !strings.Contains(w.applicationNotice, "32-window limit") && !strings.Contains(w.applicationNotice, "not available") {
-		t.Fatalf("capacity failure was not explained: %q", w.applicationNotice)
+	remaining := make(map[string]bool)
+	for _, key := range w.SavedApplicationKeys() {
+		remaining[key] = true
+	}
+	removed := 0
+	for _, key := range beforeKeys {
+		if !remaining[key] {
+			removed++
+		}
+	}
+	if removed != 1 || remaining[beforeKeys[0]] || !remaining[beforeKeys[1]] || w.applicationNotice != "" {
+		t.Fatalf("dock launch recycled %d closed slots or left a capacity notice %q", removed, w.applicationNotice)
 	}
 }

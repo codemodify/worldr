@@ -7,6 +7,11 @@
 // into workspace surfaces. Standard output is reserved for the framed protocol;
 // applications should write diagnostics to standard error.
 //
+// Applications may set Manifest.ControlThemes and implement ControlThemeHandler
+// to receive the workspace's saved control family and shape, including live
+// Settings changes. The request is additive; applications which do not advertise
+// support continue to own their presentation.
+//
 // Version 1 deliberately exposes data rather than renderer handles. Texture and
 // mesh IDs belong to one process connection, surface IDs belong to one running
 // application, and stable surface keys are the only identities suitable for a

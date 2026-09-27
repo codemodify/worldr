@@ -17,6 +17,7 @@ import (
 	"golang.org/x/image/math/fixed"
 
 	nativeapp "github.com/codemodify/worldr/sdk/nativeapp/v1"
+	nativeui "github.com/codemodify/worldr/sdk/nativeui/v1"
 )
 
 const (
@@ -34,18 +35,40 @@ type instrument struct {
 	elapsed, paintClock time.Duration
 	running, focused    bool
 	closed, retired     bool
+	ui                  *nativeui.Painter
 }
 
 func (a *instrument) Manifest() nativeapp.Manifest {
 	return nativeapp.Manifest{
 		ID: "dev.worldr.example.instrument", Name: "Orbital instrument",
-		Description: "A bounded native-app SDK v1 telemetry example",
+		Description: "A bounded native-app SDK v1 telemetry example", ControlThemes: true,
 	}
 }
 
 func (a *instrument) Start(host nativeapp.Host) error {
 	a.host, a.running, a.revision = host, true, 1
+	var err error
+	a.ui, err = nativeui.NewPainter(nativeui.DefaultTheme())
+	if err != nil {
+		return err
+	}
 	a.image = image.NewRGBA(image.Rect(0, 0, min(760, host.MaxSurfaceWidth), min(460, host.MaxSurfaceHeight)))
+	a.paint(true)
+	return nil
+}
+
+func (a *instrument) SetControlTheme(preference nativeapp.ControlTheme) error {
+	if a.closed || a.ui == nil {
+		return nil
+	}
+	theme, err := nativeui.FromControlTheme(preference)
+	if err != nil {
+		return err
+	}
+	if err := a.ui.SetTheme(theme); err != nil {
+		return err
+	}
+	a.revision++
 	a.paint(true)
 	return nil
 }
@@ -156,7 +179,12 @@ func (a *instrument) CloseSurface(id nativeapp.SurfaceID) error {
 	return nil
 }
 
-func (a *instrument) Close() error { return nil }
+func (a *instrument) Close() error {
+	if a.ui != nil {
+		return a.ui.Close()
+	}
+	return nil
+}
 
 func (a *instrument) paint(full bool) {
 	bounds := a.image.Bounds()
@@ -192,13 +220,16 @@ func (a *instrument) paint(full bool) {
 		lastX, lastY = x, y
 	}
 	button := image.Rect(28, h-54, 174, h-24)
-	draw.Draw(a.image, button, &image.Uniform{C: color.RGBA{8, 65, 83, 255}}, image.Point{}, draw.Src)
-	strokeRect(a.image, button, color.RGBA{25, 205, 235, 255}, 1)
 	state := "PAUSE STREAM"
+	icon := nativeui.IconPause
 	if !a.running {
 		state = "RESUME STREAM"
+		icon = nativeui.IconPlay
 	}
-	label(a.image, 42, h-34, state, color.RGBA{120, 245, 255, 255})
+	_ = a.ui.DrawButton(a.image, nativeui.Control{
+		ID: "run", Kind: nativeui.KindButton, Bounds: button, Label: state, Icon: icon,
+		State: nativeui.State{Focused: a.focused, Selected: a.running},
+	})
 	focus := "REMOTE"
 	if a.focused {
 		focus = "FOCUSED"

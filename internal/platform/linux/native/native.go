@@ -228,6 +228,21 @@ func OpenVKWayland(display, surface unsafe.Pointer, w, h uint32) (*VK, error) {
 	return &VK{ptr: ptr}, nil
 }
 
+// OpenVKWaylandTransparent presents premultiplied-alpha pixels to the host
+// compositor, including after resize/recovery. Unlike OpenVKWayland, it requires
+// transparency support and reports an error if the surface cannot provide it.
+// Use a LinearColor frame and a transparent clear for correctly associated
+// pixels through MSAA, HDR intermediates, and the final SDR color transform.
+// The host must not mark transparent areas as opaque.
+func OpenVKWaylandTransparent(display, surface unsafe.Pointer, w, h uint32) (*VK, error) {
+	errb := make([]C.char, errBuf)
+	var ptr *C.worldr_vk
+	if C.worldr_vk_create_wayland_transparent(display, surface, C.uint32_t(w), C.uint32_t(h), &ptr, &errb[0], C.int(len(errb))) != 0 {
+		return nil, cErr(errb)
+	}
+	return &VK{ptr: ptr}, nil
+}
+
 // Resize rebuilds render targets while preserving the device, atlas and geometry.
 func (v *VK) Resize(w, h uint32) error {
 	if v == nil || v.ptr == nil {

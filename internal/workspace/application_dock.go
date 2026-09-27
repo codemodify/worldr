@@ -23,16 +23,21 @@ var applicationDockEntries = [...]applicationDockEntry{
 	{kind: "axial", label: "AXIAL", hint: "Open the native 3D engineering study"},
 }
 
-var applicationDockBounds = box{1348, 112, 76, 676}
+var applicationDockBounds = box{1364, 112, 60, 506}
 
 const (
-	applicationDockTop    = float32(126)
-	applicationDockPitch  = float32(72)
-	applicationDockButton = float32(54)
+	applicationDockTop    = float32(118)
+	applicationDockPitch  = float32(56)
+	applicationDockButton = float32(46)
 )
 
 func applicationDockButtonBounds(index int) box {
-	return box{1359, applicationDockTop + float32(index)*applicationDockPitch, applicationDockButton, applicationDockButton}
+	return box{
+		applicationDockBounds.x + (applicationDockBounds.w-applicationDockButton)/2,
+		applicationDockTop + float32(index)*applicationDockPitch,
+		applicationDockButton,
+		applicationDockButton,
+	}
 }
 
 func applicationDockIndexAt(x, y float32) int {
@@ -42,6 +47,20 @@ func applicationDockIndexAt(x, y float32) int {
 		}
 	}
 	return -1
+}
+
+func (w *Workspace) applicationDockIndexAt(x, y float32) int {
+	if w.skinDesktopChromeVisible() {
+		return w.skinDesktopTargetAt(x, y)
+	}
+	return applicationDockIndexAt(x, y)
+}
+
+func (w *Workspace) applicationDockContains(x, y float32) bool {
+	if w.skinDesktopChromeVisible() {
+		return w.skinDesktopContains(x, y)
+	}
+	return applicationDockBounds.contains(x, y)
 }
 
 func (w *Workspace) applicationDockVisible() bool {
@@ -124,18 +143,21 @@ func (w *Workspace) drawApplicationDock() {
 	// A second chassis edge and small circuit ticks frame the fixed app rail
 	// without moving content or changing its hit targets.
 	flare := float32(1)
-	w.rect(applicationDockBounds.x, applicationDockBounds.y, applicationDockBounds.w, applicationDockBounds.h, bg, .78)
-	w.line(1350, 119, 1350, 772, 1, muted, .24)
-	w.line(1422, 119, 1422, 772, 1, teal, .22+.22*flare)
-	w.line(1360, 119, 1380, 119, 2, teal, .45+.35*flare)
-	w.text(1360, 101, 10, "LAUNCHER", muted, .9)
+	b := applicationDockBounds
+	left, right := b.x+2, b.x+b.w-2
+	top, bottom := b.y+7, b.y+b.h-2
+	w.rect(b.x, b.y, b.w, b.h, bg, .78)
+	w.line(left, top, left, bottom, 1, muted, .24)
+	w.line(right, top, right, bottom, 1, teal, .22+.22*flare)
+	w.line(b.x+8, top, b.x+26, top, 2, teal, .45+.35*flare)
+	w.text(b.x+8, b.y-11, 10, "LAUNCHER", muted, .9)
 	if flare > .05 {
-		w.line(1343, 147, 1350, 140, 1, teal, .35*flare)
-		w.line(1343, 147, 1343, 185, 1, teal, .28*flare)
-		w.line(1394, 772, 1422, 772, 2, teal, .55*flare)
+		w.line(b.x-5, b.y+35, left, b.y+28, 1, teal, .35*flare)
+		w.line(b.x-5, b.y+35, b.x-5, b.y+67, 1, teal, .28*flare)
+		w.line(b.x+b.w-30, bottom, right, bottom, 2, teal, .55*flare)
 		for i := range applicationDockEntries {
-			y := applicationDockTop + 3 + float32(i)*applicationDockPitch
-			w.line(1417, y, 1422, y, 1, teal, .22*flare)
+			y := applicationDockButtonBounds(i).y + 3
+			w.line(right-5, y, right, y, 1, teal, .22*flare)
 		}
 	}
 
@@ -281,10 +303,13 @@ func (w *Workspace) handleApplicationDock(event experience.Event) bool {
 		return false
 	}
 	if w.pointer.kind == captureApplicationDock {
+		if w.pointer.scale != w.scale || w.pointer.ox != w.ox || w.pointer.oy != w.oy {
+			w.pointer.dragged = true
+		}
 		switch event.Kind {
 		case experience.PointerMove:
 			w.movePointer(event.X, event.Y)
-			w.applicationDockHover = applicationDockIndexAt(w.pointer.lastX, w.pointer.lastY)
+			w.applicationDockHover = w.applicationDockIndexAt(w.pointer.lastX, w.pointer.lastY)
 			return true
 		case experience.PointerUp:
 			if applicationButton(event) != 272 {
@@ -293,7 +318,7 @@ func (w *Workspace) handleApplicationDock(event experience.Event) bool {
 			w.movePointer(event.X, event.Y)
 			p := w.pointer
 			w.pointer = pointerCapture{}
-			index := applicationDockIndexAt(p.lastX, p.lastY)
+			index := w.applicationDockIndexAt(p.lastX, p.lastY)
 			w.applicationDockHover = index
 			if !p.dragged && index == p.dockIndex {
 				w.launchApplicationDockEntry(index)
@@ -313,8 +338,8 @@ func (w *Workspace) handleApplicationDock(event experience.Event) bool {
 		return false
 	}
 	x, y := (event.X-w.ox)/w.scale, (event.Y-w.oy)/w.scale
-	inside := applicationDockBounds.contains(x, y)
-	index := applicationDockIndexAt(x, y)
+	inside := w.applicationDockContains(x, y)
+	index := w.applicationDockIndexAt(x, y)
 	switch event.Kind {
 	case experience.PointerMove:
 		w.applicationDockHover = index
@@ -347,6 +372,10 @@ func (w *Workspace) handleApplicationDock(event experience.Event) bool {
 }
 
 func (w *Workspace) launchApplicationDockEntry(index int) {
+	if index >= skinDesktopDockIndex {
+		w.launchSkinDesktopEntry(index)
+		return
+	}
 	if index < 0 || index >= len(applicationDockEntries) {
 		return
 	}

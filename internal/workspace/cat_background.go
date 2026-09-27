@@ -12,16 +12,35 @@ import (
 const (
 	ambientCatCycle        = 30 * time.Second
 	ambientCatStrideCycles = 40
+	ambientCatScale        = float32(.58)
+	ambientCatSwatDuration = 440 * time.Millisecond
 )
+
+type ambientCatActivity uint8
+
+const (
+	ambientCatRunning ambientCatActivity = iota
+	ambientCatPaused
+	ambientCatNapping
+)
+
+type ambientCatBehaviorState struct {
+	routePhase time.Duration
+	activity   ambientCatActivity
+	progress   float32
+	blend      float32
+}
 
 // ambientCat is a retained low-poly rig for the desktop background scene. Its
 // root is unpickable, so every child remains decorative even though the rig is
 // made from ordinary 3D scene nodes. Geometry is immutable and shared by all
 // repeated body, limb and ear instances; animation changes transforms only.
 type ambientCat struct {
-	scene *scene.Scene
-	phase time.Duration
-	shown bool
+	scene         *scene.Scene
+	phase         time.Duration
+	shown         bool
+	swatRemaining time.Duration
+	swatLeg       int
 
 	root, body, chest, head scene.NodeID
 	legs                    [4]ambientCatLeg
@@ -59,7 +78,7 @@ func newAmbientCat(background *scene.Scene) (*ambientCat, error) {
 		return nil, fmt.Errorf("build ambient cat ears: %w", err)
 	}
 
-	c := &ambientCat{scene: background, shown: true, bodyMesh: body, limbMesh: limb, earMesh: ear}
+	c := &ambientCat{scene: background, shown: true, swatLeg: -1, bodyMesh: body, limbMesh: limb, earMesh: ear}
 	c.root = c.add(0, scene.Node{Unpickable: true})
 	c.body = c.addPart(c.root, body, scene.Scale(1, .42, .36), 0x69b9ca, .78, false)
 	c.chest = c.addPart(c.root, body, scene.Translate(.58, .04, 0).Mul(scene.Scale(.48, .47, .41)), 0x83cedb, .8, false)
@@ -126,7 +145,22 @@ func (c *ambientCat) update(dt time.Duration) {
 	if c == nil || dt <= 0 {
 		return
 	}
+	if c.swatRemaining > 0 {
+		if dt >= c.swatRemaining {
+			c.swatRemaining, c.swatLeg = 0, -1
+		} else {
+			c.swatRemaining -= dt
+		}
+	}
 	c.phase = (c.phase + dt%ambientCatCycle) % ambientCatCycle
+	c.syncPose()
+}
+
+func (c *ambientCat) triggerSwat(leg int) {
+	if c == nil || leg < 0 || leg > 1 {
+		return
+	}
+	c.swatLeg, c.swatRemaining = leg, ambientCatSwatDuration
 	c.syncPose()
 }
 
@@ -142,6 +176,51 @@ func (c *ambientCat) setVisible(visible bool) {
 
 func (c *ambientCat) visible() bool {
 	return c != nil && c.shown
+}
+
+// ambientCatBehavior maps one bounded wall-clock cycle onto one complete route.
+// Rest intervals hold a route point rather than accumulating numerical state, so
+// split and combined updates always resolve to the same position and pose.
+func ambientCatBehavior(phase time.Duration) ambientCatBehaviorState {
+	phase %= ambientCatCycle
+	if phase < 0 {
+		phase += ambientCatCycle
+	}
+	seconds := phase.Seconds()
+	state := ambientCatBehaviorState{activity: ambientCatRunning}
+	switch {
+	case seconds < 8:
+		state.routePhase = time.Duration(seconds / 8 * 10 * float64(time.Second))
+		state.progress = float32(seconds / 8)
+	case seconds < 10:
+		state.routePhase = 10 * time.Second
+		state.activity = ambientCatPaused
+		state.progress = float32((seconds - 8) / 2)
+		state.blend = ambientCatRestBlend(seconds-8, 2)
+	case seconds < 18:
+		state.routePhase = 10*time.Second + time.Duration((seconds-10)/8*10*float64(time.Second))
+		state.progress = float32((seconds - 10) / 8)
+	case seconds < 23:
+		state.routePhase = 20 * time.Second
+		state.activity = ambientCatNapping
+		state.progress = float32((seconds - 18) / 5)
+		state.blend = ambientCatRestBlend(seconds-18, 5)
+	default:
+		state.routePhase = 20*time.Second + time.Duration((seconds-23)/7*10*float64(time.Second))
+		state.progress = float32((seconds - 23) / 7)
+	}
+	return state
+}
+
+func ambientCatRestBlend(elapsed, duration float64) float32 {
+	const transition = .38
+	value := math.Min(1, math.Min(elapsed/transition, (duration-elapsed)/transition))
+	if value <= 0 {
+		return 0
+	}
+	// Smoothstep removes a visible hinge when the retained rig enters or leaves
+	// a rest pose while retaining an exactly closed behavior cycle.
+	return float32(value * value * (3 - 2*value))
 }
 
 // ambientCatPath is an analytic closed route through the background volume.
@@ -167,7 +246,8 @@ func (c *ambientCat) syncPose() {
 	if c == nil || c.scene == nil || c.scene.Node(c.root) == nil {
 		return
 	}
-	position, tangent := ambientCatPath(c.phase)
+	behavior := ambientCatBehavior(c.phase)
+	position, tangent := ambientCatPath(behavior.routePhase)
 	horizontal := float32(math.Hypot(float64(tangent.X), float64(tangent.Z)))
 	yaw := float32(math.Atan2(float64(-tangent.Z), float64(tangent.X)))
 	pitch := float32(math.Atan2(float64(tangent.Y), float64(horizontal)))
@@ -176,18 +256,33 @@ func (c *ambientCat) syncPose() {
 	} else if pitch < -.68 {
 		pitch = -.68
 	}
-	theta := 2 * math.Pi * float64(c.phase) / float64(ambientCatCycle)
+	theta := 2 * math.Pi * float64(behavior.routePhase) / float64(ambientCatCycle)
 	stride := float32(theta * ambientCatStrideCycles)
-	bounce := .052 * (1 - float32(math.Cos(float64(2*stride))))
-	bank := .09 * float32(math.Sin(2*theta))
+	rest := float32(0)
+	if behavior.activity != ambientCatRunning {
+		rest = behavior.blend
+	}
+	gait := 1 - rest
+	gaitWave := float32(math.Sin(float64(2 * stride)))
+	bounce := float32(.052) * (1 - float32(math.Cos(float64(2*stride)))) * gait
+	bank := .09 * float32(math.Sin(2*theta)) * gait
+	nap := float32(0)
+	if behavior.activity == ambientCatNapping {
+		nap = behavior.blend
+	}
 	c.scene.Node(c.root).Transform = scene.Translate(position.X, position.Y, position.Z).
-		Mul(scene.RotateY(yaw)).Mul(scene.RotateZ(pitch)).Mul(scene.RotateX(bank)).Mul(scene.Translate(0, bounce, 0))
+		Mul(scene.RotateY(yaw)).Mul(scene.RotateZ(pitch)).Mul(scene.RotateX(bank + nap*.82)).
+		Mul(scene.Translate(0, bounce-nap*.34, 0)).Mul(scene.Scale(ambientCatScale, ambientCatScale, ambientCatScale))
 
-	c.scene.Node(c.body).Transform = scene.RotateZ(.025 * float32(math.Sin(float64(2*stride)))).Mul(scene.Scale(1, .42, .36))
+	c.scene.Node(c.body).Transform = scene.RotateZ(.025*gaitWave*gait - nap*.08).Mul(scene.Scale(1, .42, .36))
 	c.scene.Node(c.chest).Transform = scene.Translate(.58, .04, 0).
-		Mul(scene.RotateZ(-.018 * float32(math.Sin(float64(2*stride))))).Mul(scene.Scale(.48, .47, .41))
-	c.scene.Node(c.head).Transform = scene.Translate(1.03, .29+.025*float32(math.Sin(float64(2*stride))), 0).
-		Mul(scene.RotateZ(.035 * float32(math.Sin(float64(2*stride)))))
+		Mul(scene.RotateZ(-.018*gaitWave*gait - nap*.18)).Mul(scene.Scale(.48, .47, .41))
+	headTurn := float32(0)
+	if behavior.activity == ambientCatPaused {
+		headTurn = .16 * behavior.blend * float32(math.Sin(float64(behavior.progress)*2*math.Pi))
+	}
+	c.scene.Node(c.head).Transform = scene.Translate(1.03-nap*.11, .29+.025*gaitWave*gait-nap*.32, 0).
+		Mul(scene.RotateY(headTurn)).Mul(scene.RotateZ(.035*gaitWave*gait - nap*.22))
 
 	// Diagonal pairs share a phase, producing a readable trot without mutable
 	// per-foot state. Knees flex during the recovery half of each stride.
@@ -203,22 +298,63 @@ func (c *ambientCat) syncPose() {
 		if recovery < 0 {
 			recovery = 0
 		}
+		kneeAngle := float32(-.12) - .52*recovery
+		if behavior.activity == ambientCatPaused {
+			pauseSwing := [...]float32{.06, -.06, -.04, .04}[i]
+			swing += (pauseSwing - swing) * rest
+			kneeAngle += (-.18 - kneeAngle) * rest
+		}
+		if nap > 0 {
+			targetSwing := float32(.82)
+			if i&1 != 0 {
+				targetSwing = -.72
+			}
+			swing += (targetSwing - swing) * nap
+			kneeAngle += (-1.02 - kneeAngle) * nap
+		}
+		if i == c.swatLeg && c.swatRemaining > 0 && behavior.activity == ambientCatRunning {
+			progress := 1 - float64(c.swatRemaining)/float64(ambientCatSwatDuration)
+			pulse := float32(math.Sin(math.Pi * min(1.0, max(0.0, progress))))
+			swing += (1.08 - swing) * pulse
+			kneeAngle += (-.04 - kneeAngle) * pulse
+		}
 		anchor := anchors[i]
 		c.scene.Node(leg.hip).Transform = scene.Translate(anchor.X, anchor.Y, anchor.Z).Mul(scene.RotateZ(swing))
-		c.scene.Node(leg.knee).Transform = scene.Translate(0, -.46, 0).Mul(scene.RotateZ(-.12 - .52*recovery))
+		c.scene.Node(leg.knee).Transform = scene.Translate(0, -.46, 0).Mul(scene.RotateZ(kneeAngle))
 	}
 
 	// The first tail pivot turns the canonical downward prism toward -X. Later
 	// pivots inherit that heading and add only a traveling, tapered wave.
 	for i, pivot := range c.tail {
-		wave := .13 * float32(math.Sin(float64(stride*.5+float32(i)*.58)))
-		side := .085 * float32(math.Sin(float64(stride*.5+float32(i)*.71+1.2)))
+		runWave := .13 * float32(math.Sin(float64(stride*.5+float32(i)*.58)))
+		runSide := .085 * float32(math.Sin(float64(stride*.5+float32(i)*.71+1.2)))
+		restClock := float32(math.Pi) * behavior.progress
+		restWave := .035 * float32(math.Sin(float64(restClock+float32(i)*.38)))
+		restSide := .022 * float32(math.Sin(float64(restClock+float32(i)*.31+1.2)))
+		if behavior.activity == ambientCatNapping {
+			restWave *= .5
+			restSide *= .5
+		}
+		wave := runWave + (restWave-runWave)*rest
+		side := runSide + (restSide-runSide)*rest
 		transform := scene.Translate(-.88, .13, 0).Mul(scene.RotateZ(-math.Pi/2 + wave)).Mul(scene.RotateX(side))
 		if i > 0 {
 			transform = scene.Translate(0, -.36, 0).Mul(scene.RotateZ(wave)).Mul(scene.RotateX(side))
 		}
 		c.scene.Node(pivot).Transform = transform
 	}
+}
+
+func (c *ambientCat) pawPosition(leg int) (scene.Vec3, bool) {
+	if c == nil || c.scene == nil || leg < 0 || leg > 1 {
+		return scene.Vec3{}, false
+	}
+	root, hip, knee := c.scene.Node(c.root), c.scene.Node(c.legs[leg].hip), c.scene.Node(c.legs[leg].knee)
+	if root == nil || hip == nil || knee == nil {
+		return scene.Vec3{}, false
+	}
+	world := root.Transform.Mul(hip.Transform).Mul(knee.Transform)
+	return world.TransformPoint(scene.Vec3{X: .07, Y: -.43}), true
 }
 
 func ambientCatBodyMesh() (*scene.Mesh, error) {

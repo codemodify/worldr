@@ -7,13 +7,6 @@ import (
 	"github.com/codemodify/worldr/internal/experience"
 )
 
-func clickForgetClosed(w *Workspace) {
-	b := forgetClosedPlacementsButton
-	x, y := w.ox+(b.x+12)*w.scale, w.oy+(b.y+12)*w.scale
-	pointer(w, experience.PointerDown, x, y)
-	pointer(w, experience.PointerUp, x, y)
-}
-
 func TestForgetClosedPlacementsRecoversFullOrphanedLayout(t *testing.T) {
 	w, apps := multipleApplications(t, MaxApplicationLayouts)
 	apps.surfaces = nil
@@ -23,7 +16,7 @@ func TestForgetClosedPlacementsRecoversFullOrphanedLayout(t *testing.T) {
 	if w.closedPlacementMask() != ^uint32(0) || w.application.ID != 0 {
 		t.Fatal("test did not retain 32 closed placements without live apps")
 	}
-	clickForgetClosed(w)
+	command(t, w, Action{Kind: ForgetClosedPlacements})
 	if w.closedPlacementMask() != 0 || w.m.applicationState.Layouts != (ApplicationLayouts{}) ||
 		w.m.applicationState.Active != "" || w.m.applicationState.Selected != 0 || !w.CanUndo() {
 		t.Fatal("explicit cleanup did not free orphaned placements and repair selection")
@@ -210,64 +203,33 @@ func TestForgetCancelsInFlightGestureBeforeRecordingRemoval(t *testing.T) {
 	}
 }
 
-func TestForgetClickCancellationResizeAndLiveReappearance(t *testing.T) {
-	for _, cancel := range []string{"release-outside", "pointer-cancel", "keyboard-cancel", "resize", "reappeared"} {
-		t.Run(cancel, func(t *testing.T) {
-			w, apps := multipleApplications(t, 1)
-			surface := apps.surfaces[0]
-			apps.surfaces = nil
-			w.Update(0)
-			before := w.Document()
-			b := forgetClosedPlacementsButton
-			x, y := b.x+12, b.y+12
-			if !pointer(w, experience.PointerDown, x, y) || w.Document() != before {
-				t.Fatal("forget acted before the completed click")
-			}
-			switch cancel {
-			case "release-outside":
-				x -= b.w
-			case "pointer-cancel":
-				w.Handle(experience.Event{Kind: experience.PointerCancel})
-			case "keyboard-cancel":
-				w.Handle(experience.Event{Kind: experience.KeyboardCancel})
-			case "resize":
-				// The host cancels input before changing its coordinate extent.
-				w.Handle(experience.Event{Kind: experience.PointerCancel})
-				w.Draw(2880, 1800)
-				x, y = x*2, y*2
-			case "reappeared":
-				apps.surfaces = []experience.ApplicationSurface{surface}
-			}
-			pointer(w, experience.PointerUp, x, y)
-			if w.Document() != before || w.CanUndo() {
-				t.Fatal("cancelled click or live reappearance forgot a placement")
-			}
-			if cancel == "resize" {
-				clickForgetClosed(w)
-				if w.closedPlacementMask() != 0 || !w.CanUndo() {
-					t.Fatal("scaled cleanup control did not accept a new completed click")
-				}
-			}
-		})
-	}
-}
-
-func TestForgetControlAndNoticeDoNotOverlap(t *testing.T) {
+func TestClosedPlacementsDoNotDrawOrCaptureCleanupChrome(t *testing.T) {
 	w, apps := multipleApplications(t, 1)
 	apps.surfaces = nil
 	w.Update(0)
+	if w.closedPlacementMask() == 0 {
+		t.Fatal("fixture did not retain a closed placement")
+	}
+	w.canvas.Reset(1440, 900)
+	w.drawApplicationNotice()
+	if len(w.canvas.Frame().Vertices) != 0 {
+		t.Fatal("a closed placement drew cleanup chrome without a real notice")
+	}
+	w.Draw(1440, 900)
+	before := w.Document()
+	if w.Handle(experience.Event{Kind: experience.PointerDown, Button: experience.ButtonPrimary, X: 1180, Y: 28}) || w.pointer.kind != captureNone || w.Document() != before {
+		t.Fatal("the former cleanup row retained a hidden pointer target")
+	}
+}
+
+func TestApplicationNoticeUsesTheFullViewportWidth(t *testing.T) {
+	w := desktop(t)
 	w.showApplicationNotice(strings.Repeat("W", 120))
 	frame := w.Draw(1440, 900)
 	color := w.color(amber, 1)
 	for _, vertex := range frame.Vertices {
-		if vertex.Y >= 22 && vertex.Y < 41 && vertex.R == color.R && vertex.G == color.G && vertex.B == color.B && vertex.A == 1 && vertex.X >= forgetClosedPlacementsButton.x {
-			t.Fatal("wide error text covered the cleanup button")
+		if vertex.Y >= 22 && vertex.Y < 41 && vertex.R == color.R && vertex.G == color.G && vertex.B == color.B && vertex.A == 1 && vertex.X > 1334 {
+			t.Fatal("wide error text escaped the desktop viewport")
 		}
-	}
-	clickForgetClosed(w)
-	before, history := w.Document(), w.historyPosition
-	clickForgetClosed(w)
-	if w.Document() != before || w.historyPosition != history || w.pointer.kind != captureNone {
-		t.Fatal("hidden cleanup control acted without closed placements")
 	}
 }

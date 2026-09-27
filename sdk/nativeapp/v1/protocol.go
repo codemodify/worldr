@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	skin "github.com/codemodify/worldr/sdk/skin/v1"
 	"io"
 	"sync"
 )
@@ -21,6 +22,8 @@ const (
 	RequestInput        RequestKind = "input"
 	RequestFocus        RequestKind = "focus"
 	RequestResize       RequestKind = "resize"
+	RequestTheme        RequestKind = "theme"
+	RequestSkin         RequestKind = "skin"
 	RequestCloseSurface RequestKind = "close_surface"
 	RequestShutdown     RequestKind = "shutdown"
 )
@@ -28,15 +31,17 @@ const (
 // Request and Response are the v1 wire envelope. Sequence is chosen by the
 // host and echoed by the application.
 type Request struct {
-	Version    uint32      `json:"version"`
-	Sequence   uint64      `json:"sequence"`
-	Kind       RequestKind `json:"kind"`
-	Host       Host        `json:"host,omitempty"`
-	DeltaNanos int64       `json:"delta_nanos,omitempty"`
-	Surface    SurfaceID   `json:"surface,omitempty"`
-	Width      int         `json:"width,omitempty"`
-	Height     int         `json:"height,omitempty"`
-	Event      *Event      `json:"event,omitempty"`
+	Version    uint32        `json:"version"`
+	Sequence   uint64        `json:"sequence"`
+	Kind       RequestKind   `json:"kind"`
+	Host       Host          `json:"host,omitempty"`
+	DeltaNanos int64         `json:"delta_nanos,omitempty"`
+	Surface    SurfaceID     `json:"surface,omitempty"`
+	Width      int           `json:"width,omitempty"`
+	Height     int           `json:"height,omitempty"`
+	Event      *Event        `json:"event,omitempty"`
+	Theme      *ControlTheme `json:"theme,omitempty"`
+	Skin       *skin.Skin    `json:"skin,omitempty"`
 }
 
 type Response struct {

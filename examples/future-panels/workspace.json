@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "experience_id": "worldr.workspace",
+  "state": {
+    "version": 1,
+    "camera": {
+      "yaw": 1.07,
+      "pitch": 0.34,
+      "zoom": -0.12,
+      "target_x": -1.2
+    },
+    "presentation": "cinematic",
+    "applications": {
+      "reading": false,
+      "overview": false,
+      "active": "native:terminal",
+      "selected": 2,
+      "layouts": [
+        {
+          "key": "native:project-browser",
+          "x": -4.3,
+          "y": 0.8,
+          "depth": -1.8,
+          "width": 780,
+          "height": 880
+        },
+        {
+          "key": "native:terminal",
+          "x": 0,
+          "y": 0.6,
+          "depth": 0.5,
+          "width": 1000,
+          "height": 900
+        },
+        {
+          "key": "native:research-workbench",
+          "x": 4.4,
+          "y": 1.1,
+          "depth": -2.8,
+          "width": 980,
+          "height": 710
+        },
+        {
+          "key": "native:model",
+          "x": 3.8,
+          "y": -2.3,
+          "depth": -1.8,
+          "width": 850,
+          "height": 570
+        },
+        {
+          "key": "native:axial-07",
+          "x": -3,
+          "y": -2.7,
+          "depth": -3.8,
+          "width": 900,
+          "height": 560
+        }
+      ]
+    },
+    "environment": {
+      "dna": false,
+      "cat": false,
+      "cat_collisions": false,
+      "eyes": false
+    }
+  }
+}

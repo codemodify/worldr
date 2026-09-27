@@ -305,6 +305,8 @@ func cropOutputFrame(dst *render.Frame, src render.Frame, origin image.Point) {
 		case render.ImageCommand:
 			command.Image.Bounds[0] -= float32(origin.X)
 			command.Image.Bounds[1] -= float32(origin.Y)
+		case render.FluidCommand:
+			command.Fluid = render.TranslateFluid(command.Fluid, -float32(origin.X), -float32(origin.Y))
 		}
 	}
 }

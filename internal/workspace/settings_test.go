@@ -137,19 +137,13 @@ func TestWindowBorderSettingsApplyLiveAndPersistWithoutUndoHistory(t *testing.T)
 		x, y := settingsPoint(w, settingsWindowsButton)
 		pointer(w, experience.PointerDown, x, y)
 		pointer(w, experience.PointerUp, x, y)
-		for _, choice := range []struct {
-			bounds box
-			style  windowBorderStyle
-		}{
-			{settingsWindowInstrument, windowBorderInstrument},
-			{settingsWindowAperture, windowBorderAperture},
-			{settingsWindowGlass, windowBorderGlass},
-			{settingsWindowTelemetry, windowBorderTelemetry},
-		} {
-			x, y = settingsPoint(w, choice.bounds)
+		var last windowBorderStyle
+		for i, choice := range windowBorderChoices {
+			x, y = settingsPoint(w, windowBorderCardBox(i))
 			if !pointer(w, experience.PointerDown, x, y) || !pointer(w, experience.PointerUp, x, y) || w.windows.Border != choice.style {
 				t.Fatalf("border card did not apply %q live", choice.style)
 			}
+			last = choice.style
 		}
 		if w.Document() != beforeDocument || w.historyPosition != history || len(w.history) != historyLength || w.CanUndo() {
 			t.Fatal("window border preference entered the workspace document or Undo history")
@@ -159,7 +153,7 @@ func TestWindowBorderSettingsApplyLiveAndPersistWithoutUndoHistory(t *testing.T)
 			t.Fatal("window border preference did not change persisted desktop state")
 		}
 		loaded := desktop(t)
-		if err := loaded.LoadState(afterState); err != nil || loaded.windows.Border != windowBorderTelemetry {
+		if err := loaded.LoadState(afterState); err != nil || loaded.windows.Border != last {
 			t.Fatalf("window border preference did not round-trip: state=%+v err=%v", loaded.windows, err)
 		}
 	}
@@ -271,6 +265,34 @@ func TestEnvironmentSettingsPersistWithoutEnteringUndoHistory(t *testing.T) {
 	}
 }
 
+func TestCatCollisionSettingIsSavedWithoutEnteringUndoHistory(t *testing.T) {
+	w := desktop(t)
+	w.Draw(1440, 900)
+	if w.environment.CatCollisions {
+		t.Fatal("test fixture did not isolate autonomous cat collisions")
+	}
+	beforeDocument, history, historyLength := w.Document(), w.historyPosition, len(w.history)
+	w.openSettings()
+	x, y := settingsPoint(w, settingsEnvironmentButton)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	x, y = settingsPoint(w, settingsCatCollisionToggle)
+	if !pointer(w, experience.PointerDown, x, y) || !pointer(w, experience.PointerUp, x, y) || !w.environment.CatCollisions {
+		t.Fatal("cat collision switch did not activate on a completed click")
+	}
+	if w.Document() != beforeDocument || w.historyPosition != history || len(w.history) != historyLength || w.CanUndo() {
+		t.Fatal("cat collision preference entered the workspace document or Undo history")
+	}
+	state, err := w.SaveState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded := desktop(t)
+	if err := loaded.LoadState(state); err != nil || !loaded.environment.CatCollisions {
+		t.Fatalf("enabled cat collision preference did not round-trip: state=%+v err=%v", loaded.environment, err)
+	}
+}
+
 func TestEnvironmentSettingsRequireVisibleCompletedUnmovedClicks(t *testing.T) {
 	w := desktop(t)
 	w.Draw(1440, 900)
@@ -294,6 +316,14 @@ func TestEnvironmentSettingsRequireVisibleCompletedUnmovedClicks(t *testing.T) {
 	if !w.environment.Cat {
 		t.Fatal("a cancelled press activated the cat switch on a later release")
 	}
+	x, y = settingsPoint(w, settingsCatCollisionToggle)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerMove, x+12, y)
+	pointer(w, experience.PointerMove, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	if w.environment.CatCollisions {
+		t.Fatal("dragging away and back activated the cat collision switch")
+	}
 	x, y = settingsPoint(w, settingsEyesToggle)
 	pointer(w, experience.PointerDown, x, y)
 	w.Draw(2880, 1800)
@@ -311,6 +341,12 @@ func TestEnvironmentSettingsRequireVisibleCompletedUnmovedClicks(t *testing.T) {
 	pointer(w, experience.PointerUp, x, y)
 	if !w.environment.DNA {
 		t.Fatal("an invisible Environment switch activated from another category")
+	}
+	x, y = settingsPoint(w, settingsCatCollisionToggle)
+	pointer(w, experience.PointerDown, x, y)
+	pointer(w, experience.PointerUp, x, y)
+	if w.environment.CatCollisions {
+		t.Fatal("an invisible cat collision switch activated from another category")
 	}
 }
 

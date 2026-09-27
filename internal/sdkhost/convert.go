@@ -58,6 +58,7 @@ func (p *Provider) surfaceFromSDK(surface nativeapp.Surface) (experience.Applica
 	result := experience.ApplicationSurface{
 		ID: uint64(surface.ID), Key: sdkSurfaceKey(namespace, surface.Key), AppID: p.manifest.ID,
 		Title: surface.Title, Texture: resource.texture, ContentAspect: surface.ContentAspect, SurfaceUV: surface.UV,
+		MinWidth: surface.MinWidth, MinHeight: surface.MinHeight,
 		Translucent: surface.Translucent, Frameless: surface.Frameless, DragContent: surface.DragContent,
 	}
 	switch surface.FrameStyle {

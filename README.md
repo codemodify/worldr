@@ -1,5 +1,24 @@
 # worldr
 
+WorldR has two product directions:
+
+- **[worldr-kit](sdk/README.md)** — a toolkit for building GPU-rendered applications.
+- **worldr-desktop** — a desktop environment that hosts applications.
+
+They share the existing GPU foundation. The [product boundaries and first usable
+milestone](docs/PRODUCTS.md) define the separation. `make build` now produces
+`bin/worldr-desktop`; `worldr-shell` remains a compatible entry point.
+
+Run **[Future Panels](docs/FUTURE-PANELS.md)** with
+`./scripts/run-future-panels.sh` for five native applications arranged in the
+3D workspace, with glass frames, direct dragging and inertial throws.
+
+**[WorldR Terminal](docs/TERMINAL.md)** is a separate standalone kit experiment
+built on the new [`sdk/app/v1`](sdk/app/v1/README.md) runtime. Run
+`./scripts/run-terminal.sh` for a real shell with transparent glass chrome,
+palette transitions, tabs, clipboard and scrollback. It runs independently of
+worldr-desktop.
+
 A Linux computing environment inspired by the workspaces of **Avatar**, **Iron
 Man**, **Minority Report**, **Moon**, and **Her**: directly manipulable objects,
 live instruments, expressive motion, and a coherent place to work.
@@ -14,35 +33,69 @@ The former CPU window compositor and desktop shell are available in Git history.
 
 The default experience is a **general spatial workspace** for native tools and
 legacy applications. Open a native project browser, arrange terminals around it,
-and drag or throw windows through the space. An empty workspace stays available
-when its last application closes.
+and drag or throw windows through the space. Closing the last application leaves
+the bare spatial workspace; it does not draw an empty-state card or a placement
+cleanup control.
 
-The vertical **LAUNCHER** rail on the right begins with a Launcher icon that
+Window chrome and native controls share extensible skin packages. **Settings →
+Skins** selects Merrick, Advanced, Hologram, Plasma or Future Panels and adjusts accents, shapes
+and typography. `--skin` also loads custom JSON packages. Try the working
+[Skin Studio example and authoring guide](docs/SKINS.md).
+
+Run `./scripts/run-merrick-desktop.sh` for the working Merrick reference: silver
+sculpted wallpaper, slate side tabs, a narrow calendar, a profile dashboard,
+overlapping documents, and Programs/Messages palettes. Its seven native windows
+share skinnable controls and host-owned dragging, resizing, minimizing and closing.
+
+Two more [native reference interfaces](docs/REFERENCE-DEMOS.md) are available:
+`./scripts/run-advanced-desktop.sh` opens the steel-blue studio dashboard, and
+`./scripts/run-hologram-desktop.sh` opens the neon disk visualization. Both have
+working controls, live skin selection, and separate saved layouts.
+
+Run `./scripts/run-plasma-playground.sh` for the [native fluid-surface
+playground](docs/FLUID-SURFACES.md): five draggable panels fuse into a shared
+glass outline and separate when pulled apart. It includes live appearance,
+fusion and snapping controls, keyboard movement, and a saved layout.
+
+Run `./scripts/run-navigator.sh` for [navigation between real apps](docs/NAVIGATOR.md):
+choose a project, focus a live preview, and return through Back or Overview.
+It starts with Files, Research, Model and AXIAL, then restores its own saved
+session. Mouse controls and keyboard shortcuts work alongside normal app input.
+
+The default vertical **LAUNCHER** rail on the right begins with a Launcher icon that
 opens the searchable Tools + Spaces menu. Its other icons launch eight built-in
 tools: Files, Terminal, Photo, Media, Model, Research, Notes, and AXIAL. Files,
 Terminal, Notes, and AXIAL open directly. Photo, Media, Model, and Research
 focus Files in a matching choose-file mode; folders remain navigable, Escape
 restores the full listing, and opening a supported file hands it to the selected
-native viewer. The desktop has no left sidebar, footer, or main toolbar. Tool
+native viewer. The default desktop has no left sidebar, footer, or main toolbar. Tool
 launching stays in the right rail, and a compact scene controller continues that
-rail at the bottom-right. Its reticle orbits the workspace, two unlabeled values
-show yaw and pitch, its gear opens Settings, and Reset restores the camera view.
-Settings provides Terminal and Media previews, a Windows category with live
-Aperture, Instrument, Glass, and Telemetry border choices, and an Environment
-category with independent DNA, running-cat, and cursor-eye switches. Border and
-ambient choices are saved with the workspace.
+rail at the bottom-right. Its reticle has no angle readout and turns the view like
+looking from inside a sphere; its upper-left X restores the camera view and its
+gear opens Settings. Settings provides Terminal and Media previews; Windows has
+live Aperture, Instrument, Glass, and Telemetry border choices; Themes combines
+four SDK-compatible control palettes with four independent shape grammars in a
+live gallery; and Environment has independent DNA, Cat, cat/window-physics, and
+Eyes switches. Border, control-theme, and ambient choices are saved with the
+workspace. The additive native-app v1 theme preference broadcasts family and
+shape changes to apps that advertise support; the native-instrument example
+updates live. Older and non-theme-aware apps keep their own presentation.
 
-The general desktop's rear backdrop is a woven cyan energy wall. Its pinned
-25-by-15 physical lattice uses hidden horizontal and vertical bracing while two
-visible families of bowed diagonal fibers form the weave. An overscanned,
-oblique projection hides the lattice boundary; shaded polymer strands breathe
-gently, and subtle electrical pulses modulate their material. The wall deforms
+The general desktop's rear backdrop is a dim cyan energy weave. Its pinned
+25-by-15 physical lattice uses hidden bracing, while the visible sheet is a
+much finer hexagonal mesh of thin shaded threads. An overscanned oblique
+projection hides the lattice boundary. The threads stay quiet enough to sit
+behind the workspace: they breathe gently, and a faint electrical pulse only
+lifts their highlight. The wall deforms
 when a window reaches the rear depth boundary, then rebounds the window or
 explicit group toward the camera. The retained 3D DNA double helix completes one
-rotation every 30 seconds, a retained 3D cat runs a closed route across all three
-spatial axes, and three bloodshot ambient eyes follow the pointer. These effects
-remain behind application content, never capture input, and can be switched
-independently in Settings.
+rotation every 30 seconds. A smaller retained 3D cat runs across all three spatial
+axes, pauses, and curls up for a nap during its deterministic cycle. Its optional
+paw physics adds an impulse to a window's existing inertial motion without
+stopping other moving windows. Three small, aligned bloodshot eyes occupy the
+workspace's upper-right and follow the pointer. These effects remain behind
+application content, never capture input, and can be switched independently in
+Settings.
 
 **AXIAL / 07** is a hosted native 3D application in the general workspace; use
 its launcher-rail control or start with `--axial`. It can be moved, grouped, sent
@@ -117,8 +170,8 @@ and rebounds toward the camera. Direct depth movement is constrained by the same
 wall. **Super+wheel** moves the hovered window (and its explicit group) without
 focusing it. **Super+primary drag** on empty workspace pans left, right, up or
 down. **Ctrl+Alt+O** retrieves hidden apps. Resize freely with the bottom-right
-grip or **Super+secondary drag**. The general desktop has no top action bar;
-Reset is inside the scene controller below the launcher rail. The standalone
+grip or **Super+secondary drag**. The general desktop has no top action bar; the
+reset X is inside the scene controller below the launcher rail. The standalone
 AXIAL experience retains its own toolbar, including Place / Group, Group
 Selected, Ungroup, and its depth control when it hosts applications.
 
@@ -236,10 +289,11 @@ For different applications and arguments, use `--apps=workspace-apps.json`:
 
 Profile IDs keep layout associations stable when launch order changes. The
 workspace supports 32 live windows and retains up to 32 saved window placements.
-Closing a window preserves its placement. A document containing old placements
-can therefore reach its limit with fewer live windows. Launch failures show a
-temporary notice and preserve the existing layout; a new terminal that cannot
-be placed is closed immediately.
+Closing a window preserves its placement while capacity remains, so reopening
+the same key restores its position. Once all 32 slots are occupied, a genuinely
+new window deterministically recycles one closed placement; live and opening
+windows are never evicted. Launch failures show a temporary notice and preserve
+all live layouts.
 
 Install `Xwayland` to enable X11 compatibility explicitly:
 
@@ -262,13 +316,6 @@ participates in the same lazy clipboard broker as Wayland, native and host
 endpoints, with TARGETS negotiation and bounded transfers. XDND versions 3–5
 route copy-only drags between exact managed X11 source and destination windows.
 X11 windows remain separate workspace surfaces.
-
-**Forget Closed Placements** appears in the compact notification row near the
-top edge when closed windows have saved positions. It explicitly frees those
-entries while preserving all live
-windows, their groups and selection. Ctrl+Z restores forgotten entries when
-capacity permits; undo never drops a newly opened window to make room. Redo
-keeps any window that has reopened in the meantime.
 
 `--terminal` opens a worldr-native terminal backed by a real PTY and libvterm.
 It runs `$SHELL` (or `/bin/sh`) directly, with colors, alternate-screen programs,
@@ -326,8 +373,8 @@ input; click an app or press Enter to resume typing.
 | Open / close the workspace shortcut guide | F1 from the workspace; Escape closes |
 | Open Tools + Spaces | First Launcher icon in the right rail, or Ctrl+Alt+Space from the workspace or a focused app |
 | Pan the spatial workspace | Super+primary drag on empty workspace |
-| Orbit the spatial scene | Drag the reticle in the scene controller below the right launcher rail |
-| Open Settings | Select the gear in the scene controller; choose Terminal or Media for previews, Windows to select a saved native border, or Environment to switch DNA, Cat, and Eyes independently |
+| Look around | Drag the reticle in the scene controller. The view turns in place; windows stay where you put them, and the rear weave turns with them |
+| Open Settings | Select the gear in the scene controller; use Terminal or Media for previews, Windows for native borders, Themes for the saved SDK-compatible control profile and gallery, or Environment for DNA, Cat, cat/window physics, and Eyes |
 | Zoom the spatial scene | Scroll over the scene; application scrolling keeps its usual behavior |
 | Move / throw a window | Drag its top grip, or use Super+primary drag where the host permits |
 | Change or throw through depth | Scroll with the drag held; release after a quick scroll to carry that recent motion into the throw |
@@ -348,9 +395,8 @@ input; click an app or press Enter to resume typing.
 | Read and type in the selected window | A fresh Enter / keypad Enter outside Overview; focused apps keep normal Enter behavior |
 | Open an independent native shell | Ctrl+Alt+Enter |
 | Request closing the active window | Win/Super+C from workspace or app focus; the provider may keep it open for an unsaved-work prompt |
-| Remove saved positions belonging only to closed windows | Forget Closed Placements; Ctrl+Z to undo |
 | Focus the object / read the selected app | F |
-| Reset workspace view / reset AXIAL study | Scene-controller Reset or R in the desktop; standalone AXIAL Reset or R |
+| Reset workspace view / reset AXIAL study | Scene-controller X or R in the desktop; standalone AXIAL Reset or R |
 | Undo / redo | Ctrl+Z / Ctrl+Shift+Z or Ctrl+Y |
 | Cancel an active gesture / reset the view | Escape |
 | Save a configured document | Ctrl+S |
@@ -429,8 +475,8 @@ prevents two worldr instances from using the same state path concurrently.
 `--fresh` loads the primary layout but skips recovery and saved native apps,
 then starts only the apps requested on the command line. Missing saved resources
 are reported and skipped; their references stay pending with their placements
-for a later launch. Files falls back to its root if its saved subfolder is gone.
-**Forget Closed Placements** also discards pending references for forgotten keys.
+for a later launch until that closed slot is recycled. Files falls back to its
+root if its saved subfolder is gone.
 
 Undo history and animation interpolation are not persisted. Manual saving cancels an
 unfinished held drag and stops a released window's glide at its current position

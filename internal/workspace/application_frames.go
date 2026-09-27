@@ -40,6 +40,7 @@ func (w *Workspace) attachApplicationFrame(id uint64, parent scene.NodeID) {
 }
 
 func (w *Workspace) syncApplicationFrame(surface experience.ApplicationSurface) {
+	w.syncWindowSkinCache()
 	w.syncApplicationDragHandle(surface)
 	w.syncApplicationWindowControls(surface)
 	w.syncApplicationResizeHandle(surface)
@@ -55,6 +56,11 @@ func (w *Workspace) syncApplicationFrame(surface experience.ApplicationSurface) 
 		return
 	}
 	frame.Mesh = w.frameMeshFor(surface)
+	if w.activeSkin != nil && !photoFrameSurface(surface) {
+		applyWindowSkinPart(frame, w.skinWindowMeshes(surface).frame)
+		return
+	}
+	resetWindowSkinMaterial(frame, true)
 	color, alpha := uint32(0x6a9dab), float32(.10)
 	glow := float32(0)
 	index := i

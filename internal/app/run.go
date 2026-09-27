@@ -79,6 +79,9 @@ func Run(ctx context.Context, out io.Writer, o Options, factory Factory) (runErr
 	if o.Fresh {
 		saved = nil
 	}
+	if err := applyStartupSkin(work, o.Skin); err != nil {
+		return err
+	}
 	hasLegacyApplications := o.Application != "" || len(o.Applications) > 0 || len(o.X11Applications) > 0 || len(o.Launches) > 0
 	_, canHostApplications := work.(experience.ApplicationAware)
 	if hasLegacyApplications || len(o.NativeApplications) > 0 || o.Xwayland || o.Terminal || o.Axial || o.Project != "" || len(o.Models) > 0 || len(o.Research) > 0 || saved != nil && (saved.Project != nil || saved.Photo != nil || saved.Media != nil || saved.Axial != nil || len(saved.Terminals) > 0 || len(saved.Models) > 0 || len(saved.Research) > 0 || len(saved.Notes) > 0 || len(saved.Photos) > 0 || len(saved.Videos) > 0) {
@@ -359,7 +362,32 @@ func Run(ctx context.Context, out io.Writer, o Options, factory Factory) (runErr
 			connectTerminalBrowser(p, terminal, content, work)
 		}
 	}
-	prepareInputLayout(work, p.w, p.h)
+	layoutExperimentMenu := func() {
+		if o.experiments != nil {
+			scale := float32(1)
+			if p.win != nil {
+				scale = float32(p.win.Scale())
+			}
+			o.experiments.menu.layout(p.w, p.h, scale)
+		}
+	}
+	layoutExperimentMenu()
+	workHeight := func() int {
+		if o.experiments != nil {
+			return o.experiments.menu.ContentHeight()
+		}
+		return p.h
+	}
+	prepareInputLayout(work, p.w, workHeight())
+	setTextInput := func() error {
+		if p.win == nil {
+			return nil
+		}
+		if o.experiments != nil && o.experiments.menu.open {
+			return p.win.SetTextInput(host.TextInputState{})
+		}
+		return p.win.SetTextInput(textInputState(work))
+	}
 	if recovered {
 		fmt.Fprintln(out, "session: recovered from", recoveryPath(o.State))
 	}
@@ -491,13 +519,28 @@ func Run(ctx context.Context, out io.Writer, o Options, factory Factory) (runErr
 		if content != nil {
 			content.seat(e)
 		}
+		if controller := o.experiments; controller != nil {
+			wasOpen := controller.menu.open
+			consumed, requested := controller.menu.handle(e)
+			if !wasOpen && controller.menu.open {
+				work.Handle(experience.Event{Kind: experience.PointerCancel})
+				work.Handle(experience.Event{Kind: experience.KeyboardCancel})
+			}
+			if requested != "" {
+				controller.request(ctx, o, requested)
+			}
+			if consumed {
+				return false, setTextInput()
+			}
+		}
 		quit, err := dispatchEvent(work, e, o.State, out, func() error { return session.save(o.State, checkpoints) })
 		session.reconcile()
-		if err == nil && p.win != nil {
-			err = p.win.SetTextInput(textInputState(work))
+		if err == nil {
+			err = setTextInput()
 		}
 		return quit, err
 	}
+	experimentSaved := false
 loop:
 	for {
 		frameBegin := time.Now()
@@ -506,6 +549,14 @@ loop:
 			break loop
 		default:
 		}
+		if controller := o.experiments; controller != nil && controller.poll(func() error {
+			work.Handle(experience.Event{Kind: experience.PointerCancel})
+			return session.save(o.State, checkpoints)
+		}) {
+			experimentSaved = true
+			break loop
+		}
+		layoutExperimentMenu()
 		changed, seatErr := p.pollSeat(time.Now())
 		if seatErr != nil {
 			return fmt.Errorf("direct session: %w", seatErr)
@@ -517,7 +568,8 @@ loop:
 					return err
 				}
 			}
-			prepareInputLayout(work, p.w, p.h)
+			layoutExperimentMenu()
+			prepareInputLayout(work, p.w, workHeight())
 			if p.pointer != nil {
 				cursorX, cursorY = float32(p.pointer.X), float32(p.pointer.Y)
 				cursorVisible = true
@@ -571,7 +623,8 @@ loop:
 					metrics.recoveries++
 				}
 				metrics.resizes++
-				prepareInputLayout(work, p.w, p.h)
+				layoutExperimentMenu()
+				prepareInputLayout(work, p.w, workHeight())
 			}
 			for _, event := range events {
 				if event.Kind == host.Close {
@@ -652,15 +705,28 @@ loop:
 			fmt.Fprintf(out, "autosave: %v\n", err)
 			notifyWorkspace(work, "Autosave failed: "+err.Error())
 		}
-		frame := work.Draw(p.w, p.h)
-		if p.win != nil {
-			if err := p.win.SetTextInput(textInputState(work)); err != nil {
-				return err
+		frame := work.Draw(p.w, workHeight())
+		if o.experiments != nil {
+			frame = o.experiments.menu.append(frame)
+			for _, id := range o.experiments.menu.RetiredTextures() {
+				if err := p.releaseTexture(id); err != nil {
+					return err
+				}
 			}
+		}
+		if err := setTextInput(); err != nil {
+			return err
 		}
 		if owner, ok := work.(experience.ApplicationTextureRetirer); ok {
 			for _, id := range owner.RetiredTextures() {
 				if err := p.releaseTexture(id); err != nil {
+					return err
+				}
+			}
+		}
+		if owner, ok := work.(interface{ RetiredGeometryIDs() []uint64 }); ok {
+			for _, id := range owner.RetiredGeometryIDs() {
+				if err := p.releaseGeometry(id); err != nil {
 					return err
 				}
 			}
@@ -686,7 +752,11 @@ loop:
 			return fmt.Errorf("application input: %w", applications.err)
 		}
 		if cursorVisible {
-			frame = cursor.appendFor(frame, cursorX, cursorY, work.Atlas(), work)
+			var cursorOwner any = work
+			if o.experiments != nil && (o.experiments.menu.open || o.experiments.menu.Hovering(cursorX, cursorY)) {
+				cursorOwner = nil
+			}
+			frame = cursor.appendFor(frame, cursorX, cursorY, work.Atlas(), cursorOwner)
 		}
 		before := time.Now()
 		err = p.renderFrame(frame, [4]float32{.025, .034, .043, 1})
@@ -705,7 +775,8 @@ loop:
 				return err
 			}
 			metrics.recoveries++
-			prepareInputLayout(work, p.w, p.h)
+			layoutExperimentMenu()
+			prepareInputLayout(work, p.w, workHeight())
 			select {
 			case <-ctx.Done():
 				break loop
@@ -722,7 +793,8 @@ loop:
 				if err := p.resize(w, h); err != nil {
 					return err
 				}
-				prepareInputLayout(work, p.w, p.h)
+				layoutExperimentMenu()
+				prepareInputLayout(work, p.w, workHeight())
 			}
 			if o.Duration > 0 && time.Since(start) >= o.Duration {
 				break loop
@@ -763,8 +835,10 @@ loop:
 	metrics.sampleMemory(p)
 	// An interrupted pointer capture is not a committed document edit.
 	work.Handle(experience.Event{Kind: experience.PointerCancel})
-	if err := session.save(o.State, checkpoints); err != nil {
-		return err
+	if !experimentSaved {
+		if err := session.save(o.State, checkpoints); err != nil {
+			return err
+		}
 	}
 	if o.Snapshot != "" {
 		// Export re-renders the same document into an offscreen image. The interactive
@@ -778,7 +852,11 @@ loop:
 			return err
 		}
 		pixels := make([]byte, p.w*p.h*4)
-		if err := capture.RenderFrame(work.Draw(p.w, p.h), [4]float32{.025, .034, .043, 1}, pixels); err != nil {
+		frame := work.Draw(p.w, workHeight())
+		if o.experiments != nil {
+			frame = o.experiments.menu.append(frame)
+		}
+		if err := capture.RenderFrame(frame, [4]float32{.025, .034, .043, 1}, pixels); err != nil {
 			return err
 		}
 		if err := savePNG(o.Snapshot, pixels, p.w, p.h); err != nil {

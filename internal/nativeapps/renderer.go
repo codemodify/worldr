@@ -82,6 +82,7 @@ type terminalRenderer struct {
 	previous    terminal.Snapshot
 	decoration  terminalDecoration
 	initialized bool
+	panelField  bool
 }
 
 func newTerminalRenderer(width, height int) (*terminalRenderer, error) {
@@ -161,6 +162,40 @@ func fill(dst *image.RGBA, rect image.Rectangle, c color.RGBA) {
 	draw.Draw(dst, rect, image.NewUniform(c), image.Point{}, draw.Src)
 }
 
+// Palette fills already use premultiplied RGBA through nativeui.SetSkin.
+func (r *terminalRenderer) panelColor(fallback, themed color.RGBA) color.RGBA {
+	if r.panelField {
+		return themed
+	}
+	return fallback
+}
+
+// Unassociate palette text before making it opaque so authored text alpha
+// cannot accidentally darken glyphs on a translucent panel.
+func (r *terminalRenderer) textColor(fallback, themed color.RGBA) color.RGBA {
+	if r.panelField {
+		straight := color.NRGBAModel.Convert(themed).(color.NRGBA)
+		return color.RGBA{R: straight.R, G: straight.G, B: straight.B, A: 255}
+	}
+	return fallback
+}
+
+func (r *terminalRenderer) cellColors(cell terminal.Cell, selected bool) (foreground, background color.RGBA) {
+	foreground, background = cellColors(cell, selected)
+	if !r.panelField || selected || cell.Reverse {
+		return
+	}
+	// Only the backend's default colors are themed. Explicit ANSI backgrounds,
+	// inverse video, and selections remain solid and retain their meaning.
+	if cell.Background == (terminal.Color{R: 8, G: 16, B: 23}) {
+		background = r.ui.Theme.Background
+	}
+	if cell.Foreground == (terminal.Color{R: 220, G: 235, B: 238}) {
+		foreground = r.textColor(foreground, r.ui.Theme.Text)
+	}
+	return
+}
+
 func (r *terminalRenderer) paint(snapshot terminal.Snapshot, decoration terminalDecoration) error {
 	if snapshot.Cols <= 0 || snapshot.Rows <= 0 || len(snapshot.Cells) != snapshot.Cols*snapshot.Rows {
 		return fmt.Errorf("invalid terminal cell snapshot")
@@ -172,7 +207,7 @@ func (r *terminalRenderer) paint(snapshot terminal.Snapshot, decoration terminal
 	full := !r.initialized || snapshot.Cols != r.previous.Cols || snapshot.Rows != r.previous.Rows
 	dirty := image.Rectangle{}
 	if full {
-		fill(r.image, r.image.Bounds(), rgb(0x101c26))
+		fill(r.image, r.image.Bounds(), r.panelColor(rgb(0x101c26), r.ui.Theme.Background))
 		dirty = r.image.Bounds()
 	}
 	selectionChanged := decoration.Selection != r.decoration.Selection
@@ -241,13 +276,13 @@ func cellColors(cell terminal.Cell, selected bool) (foreground, background color
 
 func (r *terminalRenderer) drawRow(snapshot terminal.Snapshot, decoration terminalDecoration, row int) {
 	if decoration.ToolRows != nil {
-		background := rgb(0x081017)
+		background := r.panelColor(rgb(0x081017), r.ui.Theme.Background)
 		if decoration.Selection.intersectsRow(row, snapshot.Cols) {
 			background = rgb(0x285d71)
 		}
 		rect := image.Rect(contentLeft, contentTop+row*cellHeight, contentLeft+snapshot.Cols*cellWidth, contentTop+(row+1)*cellHeight)
 		fill(r.image, rect, background)
-		_ = r.ui.DrawLabel(r.image, rect, decoration.ToolRows[row], rgb(0xdcebee))
+		_ = r.ui.DrawLabel(r.image, rect, decoration.ToolRows[row], r.textColor(rgb(0xdcebee), r.ui.Theme.Text))
 		return
 	}
 	// Paint the entire row's backgrounds before glyphs. A continuation cell
@@ -258,12 +293,12 @@ func (r *terminalRenderer) drawRow(snapshot terminal.Snapshot, decoration termin
 		if cell.Width == 0 && col > 0 {
 			selected = selected || decoration.Selection.contains(row*snapshot.Cols+col-1)
 		}
-		_, background := cellColors(cell, selected)
+		_, background := r.cellColors(cell, selected)
 		fill(r.image, image.Rect(contentLeft+col*cellWidth, contentTop+row*cellHeight, contentLeft+(col+1)*cellWidth, contentTop+(row+1)*cellHeight), background)
 	}
 	for col := 0; col < snapshot.Cols; col++ {
 		cell := snapshot.Cells[row*snapshot.Cols+col]
-		foreground, _ := cellColors(cell, decoration.Selection.contains(row*snapshot.Cols+col))
+		foreground, _ := r.cellColors(cell, decoration.Selection.contains(row*snapshot.Cols+col))
 		r.drawCell(cell, col, row, foreground)
 	}
 	cursor := snapshot.Cursor
@@ -271,7 +306,7 @@ func (r *terminalRenderer) drawRow(snapshot terminal.Snapshot, decoration termin
 		return
 	}
 	x, y := contentLeft+cursor.Col*cellWidth, contentTop+row*cellHeight
-	cursorColor := rgb(0x83e6f1)
+	cursorColor := r.textColor(rgb(0x83e6f1), r.ui.Theme.Accent)
 	if !decoration.Focused {
 		fill(r.image, image.Rect(x, y, x+cellWidth, y+1), cursorColor)
 		fill(r.image, image.Rect(x, y+cellHeight-1, x+cellWidth, y+cellHeight), cursorColor)
@@ -360,55 +395,55 @@ func (r *terminalRenderer) labelText(x, y int, value string, c color.RGBA, maxWi
 
 func (r *terminalRenderer) drawChrome(snapshot terminal.Snapshot, decoration terminalDecoration) {
 	width, height := r.image.Rect.Dx(), r.image.Rect.Dy()
-	fill(r.image, image.Rect(0, 0, width, contentTop), rgb(0x091823))
-	accent, rail := rgb(0x5894a3), rgb(0x244d5d)
+	fill(r.image, image.Rect(0, 0, width, contentTop), r.panelColor(rgb(0x091823), r.ui.Theme.Background))
+	accent, rail := r.panelColor(rgb(0x5894a3), r.ui.Theme.Border), r.panelColor(rgb(0x244d5d), r.ui.Theme.Border)
 	if decoration.Focused {
-		accent, rail = rgb(0x8bebf3), rgb(0x34788b)
+		accent, rail = r.panelColor(rgb(0x8bebf3), r.ui.Theme.Accent), r.panelColor(rgb(0x34788b), r.ui.Theme.Border)
 	}
 	fill(r.image, image.Rect(18, 1, width-18, 2), rail)
 	plate := image.Rect(10, 5, min(width-10, 220), 27)
-	terminalChromePlate(r.image, plate, 5, rgb(0x102e3d))
+	terminalChromePlate(r.image, plate, 5, r.panelColor(rgb(0x102e3d), r.ui.Theme.Surface))
 	fill(r.image, image.Rect(plate.Min.X+5, plate.Min.Y, plate.Max.X-5, plate.Min.Y+1), accent)
 	terminalChromeLine(r.image, 17, 11, 21, 15, accent)
 	terminalChromeLine(r.image, 21, 15, 17, 19, accent)
 	fill(r.image, image.Rect(24, 19, 29, 20), accent)
-	r.labelText(38, 21, "NATIVE TERMINAL", accent, plate.Max.X-48)
+	r.labelText(38, 21, "NATIVE TERMINAL", r.textColor(accent, r.ui.Theme.Text), plate.Max.X-48)
 	if width >= 420 {
 		// Session identity belongs in the header; live process status stays
 		// in the footer. The paired rails are decorative.
 		fill(r.image, image.Rect(plate.Max.X+12, 13, width-133, 14), rail)
-		fill(r.image, image.Rect(plate.Max.X+12, 17, width-149, 18), rgb(0x183846))
-		r.labelText(width-116, 21, "SHELL SESSION", rgb(0x698c9b), 104)
+		fill(r.image, image.Rect(plate.Max.X+12, 17, width-149, 18), r.panelColor(rgb(0x183846), r.ui.Theme.Border))
+		r.labelText(width-116, 21, "SHELL SESSION", r.textColor(rgb(0x698c9b), r.ui.Theme.Muted), 104)
 	}
 	title := snapshot.Title
 	if title == "" {
 		title = "Interactive shell"
 	}
 	if decoration.Find != nil {
-		r.labelText(18, 43, "Find", rgb(0xd7e9ef), 40)
+		r.labelText(18, 43, "Find", r.textColor(rgb(0xd7e9ef), r.ui.Theme.Text), 40)
 		_ = r.ui.DrawField(r.image, findFieldRect(width), decoration.Find, "Search scrollback", decoration.Focused)
 	} else if decoration.Header != "" {
-		r.labelText(18, 43, decoration.Header, rgb(0xd7e9ef), width-36)
+		r.labelText(18, 43, decoration.Header, r.textColor(rgb(0xd7e9ef), r.ui.Theme.Text), width-36)
 	} else {
 		toolbar := terminalToolbar(width)
 		titleWidth := width - 36
 		if len(toolbar) != 0 {
 			titleWidth = toolbar[0].Bounds.Min.X - 26
 		}
-		r.labelText(18, 43, title, rgb(0xd7e9ef), titleWidth)
+		r.labelText(18, 43, title, r.textColor(rgb(0xd7e9ef), r.ui.Theme.Text), titleWidth)
 		for _, node := range toolbar {
 			node.Disabled = snapshot.AlternateScreen
 			_ = r.ui.DrawButton(r.image, node, decoration.ToolFocus == node.ID, false)
 		}
 	}
-	fill(r.image, image.Rect(18, contentTop-3, width-18, contentTop-2), rgb(0x183c4a))
+	fill(r.image, image.Rect(18, contentTop-3, width-18, contentTop-2), r.panelColor(rgb(0x183c4a), r.ui.Theme.Border))
 	fill(r.image, image.Rect(18, contentTop-2, 74, contentTop-1), rail)
 
 	footer := height - footerHeight
-	fill(r.image, image.Rect(0, footer, width, height), rgb(0x091823))
-	fill(r.image, image.Rect(15, footer, width-15, footer+1), rgb(0x2a596b))
-	terminalChromePlate(r.image, image.Rect(10, footer+4, width-10, height-3), 4, rgb(0x0d2430))
-	statusColor, indicator := rgb(0x9cbfcb), rgb(0x62becb)
+	fill(r.image, image.Rect(0, footer, width, height), r.panelColor(rgb(0x091823), r.ui.Theme.Background))
+	fill(r.image, image.Rect(15, footer, width-15, footer+1), r.panelColor(rgb(0x2a596b), r.ui.Theme.Border))
+	terminalChromePlate(r.image, image.Rect(10, footer+4, width-10, height-3), 4, r.panelColor(rgb(0x0d2430), r.ui.Theme.Surface))
+	statusColor, indicator := r.textColor(rgb(0x9cbfcb), r.ui.Theme.Muted), r.panelColor(rgb(0x62becb), r.ui.Theme.Accent)
 	status := fmt.Sprintf("%d × %d  /  LIVE", snapshot.Cols, snapshot.Rows)
 	if snapshot.MouseTracking {
 		status += "  /  APP MOUSE"
@@ -428,6 +463,6 @@ func (r *terminalRenderer) drawChrome(snapshot terminal.Snapshot, decoration ter
 	}
 	fill(r.image, image.Rect(16, footer+11, 19, footer+14), indicator)
 	r.labelText(27, height-8, status, statusColor, width-57)
-	terminalChromeLine(r.image, width-25, height-9, width-20, height-14, rgb(0x3b697a))
-	terminalChromeLine(r.image, width-20, height-9, width-15, height-14, rgb(0x3b697a))
+	terminalChromeLine(r.image, width-25, height-9, width-20, height-14, r.panelColor(rgb(0x3b697a), r.ui.Theme.Border))
+	terminalChromeLine(r.image, width-20, height-9, width-15, height-14, r.panelColor(rgb(0x3b697a), r.ui.Theme.Border))
 }

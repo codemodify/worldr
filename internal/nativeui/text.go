@@ -2,6 +2,7 @@ package nativeui
 
 import (
 	"fmt"
+	sdkui "github.com/codemodify/worldr/sdk/nativeui/v1"
 	"image"
 	"image/color"
 	"image/draw"
@@ -29,10 +30,13 @@ type layoutKey struct {
 	size  float64
 }
 type Painter struct {
-	Theme  Theme
-	cache  map[layoutKey]textLayout
-	order  []layoutKey
-	closed bool
+	skinPainter     *sdkui.Painter
+	controlFont     string
+	controlFontSize float64
+	Theme           Theme
+	cache           map[layoutKey]textLayout
+	order           []layoutKey
+	closed          bool
 }
 
 // GraphemeStops returns owned UTF-8 byte offsets at user-perceived character
@@ -67,6 +71,10 @@ func (p *Painter) Close() {
 		return
 	}
 	p.closed = true
+	if p.skinPainter != nil {
+		_ = p.skinPainter.Close()
+		p.skinPainter = nil
+	}
 	for _, layout := range p.cache {
 		layout.close()
 	}
@@ -157,6 +165,8 @@ func (p *Painter) DrawButton(dst *image.RGBA, node Node, focused, hovered bool) 
 	if rect.Empty() {
 		return nil
 	}
+	restoreTypography := p.useControlTypography(rect)
+	defer restoreTypography()
 	background, border, foreground := p.Theme.Surface, p.Theme.Border, p.Theme.Text
 	if hovered {
 		background = p.Theme.Hover
@@ -167,28 +177,50 @@ func (p *Painter) DrawButton(dst *image.RGBA, node Node, focused, hovered bool) 
 	if node.Disabled {
 		foreground = p.Theme.Disabled
 	}
-	cut := min(p.Theme.CornerCut, min(rect.Dx()/3, rect.Dy()/3))
-	for y := rect.Min.Y; y < rect.Max.Y; y++ {
-		inset := max(0, cut-min(y-rect.Min.Y, rect.Max.Y-y-1))
-		draw.Draw(dst, image.Rect(rect.Min.X+inset, y, rect.Max.X-inset, y+1), image.NewUniform(background), image.Point{}, draw.Src)
+	content := rect.Inset(max(1, p.Theme.Padding/2))
+	if p.skinPainter != nil {
+		kind := "button"
+		if node.Role == RoleMenuItem {
+			kind = "menu-item"
+		}
+		state := sdkui.State{Focused: focused, Hovered: hovered, Disabled: node.Disabled, Selected: node.Selected}
+		if err := p.skinPainter.DrawControlBackground(dst, kind, rect, state); err != nil {
+			return err
+		}
+		foreground = p.skinPainter.ControlTextColor(kind, state)
+		content = p.controlContent(kind, rect)
+	} else {
+		cut := min(p.Theme.CornerCut, min(rect.Dx()/3, rect.Dy()/3))
+		for y := rect.Min.Y; y < rect.Max.Y; y++ {
+			inset := max(0, cut-min(y-rect.Min.Y, rect.Max.Y-y-1))
+			draw.Draw(dst, image.Rect(rect.Min.X+inset, y, rect.Max.X-inset, y+1), image.NewUniform(background), image.Point{}, draw.Src)
+		}
+		draw.Draw(dst, image.Rect(rect.Min.X+cut, rect.Min.Y, rect.Max.X-cut, rect.Min.Y+1), image.NewUniform(border), image.Point{}, draw.Src)
+		if focused {
+			draw.Draw(dst, image.Rect(rect.Min.X+cut, rect.Max.Y-1, rect.Max.X-cut, rect.Max.Y), image.NewUniform(border), image.Point{}, draw.Src)
+		}
 	}
-	draw.Draw(dst, image.Rect(rect.Min.X+cut, rect.Min.Y, rect.Max.X-cut, rect.Min.Y+1), image.NewUniform(border), image.Point{}, draw.Src)
-	if focused {
-		draw.Draw(dst, image.Rect(rect.Min.X+cut, rect.Max.Y-1, rect.Max.X-cut, rect.Max.Y), image.NewUniform(border), image.Point{}, draw.Src)
-	}
-	return p.DrawLabel(dst, rect.Inset(max(1, p.Theme.Padding/2)), node.Label, foreground)
+	return p.DrawLabel(dst, content, node.Label, foreground)
 }
 func (p *Painter) DrawField(dst *image.RGBA, rect image.Rectangle, field *Field, placeholder string, focused bool) error {
 	if dst == nil || field == nil || rect.Empty() {
 		return nil
 	}
-	draw.Draw(dst, rect, image.NewUniform(p.Theme.Background), image.Point{}, draw.Src)
-	border := p.Theme.Border
-	if focused {
-		border = p.Theme.Accent
+	restoreTypography := p.useControlTypography(rect)
+	defer restoreTypography()
+	if p.skinPainter != nil {
+		if err := p.skinPainter.DrawControlBackground(dst, "field", rect, sdkui.State{Focused: focused}); err != nil {
+			return err
+		}
+	} else {
+		draw.Draw(dst, rect, image.NewUniform(p.Theme.Background), image.Point{}, draw.Src)
+		border := p.Theme.Border
+		if focused {
+			border = p.Theme.Accent
+		}
+		draw.Draw(dst, image.Rect(rect.Min.X, rect.Max.Y-1, rect.Max.X, rect.Max.Y), image.NewUniform(border), image.Point{}, draw.Src)
 	}
-	draw.Draw(dst, image.Rect(rect.Min.X, rect.Max.Y-1, rect.Max.X, rect.Max.Y), image.NewUniform(border), image.Point{}, draw.Src)
-	inner := rect.Inset(max(1, p.Theme.Padding/2))
+	inner := p.fieldContent(rect)
 	if inner.Empty() {
 		return nil
 	}
@@ -227,7 +259,7 @@ func (p *Painter) DrawField(dst *image.RGBA, rect image.Rectangle, field *Field,
 			draw.Draw(dst, selection, image.NewUniform(p.Theme.Selection), image.Point{}, draw.Src)
 		}
 	}
-	if err := p.paintText(dst, inner, layout, origin, p.Theme.Text); err != nil {
+	if err := p.paintText(dst, inner, layout, origin, p.fieldTextColor(focused)); err != nil {
 		return err
 	}
 	if field.preedit != "" {
@@ -248,12 +280,50 @@ func (p *Painter) PlaceCaret(field *Field, rect image.Rectangle, point image.Poi
 	if field == nil {
 		return nil
 	}
+	restoreTypography := p.useControlTypography(rect)
+	defer restoreTypography()
 	layout, err := p.layout(field.text, -1)
 	if err != nil {
 		return err
 	}
-	inner := rect.Inset(max(1, p.Theme.Padding/2))
+	inner := p.fieldContent(rect)
 	origin := image.Pt(inner.Min.X-field.scroll, inner.Min.Y+(inner.Dy()-layout.metrics().Height)/2)
 	field.SetCaret(layout.hit(point.Sub(origin)), extend)
 	return nil
+}
+
+func (p *Painter) fieldContent(rect image.Rectangle) image.Rectangle {
+	if p.skinPainter != nil {
+		return p.controlContent("field", rect)
+	}
+	return rect.Inset(max(1, p.Theme.Padding/2))
+}
+func (p *Painter) fieldTextColor(focused bool) color.RGBA {
+	if p.skinPainter != nil {
+		return p.skinPainter.ControlTextColor("field", sdkui.State{Focused: focused})
+	}
+	return p.Theme.Text
+}
+
+// Fixed-layout native apps may allocate a shorter toolbar than a skin's sample
+// controls. Retain its horizontal padding while keeping one shaped line legible.
+func (p *Painter) controlContent(kind string, rect image.Rectangle) image.Rectangle {
+	content := p.skinPainter.ControlContentBounds(kind, rect)
+	minimum := min(rect.Dy(), int(math.Ceil(p.Theme.FontSize))+2)
+	if content.Dy() < minimum {
+		content.Min.Y = rect.Min.Y + (rect.Dy()-minimum)/2
+		content.Max.Y = content.Min.Y + minimum
+	}
+	return content.Intersect(rect)
+}
+
+// Skin typography belongs to controls. Application document text can retain a
+// fixed grid, while every control still uses Pango/font fallback and IME shaping.
+func (p *Painter) useControlTypography(bounds image.Rectangle) func() {
+	oldFont, oldSize := p.Theme.Font, p.Theme.FontSize
+	if p.skinPainter != nil {
+		p.Theme.Font = p.controlFont
+		p.Theme.FontSize = max(6, min(p.controlFontSize, float64(max(6, bounds.Dy()-2))))
+	}
+	return func() { p.Theme.Font, p.Theme.FontSize = oldFont, oldSize }
 }

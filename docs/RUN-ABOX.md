@@ -98,9 +98,11 @@ It does not create the general desktop's woven energy wall.
 The Cinematic presentation remains active during exploration and focus, with
 full ambient motion, spatial framing, and wire/rim accents. On the general
 desktop, electrical pulses travel across the woven wall, its springs breathe and
-carry impact waves, the retained DNA turns more subtly, a 3D cat runs through
-the background volume, and three ambient eyes follow the pointer while remaining
-behind applications. The model has a
+carry impact waves, the retained DNA turns more subtly, and a smaller 3D cat runs,
+pauses, and naps along its route through the background volume. Its optional paw
+physics can push a window into the normal inertial solver without stopping other
+throws. Three equal, small ambient eyes stay in the upper-right and follow the
+pointer while remaining behind applications. The model has a
 blue/silver palette, light-responsive highlights and smoothly shaded cylinder
 walls. Its world-space grid and rings hide in Read/Overview. Selective depth-aware background
 glow, directional shadows, moving fill lights, opt-in final-frame highlight
@@ -144,12 +146,16 @@ Held overview keys and their releases cannot type into the returned application.
 The desktop has no left sidebar or footer. Its first right-rail **Launcher** icon,
 or Ctrl+Alt+Space from any app, opens Tools + Spaces to launch tools, switch or
 create spaces, transfer a selection, and find windows across spaces. A compact
-scene controller continues the launcher rail at the bottom-right. Drag its
-reticle to orbit; the two unlabeled values show yaw and pitch. Its gear opens
-Settings, where Terminal and Media categories provide previews, Windows selects
-a saved Aperture, Instrument, Glass, or Telemetry border, and Environment
-switches DNA, Cat, and Eyes independently; its Reset control restores the camera
-view.
+scene controller continues the launcher rail at the bottom-right. It has no
+angle readout; drag its reticle to look around in place. Windows stay where
+you placed them, and the rear weave turns with that view. Its
+upper-left X restores the camera view and its gear opens Settings. Terminal and
+Media provide previews, Windows selects a saved Aperture, Instrument, Glass, or
+Telemetry border, Themes saves an SDK-compatible control palette and independent
+shape grammar with a live gallery, and Environment switches DNA, Cat,
+cat/window physics, and Eyes independently. The additive native-app v1 theme
+preference updates apps that advertise support; the native-instrument example
+changes live, while older and non-theme-aware apps keep their own presentation.
 Ctrl+Alt+Enter creates an independent native shell
 and selects it; click its content or press a fresh Enter to read and type. The shortcut works from a focused
 native or legacy app, including with keypad Enter. This control is available even without `--terminal`
@@ -200,19 +206,15 @@ endpoints. XDND versions 3–5 provide copy-only drags between managed X11
 windows; cross-protocol X11/Wayland drags are not implemented.
 
 At most 32 live windows and 32 saved placements are supported. Closed windows
-retain their saved placements, so old layout entries can fill the document with
-fewer live windows. Launch failures show a temporary notice in the compact row
-near the top edge.
-If a new terminal cannot fit the saved layout, it is closed immediately and the
-prior layout is preserved. Reopening native launch slots reuses their placement;
-it starts a fresh shell rather than restoring process memory.
+retain their saved placements while capacity exists. Reopening the same key
+reuses its placement and starts a fresh process rather than restoring process
+memory. If all slots are occupied, a genuinely new key recycles one closed slot.
+Live and still-loading provider keys are reserved first; only a 33rd live or
+opening window is refused with a temporary notice near the top edge.
 
-Use **Forget Closed Placements** in that top notification row to free entries
-belonging to closed windows. It appears only when such entries exist and works
-even with no live apps. Live positions, groups and selection remain intact.
-Ctrl+Z restores forgotten entries if the combined layout still fits; a capacity
-conflict shows a notice instead of hiding a new live window. Redo leaves any
-reopened window intact. Cleanup is always an explicit action.
+Closed placements remain in session state for native launch-slot reuse, but they
+do not add a cleanup control or an empty-state card to the workspace and may be
+recycled when a new key needs the last available slot.
 
 Real foot workflows cover typing, resize and spatial management. Isolated
 Chromium/Konsole tests cover content, menus, nested submenus and dialogs, and

@@ -97,12 +97,13 @@ func TestValidatorLimitsGlassOpticsToLitTranslucentMeshes(t *testing.T) {
 }
 
 type protocolApp struct {
-	started, updates, inputs, closed int
-	pending                          []TextureUpdate
+	started, updates, inputs, themes, closed int
+	pending                                  []TextureUpdate
+	theme                                    ControlTheme
 }
 
 func (a *protocolApp) Manifest() Manifest {
-	return Manifest{ID: "dev.worldr.test", Name: "Protocol test"}
+	return Manifest{ID: "dev.worldr.test", Name: "Protocol test", ControlThemes: true}
 }
 func (a *protocolApp) Start(host Host) error {
 	if host.Version != Version {
@@ -124,6 +125,11 @@ func (a *protocolApp) Handle(id SurfaceID, event Event) error {
 		return errors.New("wrong input")
 	}
 	a.inputs++
+	return nil
+}
+func (a *protocolApp) SetControlTheme(theme ControlTheme) error {
+	a.themes++
+	a.theme = theme
 	return nil
 }
 func (a *protocolApp) Snapshot() Snapshot {
@@ -164,7 +170,9 @@ func TestServeNegotiatesAndSerializesLifecycle(t *testing.T) {
 	request(Request{Version: Version, Sequence: 2, Kind: RequestUpdate, DeltaNanos: int64(16 * time.Millisecond)})
 	event := Event{Kind: PointerDown, Button: ButtonPrimary, X: 1, Y: 1}
 	request(Request{Version: Version, Sequence: 3, Kind: RequestInput, Surface: 7, Event: &event})
-	request(Request{Version: Version, Sequence: 4, Kind: RequestShutdown})
+	theme := ControlTheme{Family: "glass", Shape: "bracketed"}
+	request(Request{Version: Version, Sequence: 4, Kind: RequestTheme, Theme: &theme})
+	request(Request{Version: Version, Sequence: 5, Kind: RequestShutdown})
 	select {
 	case err := <-done:
 		if err != nil {
@@ -173,8 +181,26 @@ func TestServeNegotiatesAndSerializesLifecycle(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Serve did not stop")
 	}
-	if app.started != 1 || app.updates != 1 || app.inputs != 1 || app.closed != 1 {
+	if app.started != 1 || app.updates != 1 || app.inputs != 1 || app.themes != 1 || app.theme != theme || app.closed != 1 {
 		t.Fatalf("callbacks: %+v", app)
+	}
+}
+
+func TestControlThemeValidation(t *testing.T) {
+	for _, theme := range []ControlTheme{
+		{Family: "instrument", Shape: "chamfered"},
+		{Family: "aperture", Shape: "bracketed"},
+		{Family: "glass", Shape: "slab"},
+		{Family: "telemetry", Shape: "notched"},
+	} {
+		if err := theme.Validate(); err != nil {
+			t.Fatalf("valid theme %+v rejected: %v", theme, err)
+		}
+	}
+	for _, theme := range []ControlTheme{{}, {Family: "unknown", Shape: "slab"}, {Family: "glass", Shape: "round"}} {
+		if err := theme.Validate(); err == nil {
+			t.Fatalf("invalid theme %+v accepted", theme)
+		}
 	}
 }
 

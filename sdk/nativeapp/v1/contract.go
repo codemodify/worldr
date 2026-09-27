@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	skin "github.com/codemodify/worldr/sdk/skin/v1"
 )
 
 const Version uint32 = 1
@@ -31,9 +33,12 @@ type SurfaceID uint64
 // Manifest is immutable for the life of a connection. ID should use a stable
 // reverse-domain name because Worldr combines it with Surface.Key for layouts.
 type Manifest struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Description   string `json:"description,omitempty"`
+	ControlThemes bool   `json:"control_themes,omitempty"`
+	// Skins opts into the separately negotiated full skin request.
+	Skins bool `json:"skins,omitempty"`
 }
 
 func (m Manifest) Validate() error {
@@ -68,6 +73,10 @@ type Starter interface{ Start(Host) error }
 type Updater interface{ Update(time.Duration) error }
 type InputHandler interface{ Handle(SurfaceID, Event) error }
 type FocusHandler interface{ Focus(SurfaceID) error }
+type ControlThemeHandler interface{ SetControlTheme(ControlTheme) error }
+
+// SkinHandler applies a complete skin after protocol validation.
+type SkinHandler interface{ SetSkin(skin.Skin) error }
 type ResizeHandler interface {
 	Resize(SurfaceID, int, int) error
 }
@@ -81,6 +90,29 @@ type Host struct {
 	MaxSurfaceWidth  int    `json:"max_surface_width"`
 	MaxSurfaceHeight int    `json:"max_surface_height"`
 	MaxSurfaces      int    `json:"max_surfaces"`
+}
+
+// ControlTheme identifies one built-in palette and one independent control
+// silhouette. Applications advertise Manifest.ControlThemes before the host
+// sends this optional preference. Unknown values are rejected at the protocol
+// boundary so applications can safely pass them to sdk/nativeui/v1.
+type ControlTheme struct {
+	Family string `json:"family"`
+	Shape  string `json:"shape"`
+}
+
+func (t ControlTheme) Validate() error {
+	switch t.Family {
+	case "instrument", "aperture", "glass", "telemetry":
+	default:
+		return fmt.Errorf("unknown native control theme family %q", t.Family)
+	}
+	switch t.Shape {
+	case "chamfered", "bracketed", "slab", "notched":
+	default:
+		return fmt.Errorf("unknown native control shape %q", t.Shape)
+	}
+	return nil
 }
 
 type Snapshot struct {
@@ -107,6 +139,10 @@ type Surface struct {
 	Key     string     `json:"key"`
 	Title   string     `json:"title"`
 	Texture ResourceID `json:"texture"`
+	// MinWidth/MinHeight declare logical resize minima, subject to host limits.
+	// Set both to opt in. Omitted values retain the host's legacy 720x440 floor.
+	MinWidth  int `json:"min_width,omitempty"`
+	MinHeight int `json:"min_height,omitempty"`
 
 	FrameStyle    FrameStyle `json:"frame_style,omitempty"`
 	ContentAspect float32    `json:"content_aspect,omitempty"`

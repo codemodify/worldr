@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/codemodify/worldr/internal/render"
+	fluid "github.com/codemodify/worldr/sdk/fluid/v1"
 )
 
 type outputFixture struct {
@@ -61,6 +62,28 @@ func outputFixtures() ([]outputState, *outputFixture, *outputFixture) {
 	a := &outputFixture{width: 64, height: 64, stats: MemoryStats{AllocatedBytes: 100, PeakBytes: 100, BudgetBytes: 1000, Images: 1, Buffers: 2}}
 	b := &outputFixture{width: 64, height: 48, stats: a.stats}
 	return []outputState{{OutputInfo: OutputInfo{ID: 17, Bounds: image.Rect(0, 0, 64, 64)}, target: a}, {OutputInfo: OutputInfo{ID: 42, Bounds: image.Rect(64, 16, 128, 64)}, target: b}}, a, b
+}
+
+func TestOutputSetCropsFluidViewportPanelsAndPointerWithoutMutation(t *testing.T) {
+	targets, a, b := outputFixtures()
+	set, err := newOutputSet(targets, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer set.Close()
+	field := fluid.Field{Bounds: fluid.Rect{Width: 128, Height: 64}, Style: fluid.DefaultStyle(), Pointer: fluid.Point{X: 68, Y: 30}, PointerActive: true,
+		Surfaces: []fluid.Surface{{Bounds: fluid.Rect{X: 58, Y: 18, Width: 48, Height: 32}, Radius: 10, Fuse: true}}}
+	frame := render.Frame{Commands: []render.Command{{Kind: render.FluidCommand, Fluid: field}}}
+	if err := set.RenderFrame(frame, [4]float32{}); err != nil {
+		t.Fatal(err)
+	}
+	left, right := a.frame.Commands[0].Fluid, b.frame.Commands[0].Fluid
+	if field.Surfaces[0].Bounds.X != 58 || field.Pointer.X != 68 || field.Bounds.X != 0 || left.Bounds != field.Bounds || left.Surfaces[0] != field.Surfaces[0] {
+		t.Fatal("output crop mutated caller or first output fluid coordinates")
+	}
+	if right.Bounds.X != -64 || right.Bounds.Y != -16 || right.Surfaces[0].Bounds.X != -6 || right.Surfaces[0].Bounds.Y != 2 || right.Pointer != (fluid.Point{X: 4, Y: 14}) || right.Style != field.Style {
+		t.Fatal("second output did not translate all fluid coordinates together")
+	}
 }
 func TestOutputSetCropsExtendedDesktopAndMapsInputWithoutMutatingFrame(t *testing.T) {
 	targets, a, b := outputFixtures()

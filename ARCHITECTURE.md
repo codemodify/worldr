@@ -1,5 +1,11 @@
 # worldr: native scene foundation
 
+The project has two products: **worldr-kit** for application infrastructure and
+**worldr-desktop** for application hosting and workspace policy. See
+[product boundaries](docs/PRODUCTS.md) for the dependency direction and
+the standalone application runtime. The implementation below describes
+the current shared foundation.
+
 worldr treats models, documents, instruments, and data as interactive content in
 one environment. The 0.10 reset replaces the former CPU window compositor with
 an explicit host/experience boundary and a retained GPU scene pipeline.
@@ -30,7 +36,9 @@ flowchart TB
 
 | Package | Responsibility |
 | --- | --- |
-| `cmd/worldr-shell` | Chooses the experience factory and installs shutdown signals |
+| `cmd/worldr-desktop`, `cmd/worldr-shell`, `internal/desktopcmd` | Desktop entry point and compatibility command, sharing experience selection and shutdown handling |
+| `cmd/worldr-terminal`, `internal/glass` | Standalone GPU terminal with translucent native chrome, tabbed PTY sessions and appearance preferences |
+| `sdk/app/v1` | Public standalone Wayland/Vulkan runtime, input, clipboard, resource ownership and demand-based GPU submission; no workspace policy dependency |
 | `cmd/worldr-session`, `internal/session` | Validates display-manager session state, prepares XDG environment and supervises the shell |
 | `internal/app` | Owns one experience, display lifecycle, input normalization, timing, snapshots, native sessions, autosave/recovery and document files |
 | `sdk/nativeapp/v1` | Public versioned lifecycle, retained-resource, input/IME and semantic contract for external native apps |
@@ -237,8 +245,8 @@ checks where available, so renamed resources can retain their current path.
 Restoration publishes native surfaces before workspace reconciliation and does
 not grant keyboard focus. Missing resources are reported and kept as pending
 references while their placements remain; a missing Files subfolder recovers to
-the root. Reopening a replacement or forgetting its closed placement discards
-the corresponding pending association.
+the root. Reopening a replacement or recycling its closed placement discards the
+corresponding pending association.
 
 `Checkpointer.CheckpointState` supplies a non-disruptive host snapshot. With
 `--state`, `--autosave=5s` writes `PATH.autosave` on one bounded background worker;
@@ -347,21 +355,24 @@ work, with repeats and the matching release consumed by the workspace.
 Win/Super+C targets only the active live ID and leaves its surface present until
 the provider withdraws it. The top-grip close control targets its own window. An in-workspace launch error
 produces a bounded ten-second notice, outside the document and undo history.
-The hub rejects launches at 32 live surfaces. Separately, old saved placements
-can occupy all 32 layout slots: if a launched terminal cannot be placed, the
-workspace closes only its newly created surface and restores the prior document.
-Existing placements are never silently reassigned or removed to make room.
+The hub rejects a 33rd live or opening surface. Closed placements remain stable
+while an empty slot exists, and reopening the same key reuses its exact layout.
+When a genuinely new key needs a full layout, registration deterministically
+recycles the lowest closed slot. Preflight counts empty plus recyclable slots and
+subtracts every distinct provider key still waiting for registration, including
+loading surfaces. Sync resolves all provider identities before choosing a slot,
+so it never evicts a live or pending layout.
 
-Forget Closed Placements is an explicit undoable document action, available
-even with no live windows. It checks the complete provider surface list rather
-than only visible or renderable surfaces, removes absent keys without compacting
-live slots, and preserves their positions, groups and selection. It cancels an
-unfinished gesture before recording the removal. Its history merge preserves
-keys registered later; redo never removes a key that is live again. If undo
-would exceed 32 retained placements, the operation is refused atomically with
-a visible notice and unchanged history position. Other action merges keep their
-existing behavior. The control shares the notice row with width-limited error
-text, and is shown only when closed placements exist.
+An internal compatibility reducer for closed placements remains available to
+state and session maintenance without exposing a desktop control. It checks the
+complete provider surface list rather than only visible or renderable surfaces,
+removes absent keys without compacting live slots, and preserves live positions,
+groups and selection. It cancels an unfinished gesture before recording the
+removal. Its history merge preserves keys registered later; redo never removes a
+key that is live again. If undo would exceed 32 retained placements, the
+operation is refused atomically with a visible notice and unchanged history
+position. Other action merges keep their existing behavior. Closed placements
+and a zero-window desktop draw neither cleanup chrome nor an empty-state card.
 
 Focused applications receive ordinary keyboard shortcuts, including Ctrl+Q and
 Ctrl+S. The reserved chords are Ctrl+Alt+Q for exit, Ctrl+Alt+O for overview and
@@ -455,8 +466,8 @@ content is read simply because an offer becomes available.
 ## Native photo and media opening
 
 Files hands explicitly opened video/image files to their native providers as
-anchored read-only descriptors. The host checks both live-window capacity and
-retained layout capacity before transferring ownership. Registering content does
+anchored read-only descriptors. The host checks live, pending, empty and
+recyclable placement capacity before transferring ownership. Registering content does
 not select it, grant keyboard focus or change the camera; Read remains an
 explicit workspace action. Stable viewer keys preserve spatial placement.
 
@@ -595,10 +606,15 @@ current space. The launcher consumes its own keys, including releases after
 closing. The desktop has no left sidebar or footer. Its fixed chrome consists
 of the right launcher rail and the compact scene controller directly beneath it
 at the bottom-right; the general desktop has no main toolbar. The controller's
-reticle orbits the scene, two unlabeled values expose yaw and pitch, its gear
-opens the modal Settings surface, and Reset restores the camera. Settings has
-Terminal and Media categories with a preview for each. The standalone
-`--experience=axial` study retains its own toolbar and application controls.
+reticle uses reversed deltas for an inside-sphere look gesture and shows no angle
+readout; its upper-left X restores the camera and its gear opens the modal
+Settings surface. Settings has Terminal and Media previews, saved Windows border
+selection, a saved Themes profile with an SDK-compatible palette-and-shape live
+gallery, and saved Environment switches for DNA, Cat, cat/window physics, and
+Eyes. The additive native-app v1 preference path broadcasts family and shape to
+apps that advertise theme support; older and non-theme-aware apps retain their
+own presentation. The standalone `--experience=axial` study retains its own
+toolbar and application controls.
 
 `nativeui` supplies Pango/HarfBuzz shaping, fallback fonts, reusable controls,
 grapheme editing and semantic focus snapshots. Nested text-input-v3 batches

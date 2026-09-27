@@ -236,10 +236,11 @@ func (r *browserRenderer) paint(p *Provider) error {
 		if i == 0 && p.directory == "" || i == 2 && p.selected < 0 || i == 4 && (p.loadingDirectory || p.openingTerminal) {
 			c = 0x617480
 		}
-		r.fill(button.rect, 0x1a3542)
-		r.label(button.rect, button.rect.Min.X+10, button.rect.Min.Y+18, button.label, c, true)
+		if r.paintErr == nil {
+			r.paintErr = r.uiSmall.DrawButton(r.image, nativeui.Node{ID: fmt.Sprintf("toolbar:%d", i), Role: nativeui.RoleButton, Label: button.label, Bounds: button.rect, Disabled: c == 0x617480}, false, false)
+		}
 	}
-	for _, button := range operationButtons {
+	for i, button := range operationButtons {
 		_, label := p.operationButton(button.action)
 		if label == "" {
 			label = button.label
@@ -248,8 +249,9 @@ func (r *browserRenderer) paint(p *Provider) error {
 		if p.operationPending || p.loadingDirectory || button.action == undoFileAction && len(p.fileHistory) == 0 || button.action != createFolder && button.action != undoFileAction && p.selected < 0 {
 			c = 0x617480
 		}
-		r.fill(button.rect, 0x1a3542)
-		r.label(button.rect, button.rect.Min.X+10, button.rect.Min.Y+18, label, c, true)
+		if r.paintErr == nil {
+			r.paintErr = r.uiSmall.DrawButton(r.image, nativeui.Node{ID: fmt.Sprintf("operation:%d", i), Role: nativeui.RoleButton, Label: label, Bounds: button.rect, Disabled: c == 0x617480}, false, false)
+		}
 	}
 	format := "UTF-8"
 	if p.selected >= 0 && p.selected < len(p.entries) && p.entries[p.selected].kind == fileEntry {
@@ -424,8 +426,9 @@ func (r *browserRenderer) paintOperationDialog(p *Provider) {
 	r.label(image.Rect(rect.Min.X+18, rect.Min.Y+93, rect.Max.X-18, rect.Min.Y+135), rect.Min.X+18, rect.Min.Y+114, hint, 0x9cbdc8, true)
 	for i, label := range []string{"Confirm", "Cancel"} {
 		button := image.Rect(rect.Min.X+18+i*122, rect.Max.Y-46, rect.Min.X+130+i*122, rect.Max.Y-16)
-		r.fill(button, 0x235666)
-		r.label(button, button.Min.X+14, button.Min.Y+20, label, 0xb5edf0, true)
+		if r.paintErr == nil {
+			r.paintErr = r.uiSmall.DrawButton(r.image, nativeui.Node{ID: []string{"dialog-confirm", "dialog-cancel"}[i], Role: nativeui.RoleButton, Label: label, Bounds: button, Disabled: p.operationPending}, false, false)
+		}
 	}
 }
 

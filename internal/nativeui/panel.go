@@ -1,6 +1,7 @@
 package nativeui
 
 import (
+	sdkui "github.com/codemodify/worldr/sdk/nativeui/v1"
 	"image"
 	"image/draw"
 )
@@ -15,7 +16,15 @@ func (p *Painter) DrawPanel(dst *image.RGBA, bounds image.Rectangle, title strin
 	if dst == nil || bounds.Empty() {
 		return nil
 	}
-	draw.Draw(dst, bounds, image.NewUniform(p.Theme.Background), image.Point{}, draw.Src)
+	restoreTypography := p.useControlTypography(bounds)
+	defer restoreTypography()
+	if p.skinPainter != nil {
+		if err := p.skinPainter.DrawControlBackground(dst, "panel", bounds, sdkui.State{Focused: focused}); err != nil {
+			return err
+		}
+	} else {
+		draw.Draw(dst, bounds, image.NewUniform(p.Theme.Background), image.Point{}, draw.Src)
+	}
 	accent := p.Theme.Border
 	if focused {
 		accent = p.Theme.Accent

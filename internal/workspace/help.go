@@ -223,8 +223,8 @@ func (w *Workspace) drawHelp() {
 	}
 	if w.desktop {
 		columns[0].rows = []helpEntry{
-			{"Super+drag space / scene controller", "Pan the workspace / orbit from the bottom-right reticle."},
-			{"Controller gear / Reset", "Open Terminal or Media settings / restore the camera view."},
+			{"Super+drag space / scene controller", "Walk / look around in place. Windows and the rear weave stay in the room."},
+			{"Controller X / gear", "Upper-left reset / Terminal, Media, Windows, Themes, Environment."},
 			{"Super+wheel / drag held + rearward scroll; release", "Move through depth / throw into the rear energy wall."},
 			{"Ctrl+Z / Ctrl+Shift+Z", "Undo / redo workspace edits."},
 			{"Escape / R", "Cancel a gesture / reset the camera view."},

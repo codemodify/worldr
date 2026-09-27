@@ -103,6 +103,30 @@ func Serve(ctx context.Context, app Application, reader io.Reader, writer io.Wri
 					callbackErr = handler.Resize(request.Surface, request.Width, request.Height)
 				}
 			}
+		case RequestTheme:
+			if !started || !manifest.ControlThemes {
+				callbackErr = fmt.Errorf("application did not advertise native control themes")
+			} else if request.Theme == nil {
+				callbackErr = fmt.Errorf("theme request has no preference")
+			} else if callbackErr = request.Theme.Validate(); callbackErr == nil {
+				if handler, ok := app.(ControlThemeHandler); ok {
+					callbackErr = handler.SetControlTheme(*request.Theme)
+				} else {
+					callbackErr = fmt.Errorf("application advertised native control themes without a handler")
+				}
+			}
+		case RequestSkin:
+			if !started || !manifest.Skins {
+				callbackErr = fmt.Errorf("application did not advertise skins")
+			} else if request.Skin == nil {
+				callbackErr = fmt.Errorf("skin request has no skin")
+			} else if callbackErr = request.Skin.Validate(); callbackErr == nil {
+				if handler, ok := app.(SkinHandler); ok {
+					callbackErr = handler.SetSkin(request.Skin.Clone())
+				} else {
+					callbackErr = fmt.Errorf("application advertised skins without a handler")
+				}
+			}
 		case RequestCloseSurface:
 			if !started || request.Surface == 0 {
 				callbackErr = fmt.Errorf("close request has no live surface")

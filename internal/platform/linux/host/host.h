@@ -32,8 +32,20 @@ typedef struct worldr_host_event {
   uint32_t delete_before, delete_after;
 } worldr_host_event;
 typedef struct worldr_host_text_input worldr_host_text_input;
-int worldr_host_open(const char *title, int w, int h, int fullscreen,
+enum {
+  HOST_OPTION_FULLSCREEN = 1,
+  HOST_OPTION_CLIENT_DECORATED = 2,
+  HOST_OPTION_TRANSPARENT = 4,
+  HOST_OPTION_SYSTEM_CURSOR = 8
+};
+int worldr_host_open(const char *title, int w, int h, uint32_t options,
                      int timeout_ms, worldr_host **out, char *err, int errlen);
+int worldr_host_move(worldr_host *h);
+int worldr_host_resize(worldr_host *h, uint32_t edge);
+void worldr_host_minimize(worldr_host *h);
+void worldr_host_set_maximized(worldr_host *h, int maximized);
+int worldr_host_maximized(worldr_host *h);
+void worldr_host_title(worldr_host *h, const char *title);
 void worldr_host_close(worldr_host *h);
 void *worldr_host_display(worldr_host *h);
 void *worldr_host_surface(worldr_host *h);

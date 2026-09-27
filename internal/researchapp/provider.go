@@ -14,6 +14,7 @@ import (
 	"github.com/codemodify/worldr/internal/render"
 	"github.com/codemodify/worldr/internal/resourcepath"
 	"github.com/codemodify/worldr/internal/scene"
+	skin "github.com/codemodify/worldr/sdk/skin/v1"
 )
 
 type loadResult struct {
@@ -40,6 +41,7 @@ type viewer struct {
 }
 
 type Manager struct {
+	skin                             *skin.Skin
 	loader                           chan struct{}
 	slots                            [MaxDashboards]*viewer
 	retiring                         []*viewer
@@ -153,6 +155,12 @@ func (m *Manager) open(file *os.File, name, key string, saved *SessionState) (st
 	r, err := newRenderer(baseWidth, baseHeight)
 	if err != nil {
 		return "", err
+	}
+	if m.skin != nil {
+		if err := r.painter.SetSkin(*m.skin); err != nil {
+			r.close()
+			return "", err
+		}
 	}
 	state := SessionState{Key: key, Source: path, View: defaultView()}
 	if saved != nil {

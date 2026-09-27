@@ -31,6 +31,9 @@ func (w *Workspace) frameMeshFor(surface experience.ApplicationSurface) *scene.M
 		}
 		return w.photoFrameMesh
 	}
+	if w.activeSkin != nil {
+		return w.skinWindowMeshes(surface).frame.mesh
+	}
 	return w.windowBorderFrameMeshForAspect(w.selectedWindowBorderStyle(), w.windowBorderAspect(surface))
 }
 

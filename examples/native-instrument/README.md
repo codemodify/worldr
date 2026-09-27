@@ -1,10 +1,17 @@
 # Native instrument SDK example
 
-This executable imports only `sdk/nativeapp/v1`. It publishes a retained RGBA
-surface, partial texture damage, a rotating spatial mesh with a refractive glass
-shell, semantic controls and pointer/keyboard handling through the out-of-process
-protocol. The shell demonstrates the additive v1 `Transmission`, `Refraction`
-and `RefractionBlur` material fields over native instrument content.
+This executable imports the public `sdk/nativeapp/v1` process contract and
+`sdk/nativeui/v1` control toolkit. It publishes a retained RGBA surface, partial
+texture damage, a rotating spatial mesh with a refractive glass shell, semantic
+controls and pointer/keyboard handling through the out-of-process protocol. Its
+run control uses the public painter and follows the workspace's selected palette
+and shape. The shell also demonstrates the additive v1 `Transmission`,
+`Refraction` and `RefractionBlur` material fields over native instrument content.
+
+The manifest advertises `ControlThemes`, and the app implements
+`ControlThemeHandler` with `nativeui.FromControlTheme`. Change the control family
+or shape in **Settings → Themes** while it is running; the button repaints live.
+Apps that do not advertise this optional capability keep their own presentation.
 
 ```sh
 go build -o bin/worldr-native-instrument ./examples/native-instrument

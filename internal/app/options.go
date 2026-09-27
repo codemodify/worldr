@@ -14,6 +14,8 @@ import (
 )
 
 type Options struct {
+	experiments                                      *experimentSession
+	experimentID                                     string
 	Outputs                                          []uint32
 	ListOutputs                                      bool
 	Metrics                                          string
@@ -22,6 +24,7 @@ type Options struct {
 	Research                                         []string
 	NativeApplications                               []string
 	Backend, Card, Snapshot, State                   string
+	Skin                                             string
 	AccessibilitySocket                              string
 	Experience, Project                              string
 	Application                                      string
@@ -45,7 +48,7 @@ func Parse(args []string, output io.Writer) (Options, error) {
 	f := flag.NewFlagSet("worldr-shell", flag.ContinueOnError)
 	f.SetOutput(output)
 	f.StringVar(&o.Backend, "backend", "auto", "auto|nested|headless|vk-display|drm (nested needs a Wayland host)")
-	f.StringVar(&o.Experience, "experience", "workspace", "workspace|axial (general workspace or engineering study)")
+	f.StringVar(&o.Experience, "experience", "workspace", "workspace|navigator|axial|plasma (desktop, app navigation, engineering study, or fluid playground)")
 	f.StringVar(&o.Project, "project", "", "open a native project browser at this directory")
 	f.Func("model", "open an OBJ, STL or .worldr-model.json in a native 3D inspector (repeatable)", func(path string) error {
 		if strings.TrimSpace(path) == "" || len(o.Models) >= 8 {
@@ -95,6 +98,7 @@ func Parse(args []string, output io.Writer) (Options, error) {
 	f.Uint64Var(&o.GPUMemoryMiB, "gpu-memory-mib", 1024, "Vulkan allocation budget in MiB (128–8192)")
 	f.StringVar(&o.Snapshot, "snapshot", "", "export the final scene as PNG")
 	f.StringVar(&o.State, "state", "", "load a document; save with Ctrl+S and on normal exit")
+	f.StringVar(&o.Skin, "skin", "", "window and control skin: merrick|advanced|hologram|plasma|future-panels or a JSON package path")
 	f.StringVar(&o.AccessibilitySocket, "accessibility-socket", "", "stream versioned native semantics as JSON on this private Unix socket")
 	f.BoolVar(&o.Fresh, "fresh", false, "load the layout but start CLI apps without reopening saved native content or recovery")
 	f.DurationVar(&o.Autosave, "autosave", 5*time.Second, "background recovery checkpoint interval when --state is set (0 disables)")
@@ -140,11 +144,11 @@ func Parse(args []string, output io.Writer) (Options, error) {
 	if o.Demo && !explicitExperience {
 		o.Experience = "axial"
 	}
-	if o.Experience != "workspace" && o.Experience != "axial" {
-		return o, fmt.Errorf("unknown experience %q; choose workspace or axial", o.Experience)
+	if o.Experience != "workspace" && o.Experience != "navigator" && o.Experience != "axial" && o.Experience != "plasma" {
+		return o, fmt.Errorf("unknown experience %q; choose workspace, navigator, axial, or plasma", o.Experience)
 	}
-	if o.Demo && o.Experience != "axial" {
-		return o, fmt.Errorf("--demo requires --experience=axial")
+	if o.Demo && o.Experience != "navigator" && o.Experience != "axial" && o.Experience != "plasma" {
+		return o, fmt.Errorf("--demo requires --experience=navigator, axial, or plasma")
 	}
 	if f.NArg() != 0 && len(orderedLaunches) == 0 {
 		return o, fmt.Errorf("unexpected argument %q", f.Arg(0))

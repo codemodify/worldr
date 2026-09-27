@@ -5,7 +5,8 @@
 package host
 
 /*
-#cgo pkg-config: wayland-client xkbcommon
+#cgo pkg-config: wayland-client wayland-cursor xkbcommon
+#cgo CFLAGS: -Dzxdg_decoration_manager_v1_interface=worldr_host_zxdg_decoration_manager_v1_interface -Dzxdg_toplevel_decoration_v1_interface=worldr_host_zxdg_toplevel_decoration_v1_interface
 #include "host.h"
 #include <stdlib.h>
 */
@@ -26,7 +27,16 @@ type Window struct {
 func Open(title string, w, h int, fullscreen bool) (*Window, error) {
 	return open(title, w, h, fullscreen, 5000)
 }
+
+// OpenWithOptions opens a standalone window. Transparent also requires a
+// premultiplied-alpha renderer swapchain and transparent framebuffer clear.
+func OpenWithOptions(title string, w, h int, options Options) (*Window, error) {
+	return openOptions(title, w, h, options, 5000)
+}
 func open(title string, w, h int, fullscreen bool, timeoutMillis int) (*Window, error) {
+	return openOptions(title, w, h, Options{Fullscreen: fullscreen}, timeoutMillis)
+}
+func openOptions(title string, w, h int, options Options, timeoutMillis int) (*Window, error) {
 	if w <= 0 || h <= 0 || w > 32768 || h > 32768 {
 		return nil, fmt.Errorf("Wayland host dimensions must be between 1 and 32768")
 	}
@@ -34,14 +44,65 @@ func open(title string, w, h int, fullscreen bool, timeoutMillis int) (*Window, 
 	defer C.free(unsafe.Pointer(name))
 	var p *C.worldr_host
 	var err [512]C.char
-	full := 0
-	if fullscreen {
-		full = 1
+	var flags C.uint32_t
+	if options.Fullscreen {
+		flags |= C.HOST_OPTION_FULLSCREEN
 	}
-	if C.worldr_host_open(name, C.int(w), C.int(h), C.int(full), C.int(timeoutMillis), &p, &err[0], 512) != 0 {
+	if options.ClientDecorated {
+		flags |= C.HOST_OPTION_CLIENT_DECORATED
+	}
+	if options.Transparent {
+		flags |= C.HOST_OPTION_TRANSPARENT
+	}
+	if options.SystemCursor {
+		flags |= C.HOST_OPTION_SYSTEM_CURSOR
+	}
+	if C.worldr_host_open(name, C.int(w), C.int(h), flags, C.int(timeoutMillis), &p, &err[0], 512) != 0 {
 		return nil, fmt.Errorf("%s", C.GoString(&err[0]))
 	}
 	return &Window{ptr: p}, nil
+}
+
+// BeginMove starts the compositor's interactive move using the latest pointer
+// press serial. Call in direct response to pressing the app's title bar.
+func (w *Window) BeginMove() bool {
+	return w != nil && w.ptr != nil && C.worldr_host_move(w.ptr) != 0
+}
+
+// BeginResize starts interactive resize in response to an edge pointer press.
+func (w *Window) BeginResize(edge ResizeEdge) bool {
+	return w != nil && w.ptr != nil && C.worldr_host_resize(w.ptr, C.uint32_t(edge)) != 0
+}
+
+func (w *Window) Minimize() {
+	if w != nil && w.ptr != nil {
+		C.worldr_host_minimize(w.ptr)
+	}
+}
+
+func (w *Window) SetMaximized(maximized bool) {
+	if w == nil || w.ptr == nil {
+		return
+	}
+	var value C.int
+	if maximized {
+		value = 1
+	}
+	C.worldr_host_set_maximized(w.ptr, value)
+}
+
+// Maximized reports the compositor's last configured state.
+func (w *Window) Maximized() bool {
+	return w != nil && w.ptr != nil && C.worldr_host_maximized(w.ptr) != 0
+}
+
+func (w *Window) SetTitle(title string) {
+	if w == nil || w.ptr == nil {
+		return
+	}
+	name := C.CString(title)
+	defer C.free(unsafe.Pointer(name))
+	C.worldr_host_title(w.ptr, name)
 }
 func (w *Window) Close() {
 	if w != nil && w.ptr != nil {

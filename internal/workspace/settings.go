@@ -12,7 +12,9 @@ const (
 	settingsTerminal settingsCategory = iota
 	settingsMedia
 	settingsWindows
+	settingsThemes
 	settingsEnvironment
+	settingsSkins
 )
 
 type settingsTarget uint8
@@ -24,13 +26,23 @@ const (
 	settingsTargetTerminal
 	settingsTargetMedia
 	settingsTargetWindows
+	settingsTargetThemes
 	settingsTargetEnvironment
 	settingsTargetWindowAperture
 	settingsTargetWindowInstrument
 	settingsTargetWindowGlass
 	settingsTargetWindowTelemetry
+	settingsTargetThemeInstrument
+	settingsTargetThemeAperture
+	settingsTargetThemeGlass
+	settingsTargetThemeTelemetry
+	settingsTargetShapeChamfered
+	settingsTargetShapeBracketed
+	settingsTargetShapeSlab
+	settingsTargetShapeNotched
 	settingsTargetDNA
 	settingsTargetCat
+	settingsTargetCatCollisions
 	settingsTargetEyes
 )
 
@@ -42,21 +54,68 @@ type settingsPointerCapture struct {
 }
 
 var (
-	settingsBounds            = box{138, 78, 1164, 744}
-	settingsCloseButton       = box{1234, 98, 44, 32}
-	settingsTerminalButton    = box{160, 176, 218, 54}
-	settingsMediaButton       = box{160, 242, 218, 54}
-	settingsWindowsButton     = box{160, 308, 218, 54}
-	settingsEnvironmentButton = box{160, 374, 218, 54}
-	settingsPreviewBounds     = box{432, 222, 830, 430}
-	settingsWindowAperture    = box{452, 242, 380, 180}
-	settingsWindowInstrument  = box{862, 242, 380, 180}
-	settingsWindowGlass       = box{452, 446, 380, 180}
-	settingsWindowTelemetry   = box{862, 446, 380, 180}
-	settingsDNAToggle         = box{462, 256, 770, 92}
-	settingsCatToggle         = box{462, 370, 770, 92}
-	settingsEyesToggle        = box{462, 484, 770, 92}
+	settingsBounds             = box{138, 78, 1164, 744}
+	settingsCloseButton        = box{1234, 98, 44, 32}
+	settingsTerminalButton     = box{160, 176, 218, 48}
+	settingsMediaButton        = box{160, 234, 218, 48}
+	settingsWindowsButton      = box{160, 292, 218, 48}
+	settingsThemesButton       = box{160, 350, 218, 48}
+	settingsEnvironmentButton  = box{160, 408, 218, 48}
+	settingsPreviewBounds      = box{432, 222, 830, 430}
+	settingsWindowAperture     = windowBorderCardBox(0)
+	settingsWindowInstrument   = windowBorderCardBox(1)
+	settingsWindowGlass        = windowBorderCardBox(2)
+	settingsWindowTelemetry    = windowBorderCardBox(3)
+	settingsDNAToggle          = box{462, 238, 770, 78}
+	settingsCatToggle          = box{462, 334, 770, 78}
+	settingsCatCollisionToggle = box{462, 430, 770, 78}
+	settingsEyesToggle         = box{462, 526, 770, 78}
 )
+
+func windowBorderCardBox(index int) box {
+	const cardW, cardH, gapX, gapY, x0, y0 = float32(380), float32(180), float32(30), float32(24), float32(452), float32(242)
+	column, row := index%2, index/2
+	return box{x0 + float32(column)*(cardW+gapX), y0 + float32(row)*(cardH+gapY), cardW, cardH}
+}
+
+func windowBorderSettingsTarget(style windowBorderStyle) settingsTarget {
+	switch style {
+	case windowBorderAperture:
+		return settingsTargetWindowAperture
+	case windowBorderInstrument:
+		return settingsTargetWindowInstrument
+	case windowBorderGlass:
+		return settingsTargetWindowGlass
+	case windowBorderTelemetry:
+		return settingsTargetWindowTelemetry
+	default:
+		return settingsTargetNone
+	}
+}
+
+func windowBorderCardAt(x, y float32) settingsTarget {
+	for i, choice := range windowBorderChoices {
+		if windowBorderCardBox(i).contains(x, y) {
+			return windowBorderSettingsTarget(choice.style)
+		}
+	}
+	return settingsTargetNone
+}
+
+func windowBorderStyleForTarget(target settingsTarget) (windowBorderStyle, bool) {
+	switch target {
+	case settingsTargetWindowAperture:
+		return windowBorderAperture, true
+	case settingsTargetWindowInstrument:
+		return windowBorderInstrument, true
+	case settingsTargetWindowGlass:
+		return windowBorderGlass, true
+	case settingsTargetWindowTelemetry:
+		return windowBorderTelemetry, true
+	default:
+		return "", false
+	}
+}
 
 func (w *Workspace) settingsButtonTarget(x, y float32) settingsTarget {
 	switch {
@@ -68,20 +127,38 @@ func (w *Workspace) settingsButtonTarget(x, y float32) settingsTarget {
 		return settingsTargetMedia
 	case settingsWindowsButton.contains(x, y):
 		return settingsTargetWindows
+	case settingsThemesButton.contains(x, y):
+		return settingsTargetThemes
 	case settingsEnvironmentButton.contains(x, y):
 		return settingsTargetEnvironment
-	case w.settingsCategory == settingsWindows && settingsWindowAperture.contains(x, y):
-		return settingsTargetWindowAperture
-	case w.settingsCategory == settingsWindows && settingsWindowInstrument.contains(x, y):
-		return settingsTargetWindowInstrument
-	case w.settingsCategory == settingsWindows && settingsWindowGlass.contains(x, y):
-		return settingsTargetWindowGlass
-	case w.settingsCategory == settingsWindows && settingsWindowTelemetry.contains(x, y):
-		return settingsTargetWindowTelemetry
+	case settingsSkinsButton.contains(x, y):
+		return settingsTargetSkins
+	case w.skinSettingsTarget(x, y) != settingsTargetNone:
+		return w.skinSettingsTarget(x, y)
+	case w.settingsCategory == settingsWindows && windowBorderCardAt(x, y) != settingsTargetNone:
+		return windowBorderCardAt(x, y)
+	case w.settingsCategory == settingsThemes && settingsThemeInstrument.contains(x, y):
+		return settingsTargetThemeInstrument
+	case w.settingsCategory == settingsThemes && settingsThemeAperture.contains(x, y):
+		return settingsTargetThemeAperture
+	case w.settingsCategory == settingsThemes && settingsThemeGlass.contains(x, y):
+		return settingsTargetThemeGlass
+	case w.settingsCategory == settingsThemes && settingsThemeTelemetry.contains(x, y):
+		return settingsTargetThemeTelemetry
+	case w.settingsCategory == settingsThemes && settingsShapeChamfered.contains(x, y):
+		return settingsTargetShapeChamfered
+	case w.settingsCategory == settingsThemes && settingsShapeBracketed.contains(x, y):
+		return settingsTargetShapeBracketed
+	case w.settingsCategory == settingsThemes && settingsShapeSlab.contains(x, y):
+		return settingsTargetShapeSlab
+	case w.settingsCategory == settingsThemes && settingsShapeNotched.contains(x, y):
+		return settingsTargetShapeNotched
 	case w.settingsCategory == settingsEnvironment && settingsDNAToggle.contains(x, y):
 		return settingsTargetDNA
 	case w.settingsCategory == settingsEnvironment && settingsCatToggle.contains(x, y):
 		return settingsTargetCat
+	case w.settingsCategory == settingsEnvironment && settingsCatCollisionToggle.contains(x, y):
+		return settingsTargetCatCollisions
 	case w.settingsCategory == settingsEnvironment && settingsEyesToggle.contains(x, y):
 		return settingsTargetEyes
 	default:
@@ -239,6 +316,12 @@ func (w *Workspace) handleSettings(event experience.Event) bool {
 				target, activate := p.target, !p.dragged && w.settingsButtonTarget(x, y) == p.target
 				w.cancelSettingsPointer()
 				if activate {
+					if w.applySkinSettingsTarget(target) {
+						return true
+					}
+					if target >= settingsTargetWindowAperture && target <= settingsTargetShapeNotched {
+						w.clearSkin()
+					}
 					switch target {
 					case settingsTargetClose:
 						w.closeSettings()
@@ -248,6 +331,8 @@ func (w *Workspace) handleSettings(event experience.Event) bool {
 						w.settingsCategory = settingsMedia
 					case settingsTargetWindows:
 						w.settingsCategory = settingsWindows
+					case settingsTargetThemes:
+						w.settingsCategory = settingsThemes
 					case settingsTargetEnvironment:
 						w.settingsCategory = settingsEnvironment
 					case settingsTargetWindowAperture:
@@ -258,10 +343,36 @@ func (w *Workspace) handleSettings(event experience.Event) bool {
 						w.windows.Border = windowBorderGlass
 					case settingsTargetWindowTelemetry:
 						w.windows.Border = windowBorderTelemetry
+					case settingsTargetThemeInstrument:
+						w.controlTheme.Family = controlThemeInstrument
+						w.publishControlTheme()
+					case settingsTargetThemeAperture:
+						w.controlTheme.Family = controlThemeAperture
+						w.publishControlTheme()
+					case settingsTargetThemeGlass:
+						w.controlTheme.Family = controlThemeGlass
+						w.publishControlTheme()
+					case settingsTargetThemeTelemetry:
+						w.controlTheme.Family = controlThemeTelemetry
+						w.publishControlTheme()
+					case settingsTargetShapeChamfered:
+						w.controlTheme.Shape = controlShapeChamfered
+						w.publishControlTheme()
+					case settingsTargetShapeBracketed:
+						w.controlTheme.Shape = controlShapeBracketed
+						w.publishControlTheme()
+					case settingsTargetShapeSlab:
+						w.controlTheme.Shape = controlShapeSlab
+						w.publishControlTheme()
+					case settingsTargetShapeNotched:
+						w.controlTheme.Shape = controlShapeNotched
+						w.publishControlTheme()
 					case settingsTargetDNA:
 						w.environment.DNA = !w.environment.DNA
 					case settingsTargetCat:
 						w.environment.Cat = !w.environment.Cat
+					case settingsTargetCatCollisions:
+						w.environment.CatCollisions = !w.environment.CatCollisions
 					case settingsTargetEyes:
 						w.environment.Eyes = !w.environment.Eyes
 					}
@@ -306,19 +417,25 @@ func (w *Workspace) drawSettings() {
 	w.drawSettingsCategory(settingsTerminalButton, "TERMINAL", "SHELL SURFACE", w.settingsCategory == settingsTerminal)
 	w.drawSettingsCategory(settingsMediaButton, "MEDIA", "PLAYBACK SURFACE", w.settingsCategory == settingsMedia)
 	w.drawSettingsCategory(settingsWindowsButton, "WINDOWS", "NATIVE BORDERS", w.settingsCategory == settingsWindows)
+	w.drawSettingsCategory(settingsThemesButton, "THEMES", "CONTROLS + SHAPES", w.settingsCategory == settingsThemes)
 	w.drawSettingsCategory(settingsEnvironmentButton, "ENVIRONMENT", "AMBIENT SCENE", w.settingsCategory == settingsEnvironment)
+	w.drawSettingsCategory(settingsSkinsButton, "SKINS", "WINDOWS + CONTROLS", w.settingsCategory == settingsSkins)
 	footer := "TRANSIENT PREVIEW"
-	if w.settingsCategory == settingsWindows || w.settingsCategory == settingsEnvironment {
+	if w.settingsCategory == settingsWindows || w.settingsCategory == settingsThemes || w.settingsCategory == settingsEnvironment || w.settingsCategory == settingsSkins {
 		footer = "SAVED WITH WORKSPACE"
 	}
 	w.text(160, 760, 10, footer, muted, .72)
 	w.text(160, 779, 10, "ESC  CLOSE", muted, .72)
 
 	switch w.settingsCategory {
+	case settingsSkins:
+		w.drawSkinSettings()
 	case settingsMedia:
 		w.drawMediaSettingsPreview()
 	case settingsWindows:
 		w.drawWindowSettingsPreview()
+	case settingsThemes:
+		w.drawControlThemeSettingsPreview()
 	case settingsEnvironment:
 		w.drawEnvironmentSettingsPreview()
 	default:
@@ -428,18 +545,9 @@ func (w *Workspace) drawMediaSettingsPreview() {
 func (w *Workspace) drawWindowSettingsPreview() {
 	w.drawSettingsPreviewHeader("WINDOWS", "NATIVE BORDERS", "SELECT TO APPLY LIVE")
 	w.drawPreviewFrame(settingsPreviewBounds)
-	cards := [...]struct {
-		bounds box
-		choice windowBorderChoice
-	}{
-		{settingsWindowAperture, windowBorderChoices[0]},
-		{settingsWindowInstrument, windowBorderChoices[1]},
-		{settingsWindowGlass, windowBorderChoices[2]},
-		{settingsWindowTelemetry, windowBorderChoices[3]},
-	}
 	selected := w.windows.Border.normalized()
-	for _, card := range cards {
-		w.drawWindowBorderCard(card.bounds, card.choice, selected == card.choice.style)
+	for i, choice := range windowBorderChoices {
+		w.drawWindowBorderCard(windowBorderCardBox(i), choice, selected == choice.style)
 	}
 }
 
@@ -511,7 +619,7 @@ func (w *Workspace) drawWindowBorderThumbnail(b box, style windowBorderStyle) {
 			w.line(right-length, y, right, y, 1, amber, .64)
 		}
 		w.rect(left+13, bottom-18, 62, 9, teal, .18)
-	default: // Instrument is the established layered chassis.
+	default:
 		w.line(left+30, top, right-30, top, 3, teal, .9)
 		w.line(left, top+20, left, bottom-20, 2.4, teal, .86)
 		w.line(right, top+20, right, bottom-20, 2.4, teal, .86)
@@ -529,8 +637,9 @@ func (w *Workspace) drawEnvironmentSettingsPreview() {
 	w.drawSettingsPreviewHeader("ENVIRONMENT", "AMBIENT SCENE", "LIVE WORKSPACE LAYERS")
 	w.drawPreviewFrame(settingsPreviewBounds)
 	w.drawEnvironmentToggle(settingsDNAToggle, "01", "DNA HELIX", "CENTERED RETAINED 3D LANDMARK", w.environment.DNA)
-	w.drawEnvironmentToggle(settingsCatToggle, "02", "RUNNING CAT", "FREE 3D AMBIENT MOTION", w.environment.Cat)
-	w.drawEnvironmentToggle(settingsEyesToggle, "03", "CURSOR EYES", "THREE EYES TRACK THE POINTER", w.environment.Eyes)
+	w.drawEnvironmentToggle(settingsCatToggle, "02", "RUNNING CAT", "RUNS, RESTS AND NAPS IN 3D", w.environment.Cat)
+	w.drawEnvironmentToggle(settingsCatCollisionToggle, "03", "CAT / WINDOW PHYSICS", "PAW IMPULSES MOVE WINDOWS", w.environment.CatCollisions)
+	w.drawEnvironmentToggle(settingsEyesToggle, "04", "CURSOR EYES", "THREE EYES TRACK THE POINTER", w.environment.Eyes)
 }
 
 func (w *Workspace) drawEnvironmentToggle(b box, index, title, description string, enabled bool) {

@@ -10,6 +10,7 @@ is not a security sandbox or a stable C ABI.
 | Starting point | Current example | Appropriate integration |
 | --- | --- | --- |
 | Public `sdk/nativeapp/v1.Application` | [Orbital instrument](../examples/native-instrument/main.go) | An external native tool with retained pixels, spatial meshes and semantic controls |
+| Public skin + nativeui SDKs | [Skin Studio](../examples/skin-studio/main.go) | Shared window/control recipes, live theme updates and stateful controls; see [Skins](SKINS.md) |
 | Scene-owning `experience.Experience` | [AXIAL workspace](../internal/workspace/workspace.go) | A scene, camera, models, instruments and interaction |
 | Hosted `experience.Applications` provider | [Native terminal](../internal/nativeapps/provider.go), [project browser](../internal/projectapp/provider.go) | Independently focusable content planes arranged by the workspace |
 
@@ -76,6 +77,32 @@ including JSON/base64 overhead. Invalid IDs, revisions, references, UTF-8,
 transforms, material values, semantic bounds and text-input offsets reject the
 snapshot without partially changing the visible surface list.
 
+Surfaces can declare optional `MinWidth` and `MinHeight` logical resize minima
+as a positive pair. Omit both to retain the workspace's legacy 720×440 minimum.
+Explicit minima allow narrow tools and small palettes down to the workspace's
+96×64 floor; the normal 960×600 starting size and 1920×1080 resize ceiling remain.
+Applications must handle the host's `Resize` requests. The
+[Merrick desktop](../examples/merrick-desktop) demonstrates a 190×720 calendar and
+460×86 Programs palette, with initial dimensions supplied by a saved layout.
+
+The public [`sdk/nativeui/v1`](../sdk/nativeui/v1) package is an optional
+framebuffer control toolkit layered on this contract. It provides Instrument,
+Aperture, Glass and Telemetry semantic palettes, independently selectable
+Chamfered, Bracketed, Slab and Notched geometry, clipped shape helpers, a full
+control painter, pointer/keyboard focus and range interaction, and conversion to
+the existing v1 semantic tree. It consumes `nativeapp.Event` directly and paints
+into application-owned RGBA images. Applications may choose a fixed theme or opt
+into the additive v1 control-theme preference; neither path adds a renderer
+handle.
+The workspace's saved **Settings → Themes** design/profile selector uses the same
+family and shape identifiers for its live gallery. An app opts into the additive
+v1 `theme` request with `Manifest.ControlThemes` and implements
+`ControlThemeHandler.SetControlTheme`; `nativeui.FromControlTheme` validates and
+resolves the preference. The host sends Settings changes to opted-in apps, while
+older and non-theme-aware apps retain their own presentation.
+The [native instrument](../examples/native-instrument/main.go) uses it for its
+live run control.
+
 Surfaces carry a runtime ID and app-local stable key. Worldr prefixes the key
 with the manifest ID for placement persistence and uses a deterministic hash
 suffix only when the valid composite would exceed the workspace's 256-byte key
@@ -113,22 +140,29 @@ maps interaction into [typed actions](../internal/workspace/actions.go), so
 buttons, shortcuts and demonstrations share validated behavior and undo rules.
 
 The general desktop's woven wall is implemented in
-[energy_net.go](../internal/workspace/energy_net.go). It is deliberately a
-screen-space `Canvas` layer rather than retained scene geometry. A fixed 120 Hz
+[energy_net.go](../internal/workspace/energy_net.go). It is a world-space sheet
+on the rear plane, projected with the same camera as the windows, and drawn as
+a `Canvas` layer rather than retained scene geometry. A fixed 120 Hz
 simulation integrates a pinned 25-by-15 lattice with structural, shear, and
 bending springs; the horizontal and vertical springs remain invisible bracing.
-The renderer projects two visible families of bowed diagonal fibers through an
-overscanned oblique crop, then uses shaded strokes to give the strands a rounded
-polymer body. Electrical energy subtly changes that material's highlight instead
-of drawing separate pulse bars, and crossings use local underpass shading rather
-than `Circle` commands. A long suspension settles the lattice instead of running
+The renderer samples that lattice into a finer hexagonal thread sheet through an
+overscanned oblique crop, then uses thin shaded strokes so the openings stay
+small and the fabric stays dim behind the workspace. Electrical energy only
+nudges a strand's highlight instead of drawing separate pulse bars. A long suspension settles the lattice instead of running
 an unbounded catch-up. [drawBackground](../internal/workspace/dna_background.go)
 queues this overlay first, then the background scene draw flushes it before the
-subdued retained DNA and running-cat pass. Three cursor-following eyes are queued
-after that retained pass; the normal workspace scene flushes them before drawing
-applications. This leaves the wall at the rear, DNA and cat in 3D, eyes as a
-passive ambient overlay, and applications in front of every effect. The
-standalone AXIAL experience does not allocate these desktop effects.
+subdued retained DNA and cat pass. The cat's analytic 30-second behavior cycle
+maps onto one closed 3D route with standing and sleeping intervals, so frame
+partitioning cannot change its pose. Optional paw contact feeds an impulse into
+the same linked, closed-form window-throw solver used by direct manipulation;
+an impact rebases only its target's residual velocity and leaves unrelated
+throws moving. Three equal cursor-following eyes are queued at the viewport's
+upper-right after the retained pass; the normal workspace scene flushes them
+before drawing applications. This leaves the wall at the rear, DNA and cat in
+3D, eyes as a passive ambient overlay, and applications in front of every
+effect. Settings persists separate DNA, Cat, cat/window-physics, and Eyes
+switches. The standalone AXIAL experience does not allocate these desktop
+effects.
 
 Experience calls belong to one host goroutine. A frame returned by `Draw` is
 borrowed: finish submission before another `Draw` or `Close`. Atlas pixels remain
@@ -164,8 +198,9 @@ clipboard/IME contracts; explicit path copying uses the same clipboard broker.
 `SetTerminalHandler` handles Terminal Here on the host goroutine. The browser
 opens the selected directory on its reader worker and lends its descriptor only
 for the duration of the callback; it closes the descriptor on success, failure,
-cancellation or a stale result. The host preflights live-window and saved-layout
-capacity before launching a process. `nativeapps.Manager.LaunchTerminalInDirectory`
+cancellation or a stale result. The host preflights live and opening windows plus
+empty or recyclable placement capacity before launching a process.
+`nativeapps.Manager.LaunchTerminalInDirectory`
 passes the descriptor to `terminal.Options.Directory`; the synchronous PTY startup
 uses that opened directory without reopening its display path or changing the
 parent's working directory. A regular-file selection uses the current folder.
@@ -300,7 +335,11 @@ installation, choosing a newer valid recovery or falling back after a bad file.
 `--fresh` loads only the primary layout and explicit CLI apps, skipping saved
 native resources and recovery. A `.lock` guards concurrent use of the state path.
 Missing resources are reported and kept pending with retained placements;
-replacement or forgetting the closed placement removes the old association.
+replacement or automatic recycling of the closed placement removes the old
+association. Closed slots remain stable for a same-key reopen while capacity is
+available. A genuinely new key deterministically recycles the lowest closed slot
+only after empty slots run out and after reserving live and loading keys. Closed
+placements add no cleanup control or empty-state card to the desktop.
 
 ## Hosted 3D content and shared controls
 
@@ -315,18 +354,25 @@ the backing plane's pixel coordinates. `ApplicationGeometryRetirer` releases
 mesh IDs only after the provider removes all references.
 
 In-process providers may opt a translucent mesh into `Material.Hologram`. The
-workspace supplies its own `Scene.EffectPhase`, freezes that phase under Reduced
-Motion and leaves provider playback untouched. This treatment is mesh-only:
+workspace supplies its own continuously advancing `Scene.EffectPhase` and leaves
+provider playback untouched. This treatment is mesh-only:
 application control textures, legacy buffers, shaped overlays and the host cursor
 never enter its shader.
 
 Workspace Settings applies the saved Aperture, Instrument, Glass, or Telemetry
 border to ordinary framed surfaces. `FrameCinematic` keeps the stronger authored
 chrome treatment within the selected family. Explicit `FramePhotoBracket` and
-`Frameless` preserve app-specific open or absent chrome. `nativeui.Painter`
-supplies shaped labels, buttons, panels, menus and
-fields on retained RGBA surfaces; `Controller` supplies keyboard/pointer focus
-and semantic roles. `Field` edits graphemes, selection and transient IME preedit.
+`Frameless` preserve app-specific open or absent chrome. The separate saved
+Themes profile combines an SDK-compatible control palette with an independent
+shape grammar and previews the pair in a live gallery. The host sends changes to
+native-app v1 children that advertise theme support; older and non-theme-aware
+apps ignore the additive path. `nativeui.Painter` supplies shaped
+labels, buttons, fields, text areas, switches, checkboxes, radio choices,
+sliders, meters, progress bars, tabs, segments, menus, lists, trees, tables,
+scrollbars, splitters, panels, cards, toolbars, dialogs, popovers, tooltips,
+badges, and separators on retained RGBA surfaces. `Controller` supplies
+keyboard/pointer focus, pointer capture, range input, and semantic roles. `Field`
+edits graphemes, selection and transient IME preedit.
 Linux uses Pango/HarfBuzz/font fallback. Non-cgo builds retain limited Go-font
 rendering for portable contract tests. Terminal cells remain a fixed grid.
 

@@ -5,21 +5,41 @@ import (
 	"math/bits"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/codemodify/worldr/internal/experience"
 )
 
 const (
-	// Every built-in native renderer and both compatibility bridges accept this
-	// common range, so the saved spatial dimensions always match the size the
-	// provider can actually present.
-	minApplicationWidth  = 720
-	minApplicationHeight = 440
+	// Saved geometry supports small native tools as well as full application
+	// windows. Providers retain their own content-size limits; the Compact/Wide
+	// defaults remain unchanged for placements without explicit dimensions.
+	minApplicationWidth  = 96
+	minApplicationHeight = 64
 	maxApplicationWidth  = 1920
 	maxApplicationHeight = 1080
+	// Omitted surface metadata keeps the common minimum accepted by existing
+	// built-in and compatibility applications.
+	legacyMinApplicationWidth  = 720
+	legacyMinApplicationHeight = 440
 	// Maximize fills the readable workspace while retaining reachable chrome.
 	// Larger custom surfaces remain available through direct resizing.
 	maximizedApplicationWidth  = 1440
 	maximizedApplicationHeight = 900
 )
+
+func applicationSurfaceMinimumSize(surface experience.ApplicationSurface) (width, height int) {
+	width, height = legacyMinApplicationWidth, legacyMinApplicationHeight
+	if surface.MinWidth > 0 && surface.MinHeight > 0 {
+		width, height = surface.MinWidth, surface.MinHeight
+	}
+	return max(minApplicationWidth, min(maxApplicationWidth, width)), max(minApplicationHeight, min(maxApplicationHeight, height))
+}
+
+func applicationSurfaceSize(surface experience.ApplicationSurface, placement ApplicationPlacement) (width, height int) {
+	width, height = applicationLogicalSize(placement)
+	minWidth, minHeight := applicationSurfaceMinimumSize(surface)
+	return max(minWidth, width), max(minHeight, height)
+}
 
 func (v ApplicationViewState) index(key string) int {
 	if key != "" {

@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/codemodify/worldr/internal/experience"
@@ -11,10 +10,10 @@ import (
 // Its small reticle is the desktop's only pointer target for orbiting the
 // spatial scene; the adjacent gear and Reset controls own separate strokes.
 var (
-	orbitPadBounds      = box{1348, 796, 76, 92}
-	orbitPadDragBounds  = box{1354, 802, 40, 46}
-	orbitSettingsButton = box{1398, 802, 20, 20}
-	desktopResetButton  = box{1354, 862, 64, 20}
+	orbitPadBounds      = box{1364, 796, 60, 92}
+	orbitPadDragBounds  = box{1369, 824, 50, 58}
+	orbitSettingsButton = box{1401, 802, 18, 18}
+	desktopResetButton  = box{1369, 802, 18, 18}
 )
 
 type orbitControlTarget uint8
@@ -32,7 +31,7 @@ type orbitControlPointer struct {
 	width, height   int
 }
 
-func (w *Workspace) orbitPadVisible() bool { return w.desktop }
+func (w *Workspace) orbitPadVisible() bool { return w.desktop && !w.skinDesktopChromeVisible() }
 
 func (w *Workspace) orbitPadCanOrbit() bool {
 	view := w.m.applicationState
@@ -71,7 +70,9 @@ func (w *Workspace) drawOrbitPad() {
 		w.line(edge[0], edge[1], edge[2], edge[3], 1.25, teal, .72)
 	}
 
-	cx, cy, radius := float32(1374), float32(825), float32(18)
+	cx := orbitPadDragBounds.x + orbitPadDragBounds.w/2
+	cy := orbitPadDragBounds.y + orbitPadDragBounds.h/2
+	radius := float32(18)
 	strength := float32(1)
 	if !w.orbitPadCanOrbit() {
 		strength = .32
@@ -98,12 +99,10 @@ func (w *Workspace) drawOrbitPad() {
 		w.line(gx+c*6.2, gy+s*6.2, gx+c*8, gy+s*8, 1.2, teal, .78)
 	}
 
-	yaw := float64(w.m.yaw) * 180 / math.Pi
-	pitch := float64(w.m.pitch) * 180 / math.Pi
-	w.text(1355, 850, 8, fmt.Sprintf("%+03.0f° / %+03.0f°", yaw, pitch), ink, .92)
-	w.rect(desktopResetButton.x, desktopResetButton.y, desktopResetButton.w, desktopResetButton.h, teal, .08)
-	w.line(desktopResetButton.x, desktopResetButton.y+desktopResetButton.h, desktopResetButton.x+desktopResetButton.w, desktopResetButton.y+desktopResetButton.h, 1, teal, .5)
-	w.text(desktopResetButton.x+16, desktopResetButton.y+5, 10, "RESET", teal, .95)
+	rx := desktopResetButton.x + desktopResetButton.w/2
+	ry := desktopResetButton.y + desktopResetButton.h/2
+	w.line(rx-4, ry-4, rx+4, ry+4, 1.4, teal, .95)
+	w.line(rx-4, ry+4, rx+4, ry-4, 1.4, teal, .95)
 }
 
 func (w *Workspace) handleOrbitPad(event experience.Event) bool {

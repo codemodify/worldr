@@ -134,8 +134,8 @@ func (f *rollbackLaunchingApplications) CloseApplication(id uint64) {
 	}
 }
 
-func TestNewTerminalShortcutFullSavedLayoutClosesOnlyNewSurface(t *testing.T) {
-	for _, state := range []string{"all-orphaned", "one-live", "existing-excluded-key"} {
+func TestNewTerminalShortcutRecyclesClosedSavedLayout(t *testing.T) {
+	for _, state := range []string{"all-orphaned", "one-live"} {
 		t.Run(state, func(t *testing.T) {
 			w, apps := multipleApplications(t, MaxApplicationLayouts)
 			launcher := &rollbackLaunchingApplications{launchingApplications: terminalLauncher(t, apps)}
@@ -144,37 +144,56 @@ func TestNewTerminalShortcutFullSavedLayoutClosesOnlyNewSurface(t *testing.T) {
 				apps.surfaces = nil
 			case "one-live":
 				apps.surfaces = apps.surfaces[:1]
-			case "existing-excluded-key":
-				// Even a pre-existing excluded surface with the returned key
-				// must never be mistaken for the process just launched.
-				previous := launcher.surface
-				previous.ID = 9999
-				apps.surfaces = []experience.ApplicationSurface{previous}
 			}
 			w.SetApplications(launcher)
-			before, historyPosition := w.Document(), w.historyPosition
-			existing := append([]experience.ApplicationSurface(nil), apps.surfaces...)
+			beforeKeys := w.SavedApplicationKeys()
+			historyPosition := w.historyPosition
 			launchTerminalShortcut(t, w)
-			if len(launcher.launched) != 1 || len(launcher.closed) != 1 || launcher.closed[0] != launcher.surface.ID {
-				t.Fatalf("excluded terminal was not closed exactly once: launches=%v closed=%v", launcher.launched, launcher.closed)
+			if len(launcher.launched) != 1 || len(launcher.closed) != 0 {
+				t.Fatalf("recyclable terminal launch was rolled back: launches=%v closed=%v", launcher.launched, launcher.closed)
 			}
-			if w.Document() != before || w.historyPosition != historyPosition || len(apps.surfaces) != len(existing) {
-				t.Fatal("launch rollback changed the saved layout or existing windows")
+			if w.application.ID != launcher.surface.ID || w.m.applicationState.index(launcher.surface.Key) < 0 || w.historyPosition != historyPosition {
+				t.Fatal("new terminal did not take one closed slot outside undo history")
 			}
-			for i, surface := range apps.surfaces {
-				if surface != existing[i] {
-					t.Fatal("launch rollback closed or changed an existing surface")
+			remaining := make(map[string]bool)
+			for _, key := range w.SavedApplicationKeys() {
+				remaining[key] = true
+			}
+			removed := 0
+			for _, key := range beforeKeys {
+				if !remaining[key] {
+					removed++
 				}
 			}
-			if !strings.Contains(w.applicationNotice, "32-window limit") {
-				t.Fatalf("launch capacity failure was not explained: %q", w.applicationNotice)
-			}
-			assertApplicationNoticeVisible(t, w)
-			if w.Document() != before {
-				t.Fatal("drawing after rollback changed an existing placement")
+			if removed != 1 {
+				t.Fatalf("launch recycled %d saved placements, want exactly one", removed)
 			}
 		})
 	}
+}
+
+func TestNewTerminalShortcutFullLiveLayoutClosesOnlyNewSurface(t *testing.T) {
+	w, apps := multipleApplications(t, MaxApplicationLayouts)
+	launcher := &rollbackLaunchingApplications{launchingApplications: terminalLauncher(t, apps)}
+	w.SetApplications(launcher)
+	before, historyPosition := w.Document(), w.historyPosition
+	existing := append([]experience.ApplicationSurface(nil), apps.surfaces...)
+	launchTerminalShortcut(t, w)
+	if len(launcher.launched) != 1 || len(launcher.closed) != 1 || launcher.closed[0] != launcher.surface.ID {
+		t.Fatalf("over-capacity terminal was not closed exactly once: launches=%v closed=%v", launcher.launched, launcher.closed)
+	}
+	if w.Document() != before || w.historyPosition != historyPosition || len(apps.surfaces) != len(existing) {
+		t.Fatal("launch rollback changed a live layout or existing window")
+	}
+	for i, surface := range apps.surfaces {
+		if surface != existing[i] {
+			t.Fatal("launch rollback closed or changed an existing surface")
+		}
+	}
+	if !strings.Contains(w.applicationNotice, "32 live or opening windows") {
+		t.Fatalf("live capacity failure was not explained: %q", w.applicationNotice)
+	}
+	assertApplicationNoticeVisible(t, w)
 }
 
 func TestExcessLiveApplicationsShowCapacityNotice(t *testing.T) {

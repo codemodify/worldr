@@ -10,6 +10,7 @@ import (
 	"github.com/codemodify/worldr/internal/experience"
 	"github.com/codemodify/worldr/internal/platform/linux/native"
 	"github.com/codemodify/worldr/internal/render"
+	"github.com/codemodify/worldr/internal/scene"
 )
 
 func dnaBackgroundCommand(t *testing.T, w *Workspace, frame render.Frame) (int, render.Command, render.Draw) {
@@ -31,17 +32,21 @@ func dnaBackgroundCommand(t *testing.T, w *Workspace, frame render.Frame) (int, 
 
 func TestDNABackgroundUsesSeparateEarlierSceneAndFixedCamera(t *testing.T) {
 	w := desktop(t)
+	w.environment.DNA = true
 	apps := desktopApplications(t, w)
 	frame := w.Draw(1440, 900)
 	index, backdrop, draw := dnaBackgroundCommand(t, w, frame)
 	if backdrop.Kind != render.SceneCommand || draw.Texture != nil || !w.backgroundScene.Node(w.dnaNode).Unpickable {
 		t.Fatal("DNA did not remain unpickable retained background geometry")
 	}
-	if draw.Model[12] != 0 || draw.Model[13] != 0 || draw.Model[14] != 0 {
-		t.Fatalf("DNA is not centered: translation=(%v, %v, %v)", draw.Model[12], draw.Model[13], draw.Model[14])
+	_, up, _ := applicationBasis()
+	axis := scene.Vec3{X: draw.Model[4], Y: draw.Model[5], Z: draw.Model[6]}
+	if axis.Length() < .2 || axis.Normalize().Sub(up).Length() > 1e-4 {
+		t.Fatalf("DNA long axis is not the room's up: %+v", axis)
 	}
-	if draw.Model[4] != 0 || draw.Model[5] != 1 || draw.Model[6] != 0 {
-		t.Fatalf("DNA long axis is not vertical: y-axis=(%v, %v, %v)", draw.Model[4], draw.Model[5], draw.Model[6])
+	got := scene.Vec3{X: draw.Model[12], Y: draw.Model[13], Z: draw.Model[14]}
+	if got.Sub(dnaLandmarkCenter()).Length() > 1e-4 {
+		t.Fatalf("DNA landmark is not in the room: got %+v", got)
 	}
 	appIndex := -1
 	for i, command := range frame.Commands {
@@ -60,8 +65,8 @@ func TestDNABackgroundUsesSeparateEarlierSceneAndFixedCamera(t *testing.T) {
 	command(t, w, Action{Kind: OrbitCamera, DeltaX: 35, DeltaY: -15})
 	command(t, w, Action{Kind: ZoomCamera, DeltaZoom: .2})
 	_, movedCamera, movedDraw := dnaBackgroundCommand(t, w, w.Draw(1440, 900))
-	if movedCamera.View != backdrop.View || movedDraw.Model != draw.Model || movedDraw.Geometry != draw.Geometry {
-		t.Fatal("workspace camera motion changed backdrop framing, pose or geometry")
+	if movedCamera.View == backdrop.View || movedDraw.Model != draw.Model || movedDraw.Geometry != draw.Geometry {
+		t.Fatal("looking around left the landmark stuck to the screen or moved it inside the room")
 	}
 	_, resized, resizedDraw := dnaBackgroundCommand(t, w, w.Draw(1000, 700))
 	if resized.View.Viewport == backdrop.View.Viewport || resizedDraw.Model != draw.Model || resizedDraw.Geometry != draw.Geometry {
@@ -90,6 +95,7 @@ func TestDNABackgroundUsesSeparateEarlierSceneAndFixedCamera(t *testing.T) {
 
 func TestDNABackgroundTimingIsFrameIndependentAndBounded(t *testing.T) {
 	fast, slow := desktop(t), desktop(t)
+	fast.environment.DNA, slow.environment.DNA = true, true
 	_, _, initial := dnaBackgroundCommand(t, fast, fast.Draw(1440, 900))
 	for i := 0; i < 40; i++ {
 		fast.Update(25 * time.Millisecond)
@@ -127,6 +133,7 @@ func TestDNABackgroundTimingIsFrameIndependentAndBounded(t *testing.T) {
 
 func TestDNABackgroundMotionIsTransientAndAlwaysAdvances(t *testing.T) {
 	w := desktop(t)
+	w.environment.DNA = true
 	before := w.Document()
 	state, err := w.SaveState()
 	if err != nil {
@@ -180,9 +187,10 @@ func TestEnvironmentVisibilityControlsRetainedBackdropWithoutRebuilding(t *testi
 		return false
 	}
 
+	w.environment.DNA, w.environment.Cat = true, true
 	initial := w.Draw(1440, 900)
 	if !contains(initial, dnaGeometry) || !contains(initial, w.ambientCat.bodyMesh.Geometry()) {
-		t.Fatal("enabled Environment defaults did not submit DNA and cat geometry")
+		t.Fatal("enabled Environment switches did not submit DNA and cat geometry")
 	}
 	w.environment.DNA, w.environment.Cat = false, false
 	dnaPhase, catPhase := w.backgroundPhase, w.ambientCat.phase
@@ -212,6 +220,7 @@ func TestEnvironmentVisibilityControlsRetainedBackdropWithoutRebuilding(t *testi
 
 func TestDNABackgroundReadAndApplicationLifecycleRetainGeometry(t *testing.T) {
 	w := desktop(t)
+	w.environment.DNA = true
 	apps := desktopApplications(t, w)
 	_, _, original := dnaBackgroundCommand(t, w, w.Draw(1440, 900))
 	command(t, w, Action{Kind: ToggleApplicationReading})
@@ -242,6 +251,7 @@ func TestDNABackgroundLeavesOpaqueApplicationPixelsExactGPU(t *testing.T) {
 		t.Skip("set WORLDR_TEST_GPU=1 to render background/content isolation")
 	}
 	w := desktop(t)
+	w.environment.DNA = true
 	apps := desktopApplications(t, w)
 	command(t, w, Action{Kind: MoveApplications, DeltaX: 3})
 	texture := apps.surfaces[0].Texture

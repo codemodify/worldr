@@ -55,6 +55,10 @@ func TestDesktopOrbitPadIsScaledAndOneUndoableGesture(t *testing.T) {
 	if !pointer(w, experience.PointerMove, x+82*w.scale, y+27*w.scale) || w.Document().View.Camera == before.View.Camera {
 		t.Fatal("orbit-pad drag did not preview camera rotation")
 	}
+	preview := w.Document().View.Camera
+	if preview.Yaw >= before.View.Camera.Yaw || preview.Pitch >= before.View.Camera.Pitch {
+		t.Fatalf("inside-sphere controller did not make the view follow a down-right drag: before=%+v after=%+v", before.View.Camera, preview)
+	}
 	if !pointer(w, experience.PointerUp, x+82*w.scale, y+27*w.scale) || w.pointer.kind != captureNone {
 		t.Fatal("orbit-pad release did not finish its pointer capture")
 	}
@@ -99,6 +103,10 @@ func TestDesktopFormerBottomLeftOrbitPadAreaIsInert(t *testing.T) {
 }
 
 func TestDesktopOrbitPadGearAndResetDoNotStartOrbit(t *testing.T) {
+	if desktopResetButton.y != orbitSettingsButton.y || desktopResetButton.x >= orbitSettingsButton.x ||
+		desktopResetButton.y+desktopResetButton.h > orbitPadDragBounds.y {
+		t.Fatal("reset X and Settings are not separated above the orbit field")
+	}
 	for name, target := range map[string]box{
 		"settings": orbitSettingsButton,
 		"reset":    desktopResetButton,

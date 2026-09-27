@@ -9,6 +9,7 @@ import (
 	"github.com/codemodify/worldr/internal/experience"
 	"github.com/codemodify/worldr/internal/resourcepath"
 	"github.com/codemodify/worldr/internal/terminal"
+	skin "github.com/codemodify/worldr/sdk/skin/v1"
 )
 
 const maxNativeTerminals = 32
@@ -24,6 +25,7 @@ type managedTerminal struct {
 // belong to reusable launch slots; runtime IDs never identify a later terminal.
 // Like Provider, its methods belong to the host goroutine.
 type Manager struct {
+	skin     *skin.Skin
 	options  Options
 	factory  func(Options) (*Provider, error)
 	slots    [maxNativeTerminals]*managedTerminal
@@ -151,6 +153,9 @@ func (m *Manager) launchTerminalAt(slot int, options Options) (string, error) {
 	p, err := m.factory(options)
 	if err != nil {
 		return "", err
+	}
+	if m.skin != nil {
+		p.SetSkin(*m.skin)
 	}
 	for _, event := range []experience.Event{m.keymap, m.modifiers, m.repeat} {
 		if event.Kind != 0 {

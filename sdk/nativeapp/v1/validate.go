@@ -202,6 +202,9 @@ func validateSurfaces(surfaces []Surface, textures map[ResourceID]textureState, 
 		if surface.FrameStyle != "" && surface.FrameStyle != FrameDefault && surface.FrameStyle != FrameCinematic && surface.FrameStyle != FramePhotoBracket {
 			return nil, nil, fmt.Errorf("surface %d has an unknown frame style", surface.ID)
 		}
+		if (surface.MinWidth != 0 || surface.MinHeight != 0) && (surface.MinWidth < 1 || surface.MinWidth > MaxTextureWidth || surface.MinHeight < 1 || surface.MinHeight > MaxTextureHeight) {
+			return nil, nil, fmt.Errorf("surface %d minimum dimensions must both be positive and within host texture limits", surface.ID)
+		}
 		if !finite(surface.ContentAspect) || surface.ContentAspect < 0 || !finite(surface.UV[:]...) {
 			return nil, nil, fmt.Errorf("surface %d has an invalid aspect or UV", surface.ID)
 		}

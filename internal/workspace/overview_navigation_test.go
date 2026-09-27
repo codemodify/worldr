@@ -27,6 +27,44 @@ func tapOverviewKey(t *testing.T, w *Workspace, code uint32) {
 	}
 }
 
+func TestOverviewSemanticKeysMatchPhysicalNavigation(t *testing.T) {
+	physical, physicalApps := multipleApplications(t, 4)
+	semantic, semanticApps := multipleApplications(t, 4)
+	for _, w := range []*Workspace{physical, semantic} {
+		command(t, w, Action{Kind: ToggleApplicationOverview})
+		w.Draw(1440, 900)
+	}
+	for _, stroke := range []struct {
+		code uint32
+		key  experience.Key
+	}{
+		{106, experience.KeyRight},
+		{108, experience.KeyDown},
+		{105, experience.KeyLeft},
+		{103, experience.KeyUp},
+		{28, experience.KeyEnter}, // Return from overview.
+		{28, experience.KeyEnter}, // Explicitly read and focus the selection.
+	} {
+		for _, edge := range []struct {
+			pressed, repeat bool
+			mods            experience.Modifiers
+		}{{true, false, 0}, {true, true, experience.ModShift}, {false, false, experience.ModShift}} {
+			p := experience.Event{Kind: experience.KeyInput, Keycode: stroke.code, Pressed: edge.pressed, Repeat: edge.repeat, Modifiers: edge.mods}
+			s := p
+			s.Keycode, s.Key = 0, stroke.key
+			if physical.Handle(p) != semantic.Handle(s) || physical.Document() != semantic.Document() || physical.OwnsKeyboard() != semantic.OwnsKeyboard() {
+				t.Fatalf("semantic %s did not match physical code %d at edge %+v", stroke.key, stroke.code, edge)
+			}
+		}
+	}
+	if !semantic.OwnsKeyboard() || !semantic.m.applicationReading || semantic.m.applicationState.Overview {
+		t.Fatal("semantic Enter did not complete overview selection and explicit activation")
+	}
+	if len(physicalApps.events) != 0 || len(semanticApps.events) != 0 {
+		t.Fatal("navigation or activation strokes leaked into an application")
+	}
+}
+
 func TestSingleApplicationOverviewCentersAndFitsItsOnlyThumbnail(t *testing.T) {
 	w, apps := multipleApplications(t, 1)
 	command(t, w, Action{Kind: ToggleApplicationOverview})

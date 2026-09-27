@@ -7,6 +7,23 @@
 
 typedef struct { uint32_t begin, end; } scene_glow_scope;
 
+/* An exact, bounded snapshot of the inputs consumed by glow.vert/glow.frag
+ * and the opaque rectangle occluder in surface.vert/glow_surface.frag.
+ * Texture pixels/UV, material/light constants, and effect phase do not affect
+ * these shaders. Update this key if that shader contract gains dependencies. */
+#define SCENE_GLOW_CACHE_DRAWS 1024
+typedef struct {
+	uint64_t geometry;
+	uint32_t kind;
+	float projection[16], model[16], glow[3], alpha;
+} scene_glow_draw_key;
+typedef struct {
+	scene_glow_draw_key *draws;
+	uint32_t count, capacity;
+	float viewport[4];
+	int valid;
+} scene_glow_cache;
+
 struct scene_glow {
 	VkRenderPass seed_pass, blur_pass;
 	VkPipeline mesh, surface, readonly, blur, composite;
@@ -16,7 +33,79 @@ struct scene_glow {
 	scene_image seed, horizontal, halo[SCENE_GLOW_VIEWS];
 	VkFramebuffer seed_frame, horizontal_frame, halo_frame[SCENE_GLOW_VIEWS];
 	uint32_t width, height, slots;
+	scene_glow_cache cache[SCENE_GLOW_VIEWS];
+	uint64_t rendered, reused;
 };
+
+static void scene_glow_invalidate(worldr_vk *vk)
+{
+	if(vk && vk->scene && vk->scene->glow)
+		for(unsigned i=0;i<SCENE_GLOW_VIEWS;i++)vk->scene->glow->cache[i].valid=0;
+}
+
+void worldr_vk_invalidate_glow_cache(worldr_vk *vk) { scene_glow_invalidate(vk); }
+
+void worldr_vk_glow_cache_stats(worldr_vk *vk,uint64_t *rendered,uint64_t *reused)
+{
+	scene_glow *g=vk && vk->scene?vk->scene->glow:NULL;
+	if(rendered)*rendered=g?g->rendered:0;
+	if(reused)*reused=g?g->reused:0;
+}
+
+static scene_glow_draw_key scene_glow_key(const worldr_frame_draw *draw)
+{
+	scene_glow_draw_key key={0};
+	key.kind=draw->kind;
+	memcpy(key.projection,draw->projection,sizeof(key.projection));
+	memcpy(key.model,draw->model,sizeof(key.model));
+	if(draw->kind!=3){
+		key.geometry=draw->geometry;
+		memcpy(key.glow,draw->glow,sizeof(key.glow));
+		key.alpha=draw->color[3];
+	}
+	return key;
+}
+
+static int scene_glow_cache_matches(const scene_glow_cache *cache,const worldr_frame_draw *draws,const scene_glow_scope *scope)
+{
+	if(!cache->valid || memcmp(cache->viewport,draws[scope->begin].viewport,sizeof(cache->viewport)))return 0;
+	uint32_t count=0;
+	for(uint32_t i=scope->begin+1;i<scope->end;i++){
+		if(draws[i].kind==6)continue; /* Translucent content is absent from the seed. */
+		if(count>=cache->count)return 0;
+		scene_glow_draw_key key=scene_glow_key(&draws[i]);
+		const scene_glow_draw_key *saved=&cache->draws[count++];
+		/* Compare members, not struct padding: aggregate copies need not retain
+		 * deterministic padding bytes on every C implementation. */
+		if(key.kind!=saved->kind || key.geometry!=saved->geometry ||
+			memcmp(key.projection,saved->projection,sizeof(key.projection)) ||
+			memcmp(key.model,saved->model,sizeof(key.model)) ||
+			memcmp(key.glow,saved->glow,sizeof(key.glow)) ||
+			memcmp(&key.alpha,&saved->alpha,sizeof(key.alpha)))return 0;
+	}
+	return count==cache->count;
+}
+
+static void scene_glow_cache_store(scene_glow_cache *cache,const worldr_frame_draw *draws,const scene_glow_scope *scope)
+{
+	cache->valid=0;
+	uint32_t count=0;
+	for(uint32_t i=scope->begin+1;i<scope->end;i++)if(draws[i].kind!=6)count++;
+	/* Large scenes and allocation failure take the original exact render path;
+	 * the optimization never turns a successfully rendered frame into an error. */
+	if(count>SCENE_GLOW_CACHE_DRAWS)return;
+	if(count>cache->capacity){
+		uint32_t capacity=(count+31u)&~31u;
+		scene_glow_draw_key *keys=realloc(cache->draws,(size_t)capacity*sizeof(*keys));
+		if(!keys)return;
+		cache->draws=keys;cache->capacity=capacity;
+	}
+	cache->count=0;
+	for(uint32_t i=scope->begin+1;i<scope->end;i++)
+		if(draws[i].kind!=6)cache->draws[cache->count++]=scene_glow_key(&draws[i]);
+	memcpy(cache->viewport,draws[scope->begin].viewport,sizeof(cache->viewport));
+	cache->valid=1;
+}
 
 static void scene_glow_release(worldr_vk *vk)
 {
@@ -33,6 +122,7 @@ static void scene_glow_release(worldr_vk *vk)
 	for (unsigned i=0;i<SCENE_GLOW_VIEWS;i++) {
 		if (g->halo_frame[i]) vkDestroyFramebuffer(vk->device,g->halo_frame[i],NULL);
 		scene_drop_image(vk,&g->halo[i]);
+		free(g->cache[i].draws);
 	}
 	if (g->pool) vkDestroyDescriptorPool(vk->device,g->pool,NULL);
 	if (g->post_layout) vkDestroyPipelineLayout(vk->device,g->post_layout,NULL);
@@ -266,6 +356,11 @@ static void scene_glow_render(worldr_vk *vk,const worldr_frame_draw *draws,const
 	worldr_scene *s=vk->scene;scene_glow *g=s->glow;
 	for(unsigned slot=0;slot<count;slot++){
 		const scene_glow_scope *scope=&scopes[slot];
+		if(scene_glow_cache_matches(&g->cache[slot],draws,scope)){
+			g->reused++;
+			continue;
+		}
+		g->rendered++;
 		VkClearValue clear[2]={ {.color={.float32={0,0,0,0}}},{.depthStencil={1,0}} };
 		VkRenderPassBeginInfo pass={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,.renderPass=g->seed_pass,.framebuffer=g->seed_frame,
 			.renderArea={.extent={g->width,g->height}},.clearValueCount=2,.pClearValues=clear};
@@ -297,6 +392,7 @@ static void scene_glow_render(worldr_vk *vk,const worldr_frame_draw *draws,const
 		float horizontal[2]={1.0f/g->width,0},vertical[2]={0,1.0f/g->height};
 		scene_glow_blur(vk,g->horizontal_frame,g->seed_descriptor,horizontal,draws[scope->begin].viewport);
 		scene_glow_blur(vk,g->halo_frame[slot],g->horizontal_descriptor,vertical,draws[scope->begin].viewport);
+		scene_glow_cache_store(&g->cache[slot],draws,scope);
 	}
 }
 

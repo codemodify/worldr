@@ -1,6 +1,9 @@
 package experience
 
-import "github.com/codemodify/worldr/internal/render"
+import (
+	"github.com/codemodify/worldr/internal/render"
+	skin "github.com/codemodify/worldr/sdk/skin/v1"
+)
 
 // ApplicationSurface describes live client content without exposing a display
 // protocol to the scene. IDs identify this connection only and are not saved.
@@ -13,6 +16,9 @@ type ApplicationSurface struct {
 	AppID      string
 	Title      string
 	Texture    *render.Texture
+	// MinWidth/MinHeight opt into application-specific logical resize limits.
+	// Set both; zero values retain the workspace's legacy 720x440 minimum.
+	MinWidth, MinHeight int
 	// ContentAspect overrides the image aspect for cropped/fractional buffers.
 	// Pointer coordinates still span the complete texture dimensions. Zero uses
 	// the texture ratio. SurfaceUV is normalized x,y,width,height (zero: full).
@@ -54,6 +60,19 @@ type Applications interface {
 	Focus(id uint64)
 	Send(id uint64, event Event)
 	Resize(id uint64, width, height int)
+}
+
+// ControlTheme is the workspace-selected native control presentation. Providers
+// that can restyle their own framebuffer content receive it through
+// ApplicationThemeSetter. Compatibility clients remain application-owned and
+// need not implement this optional contract.
+type ControlTheme struct {
+	Family string
+	Shape  string
+}
+
+type ApplicationThemeSetter interface {
+	SetControlTheme(ControlTheme)
 }
 
 // ApplicationPoller advances provider work on the host goroutine. Poll must do
@@ -158,3 +177,7 @@ type ApplicationDragRouter interface {
 	ApplicationDragActive(source uint64) bool
 	ApplicationDrag(source, target uint64, event Event) bool
 }
+
+// ApplicationSkinSetter receives the validated workspace skin for shared native controls.
+// Calls belong to the host goroutine. Providers retain it for future windows.
+type ApplicationSkinSetter interface{ SetSkin(skin.Skin) }

@@ -9,9 +9,12 @@ import (
 )
 
 const (
-	energyNetColumns     = 25
-	energyNetRows        = 15
-	energyNetAspect      = float32(1.64)
+	energyNetColumns = 25
+	energyNetRows    = 15
+	energyNetAspect  = float32(1.64)
+	// Hexes across the visible sheet. The count is the cell size; rows follow
+	// from the pointy-top spacing so openings stay close to regular.
+	energyWeaveAcross    = 64
 	energyNetStep        = time.Second / 120
 	energyNetSettleTicks = 8 * 120
 
@@ -21,6 +24,11 @@ const (
 	energyWallDepth       = float32(-3.6)
 	energyWindowClearance = float32(.18)
 	energyWallRestitution = float32(.46)
+	// The visible sheet is a world-space plane behind the windows. Its span is
+	// wide enough that looking around reveals more of it instead of a screen
+	// overlay sliding independently of the room.
+	energyWallSpanX = float32(64)
+	energyWallSpanY = float32(40)
 )
 
 type energyNetPoint struct {
@@ -39,6 +47,7 @@ type energyNet struct {
 	phase       time.Duration
 	activeTicks int
 	impactCount uint64
+	deformGen   uint64
 }
 
 type energyWallImpact struct {
@@ -98,6 +107,7 @@ func (n *energyNet) update(dt time.Duration) {
 		// exact tick makes a long suspension and many small frames agree while
 		// bounding catch-up work.
 		n.settleMotion()
+		n.deformGen++
 		return
 	}
 	for ; steps > 0; steps-- {
@@ -164,6 +174,7 @@ func (n *energyNet) integrate(dt float32) {
 			}
 		}
 	}
+	n.deformGen++
 }
 
 func (n *energyNet) impact(u, v, strength float32) {
@@ -172,6 +183,7 @@ func (n *energyNet) impact(u, v, strength float32) {
 	}
 	u, v = max(float32(.03), min(float32(.97), u)), max(float32(.03), min(float32(.97), v))
 	n.impactCount++
+	n.deformGen++
 	n.activeTicks = energyNetSettleTicks
 	for row := 1; row < energyNetRows-1; row++ {
 		for column := 1; column < energyNetColumns-1; column++ {
@@ -209,168 +221,155 @@ func energyPulse(position, phase float64) float32 {
 	return float32(min(1.0, result))
 }
 
-func (n *energyNet) screenPoint(index int, viewport scene.Viewport) (float32, float32) {
+func (n *energyNet) nodeWorld(index int) scene.Vec3 {
 	point := n.points[index].position
 	u, v := point.X/energyNetAspect, point.Y
-	// Normal displacement is projected around a stable center. Each node's local
-	// Z still forms a visible dent, while a later impact elsewhere cannot teleport
-	// deformation left by an earlier collision.
 	phase := float64(n.phase) / float64(12*time.Second)
-	envelope := float32(math.Sin(float64(math.Pi*u)) * math.Sin(float64(math.Pi*v)))
-	breath := .012 * envelope * float32(math.Sin(2*math.Pi*(2*phase+float64(u)*.7+float64(v)*.4)))
-	scale := 1 + (point.Z+breath)*.22
-	u = .5 + (u-.5)*scale
-	v = .5 + (v-.5)*scale
-	// The photographed weave is a loose sheet rather than a framed Cartesian
-	// plane. Let cell size grow slightly toward the lower foreground, add a tiny
-	// deterministic fiber irregularity, and extend the pinned edge beyond the
-	// viewport so no rectangular perimeter is visible.
-	row, column := index/energyNetColumns, index%energyNetColumns
 	boundedU := min(float32(1), max(float32(0), u))
 	boundedV := min(float32(1), max(float32(0), v))
-	envelope *= float32(math.Sin(float64(math.Pi * boundedU)))
-	// A broad convex drape and stronger foreground expansion break the uniform
-	// drafting-plane spacing. The upper sheet recedes while the lower cells open
-	// toward the viewer, like the close macro perspective of the reference.
-	u += .034 * envelope * float32(math.Sin(float64(2*math.Pi*boundedV+.35)))
-	v += .044*envelope + .01*float32(math.Sin(float64(2*math.Pi*boundedU+.6)))*float32(math.Sin(float64(math.Pi*boundedV)))
-	u = .5 + (u-.5)*(.8+.32*boundedV)
-	v = v * (.78 + .22*boundedV)
-	u += envelope * (.0024*float32(math.Sin(float64(column)*.53+float64(row)*.31+.4)) +
-		.0011*float32(math.Sin(float64(column)*1.37-float64(row)*.47)))
-	v += envelope * (.0021*float32(math.Sin(float64(column)*.29-float64(row)*.43+1.2)) +
-		.0009*float32(math.Sin(float64(column)*1.11+float64(row)*.61)))
-	u = .5 + (u-.5)*1.13
-	v = .5 + (v-.5)*1.18
-	// Oblique camera framing turns the simulated rectangular brace into the
-	// skewed lozenge weave seen in the macro reference. Vertical compression and
-	// rotation happen in pixels so the material keeps the same inclination on
-	// different display aspects.
-	px, py := (u-.5)*viewport.Width, (v-.5)*viewport.Height*.82
-	const cosine, sine = float32(.9781476), float32(.2079117) // twelve degrees
-	return viewport.X + viewport.Width*.5 + cosine*px + sine*py,
-		viewport.Y + viewport.Height*.5 - sine*px + cosine*py
+	envelope := float32(math.Sin(float64(math.Pi*boundedU)) * math.Sin(float64(math.Pi*boundedV)))
+	breath := .012 * envelope * float32(math.Sin(2*math.Pi*(2*phase+float64(u)*.7+float64(v)*.4)))
+	right, up, normal := applicationBasis()
+	// Positive sheet V is down the wall, matching the screen. Placement Y is up,
+	// so the visible sheet uses the opposite sign and stays tied to window X/Y.
+	return right.Mul((u - .5) * energyWallSpanX).
+		Add(up.Mul((.5 - v) * energyWallSpanY)).
+		Add(normal.Mul(energyWallDepth + (point.Z+breath)*.9))
 }
 
 type energyNetCanvasPoint struct{ x, y float32 }
 
 type energyNetProjection struct {
-	points [energyNetColumns * energyNetRows]energyNetCanvasPoint
+	points [energyNetColumns * energyNetRows]scene.Vec3
 }
 
-func (n *energyNet) projection(viewport scene.Viewport) energyNetProjection {
+func (n *energyNet) projection() energyNetProjection {
 	var projected energyNetProjection
 	for index := range projected.points {
-		x, y := n.screenPoint(index, viewport)
-		projected.points[index] = energyNetCanvasPoint{x, y}
+		projected.points[index] = n.nodeWorld(index)
 	}
 	return projected
 }
 
-func energyNetBezier(a, control, b energyNetCanvasPoint, t float32) energyNetCanvasPoint {
-	one := 1 - t
-	return energyNetCanvasPoint{
-		x: one*one*a.x + 2*one*t*control.x + t*t*b.x,
-		y: one*one*a.y + 2*one*t*control.y + t*t*b.y,
+func (p *energyNetProjection) sample(column, row float32) scene.Vec3 {
+	c0 := int(math.Floor(float64(column)))
+	r0 := int(math.Floor(float64(row)))
+	tx, ty := column-float32(c0), row-float32(r0)
+	a, b := p.gridPoint(c0, r0), p.gridPoint(c0+1, r0)
+	c, d := p.gridPoint(c0, r0+1), p.gridPoint(c0+1, r0+1)
+	ab := a.Add(b.Sub(a).Mul(tx))
+	cd := c.Add(d.Sub(c).Mul(tx))
+	return ab.Add(cd.Sub(ab).Mul(ty))
+}
+
+func (w *Workspace) projectWall(point scene.Vec3) (energyNetCanvasPoint, bool) {
+	forward := w.camera.Target.Sub(w.camera.Eye)
+	if point.Sub(w.camera.Eye).Dot(forward) <= .05*forward.Length() {
+		return energyNetCanvasPoint{}, false
 	}
+	x, y, _, _ := w.camera.Project(point, w.viewport)
+	if !finite(float64(x)) || !finite(float64(y)) {
+		return energyNetCanvasPoint{}, false
+	}
+	return energyNetCanvasPoint{x, y}, true
 }
 
-func energyNetVariation(a, b int) float32 {
-	return .5 + .5*float32(math.Sin(float64(a*73+b*151)+.83))
+func (w *Workspace) weaveSample(projected *energyNetProjection, u, v float32) (energyNetCanvasPoint, bool) {
+	// A shared parameter keeps neighboring hexes from splitting an edge. The
+	// small irregularity is in sheet space, so it turns with the room.
+	jx := float32(math.Sin(float64(u)*46.3+float64(v)*18.7)) * .004
+	jy := float32(math.Sin(float64(u)*21.1-float64(v)*39.4+1.7)) * .003
+	u += jx
+	v += jy
+	u = .5 + (u-.5)*1.22
+	v = .5 + (v-.5)*1.22
+	return w.projectWall(projected.sample(u*float32(energyNetColumns-1), v*float32(energyNetRows-1)))
 }
 
-func (w *Workspace) drawEnergyNetFiber(a, control, b energyNetCanvasPoint, path0, path1, phase float64, light, variation float32, over bool) {
-	margin := 9 * w.scale
+func energyWeaveLight(u, v float32) float32 {
+	// The reference falls off toward the corners and the near lower fold. Keep
+	// the brightest strands well below UI cyan so the sheet stays background.
+	vertical := float32(math.Pow(float64(max(float32(0), 1-.72*v)), 1.15))
+	span := float32(math.Hypot(float64(u-.48), float64((v-.28)*1.15)))
+	radial := 1 - .62*min(float32(1), span*1.45)
+	return min(float32(.72), max(float32(.05), .06+vertical*radial*.62))
+}
+
+func (w *Workspace) drawEnergyWeaveStrand(a, b energyNetCanvasPoint, family int, light, phase, path float32) {
+	margin := 6 * w.scale
 	canvasWidth, canvasHeight := w.canvas.Size()
-	if max(a.x, max(control.x, b.x)) < -margin ||
-		min(a.x, min(control.x, b.x)) > float32(canvasWidth)+margin ||
-		max(a.y, max(control.y, b.y)) < -margin ||
-		min(a.y, min(control.y, b.y)) > float32(canvasHeight)+margin {
+	if max(a.x, b.x) < -margin || min(a.x, b.x) > float32(canvasWidth)+margin ||
+		max(a.y, b.y) < -margin || min(a.y, b.y) > float32(canvasHeight)+margin {
 		return
 	}
-	// Near fibers gain weight as the sheet rolls toward the viewer. One shaded
-	// stroke carries the teal body and pale specular rim together, which looks
-	// rounder than two uniformly colored lines laid on top of each other.
-	width := (3.75 + 1.35*(1-light) + .72*variation) * w.scale
-	if over {
-		// Erase only a short span of the lower fiber. Keeping the shadow local to
-		// the crossing preserves the translucent polymer body elsewhere.
-		underStart, underEnd := energyNetBezier(a, control, b, .42), energyNetBezier(a, control, b, .58)
-		w.canvas.Line(underStart.x, underStart.y, underEnd.x, underEnd.y, width+2.5*w.scale, scene.ColorHex(0x01070b, .61))
+	dx, dy := b.x-a.x, b.y-a.y
+	if float32(math.Hypot(float64(dx), float64(dy))) <= 1e-4 {
+		return
 	}
-	const pieces = 3
-	for piece := 0; piece < pieces; piece++ {
-		t0, t1 := float32(piece)/pieces, float32(piece+1)/pieces
-		start, end := energyNetBezier(a, control, b, t0), energyNetBezier(a, control, b, t1)
-		dx, dy := end.x-start.x, end.y-start.y
-		length := float32(math.Hypot(float64(dx), float64(dy)))
-		if length <= 1e-5 {
-			continue
-		}
-		nx, ny := -dy/length, dx/length
-		pulse := energyPulse(path0+(path1-path0)*float64(t0+t1)/2, phase)
-		dark := scene.ColorHex(0x105360, .22+.2*light+.08*pulse)
-		lit := scene.ColorHex(0x8ed8d9, .14+.5*light+.22*pulse)
-		// Electricity changes the material's own specular color instead of drawing
-		// ruler-like bars over it.
-		electric := scene.ColorHex(0xe5ffff, lit.A)
-		blend := .68 * pulse
-		lit.R += (electric.R - lit.R) * blend
-		lit.G += (electric.G - lit.G) * blend
-		lit.B += (electric.B - lit.B) * blend
-		if nx+ny < 0 { // the +normal side points toward the upper-left key light
-			w.canvas.ShadedLine(start.x, start.y, end.x, end.y, width, dark, lit)
-		} else {
-			w.canvas.ShadedLine(start.x, start.y, end.x, end.y, width, lit, dark)
-		}
-		// An occasional hairline makes a strand read as bundled polymer rather than
-		// a perfectly extruded vector stroke.
-		if variation > .45 && piece == int(variation*17)%pieces {
-			hairOffset := (width/w.scale*.34 + .32*variation) * w.scale
-			w.canvas.Line(start.x+nx*hairOffset, start.y+ny*hairOffset, end.x+nx*hairOffset, end.y+ny*hairOffset, .5*w.scale, scene.ColorHex(0xa1e6e3, .18+.19*light))
-		}
-		if variation < .2 && piece == (int(variation*29)+1)%pieces {
-			hairOffset := (width/w.scale*.3 + .22) * w.scale
-			w.canvas.Line(start.x-nx*hairOffset, start.y-ny*hairOffset, end.x-nx*hairOffset, end.y-ny*hairOffset, .42*w.scale, scene.ColorHex(0x073943, .22))
-		}
+	pulse := energyPulse(float64(path), float64(phase)+float64(family)*.19)
+	body := .045 + .09*light
+	highlight := .05 + .12*light + .028*pulse
+	dark := scene.ColorHex(0x0a333c, body)
+	lit := scene.ColorHex(0x5c9ea6, highlight)
+	electric := scene.ColorHex(0xc5eeee, lit.A)
+	blend := .18 * pulse
+	lit.R += (electric.R - lit.R) * blend
+	lit.G += (electric.G - lit.G) * blend
+	lit.B += (electric.B - lit.B) * blend
+	width := (1.35 + .28*light) * w.scale
+	if -dy+dx < 0 {
+		w.canvas.ShadedLine(a.x, a.y, b.x, b.y, width, dark, lit)
+	} else {
+		w.canvas.ShadedLine(a.x, a.y, b.x, b.y, width, lit, dark)
 	}
 }
 
-func (p *energyNetProjection) gridPoint(column, row int) energyNetCanvasPoint {
+func (p *energyNetProjection) gridPoint(column, row int) scene.Vec3 {
 	if column < 0 {
 		p0, p1 := p.gridPoint(0, row), p.gridPoint(1, row)
-		amount := float32(column)
-		return energyNetCanvasPoint{p0.x + (p1.x-p0.x)*amount, p0.y + (p1.y-p0.y)*amount}
+		return p0.Add(p1.Sub(p0).Mul(float32(column)))
 	}
 	if column >= energyNetColumns {
 		p0 := p.gridPoint(energyNetColumns-1, row)
 		p1 := p.gridPoint(energyNetColumns-2, row)
-		amount := float32(column - (energyNetColumns - 1))
-		return energyNetCanvasPoint{p0.x + (p0.x-p1.x)*amount, p0.y + (p0.y-p1.y)*amount}
+		return p0.Add(p0.Sub(p1).Mul(float32(column - (energyNetColumns - 1))))
 	}
 	if row >= 0 && row < energyNetRows {
 		return p.points[row*energyNetColumns+column]
 	}
-	// Continue beyond the pinned simulation boundary. These extrapolated fibers
-	// never participate in physics; they only keep the photographed sheet flowing
-	// beyond the crop after the oblique camera transform.
+	// Continue the sheet past the pinned simulation boundary. These points never
+	// participate in physics; they only keep the weave from showing a cut edge.
 	if row < 0 {
 		p0, p1 := p.points[column], p.points[energyNetColumns+column]
-		amount := float32(row)
-		return energyNetCanvasPoint{p0.x + (p1.x-p0.x)*amount, p0.y + (p1.y-p0.y)*amount}
+		return p0.Add(p1.Sub(p0).Mul(float32(row)))
 	}
 	p0 := p.points[(energyNetRows-1)*energyNetColumns+column]
 	p1 := p.points[(energyNetRows-2)*energyNetColumns+column]
-	amount := float32(row - (energyNetRows - 1))
-	return energyNetCanvasPoint{p0.x + (p0.x-p1.x)*amount, p0.y + (p0.y-p1.y)*amount}
+	return p0.Add(p0.Sub(p1).Mul(float32(row - (energyNetRows - 1))))
 }
 
-func energyNetFiberLight(column, row float32) float32 {
-	u := column / float32(energyNetColumns-1)
-	v := row / float32(energyNetRows-1)
-	vertical := 1 - .66*min(float32(1), max(float32(0), v))
-	center := 1 - .34*min(float32(1), float32(math.Abs(float64(u-.48)))*1.7)
-	return min(float32(1), max(float32(.12), .1+vertical*center*.9))
+type energyWeaveKey struct {
+	ex, ey, ez int32
+	tx, ty, tz int32
+	vx, vy     int32
+	vw, vh     int32
+	phase      int64
+	deform     uint64
+	scale      int32
+}
+
+func quantizeWeave(value, step float32) int32 {
+	return int32(math.Round(float64(value / step)))
+}
+
+func (w *Workspace) energyWeaveKey() energyWeaveKey {
+	n := w.energyNet
+	return energyWeaveKey{
+		ex: quantizeWeave(w.camera.Eye.X, .02), ey: quantizeWeave(w.camera.Eye.Y, .02), ez: quantizeWeave(w.camera.Eye.Z, .02),
+		tx: quantizeWeave(w.camera.Target.X, .02), ty: quantizeWeave(w.camera.Target.Y, .02), tz: quantizeWeave(w.camera.Target.Z, .02),
+		vx: int32(w.viewport.X), vy: int32(w.viewport.Y), vw: int32(w.viewport.Width), vh: int32(w.viewport.Height),
+		phase: int64(n.phase / (100 * time.Millisecond)), deform: n.deformGen, scale: quantizeWeave(w.scale, .01),
+	}
 }
 
 func (w *Workspace) drawEnergyNet() {
@@ -378,76 +377,73 @@ func (w *Workspace) drawEnergyNet() {
 	if n == nil || w.viewport.Width <= 0 || w.viewport.Height <= 0 {
 		return
 	}
-	phase := float64(n.phase) / float64(12*time.Second)
-	// A restrained cyan pool behind the fibers supplies the photographic depth
-	// cue visible through the apertures without turning the wall into neon UI.
-	radius := max(w.viewport.Width, w.viewport.Height) * .72
-	w.canvas.RadialGradient(w.viewport.X+w.viewport.Width*.46, w.viewport.Y+w.viewport.Height*.2, radius,
-		scene.ColorHex(0x195a68, .055), scene.ColorHex(0x07121a, 0))
-	projection := n.projection(w.viewport)
-	const overscanRows, overscanColumns = 3, 3
-	for row := -overscanRows; row < energyNetRows-1+overscanRows; row++ {
-		for column := -overscanColumns; column < energyNetColumns-1+overscanColumns; column++ {
-			tl, tr := projection.gridPoint(column, row), projection.gridPoint(column+1, row)
-			bl, br := projection.gridPoint(column, row+1), projection.gridPoint(column+1, row+1)
-			seed := (row+overscanRows)*(energyNetColumns+2*overscanColumns) + column + overscanColumns
-			jitter := energyNetVariation(seed, seed+energyNetColumns+1)
-			waveX := .64*float32(math.Sin(float64(column)*.23+float64(row)*.31+.4)) +
-				.36*float32(math.Sin(float64(column)*.67-float64(row)*.19+1.1))
-			waveY := .61*float32(math.Sin(float64(column)*.17-float64(row)*.29+1.2)) +
-				.39*float32(math.Sin(float64(column)*.61+float64(row)*.23+.2))
-			cross := energyNetCanvasPoint{
-				x: (tl.x+tr.x+bl.x+br.x)/4 + (waveX*5.2+(jitter-.5)*2.6)*w.scale,
-				y: (tl.y+tr.y+bl.y+br.y)/4 + (waveY*4.1+(energyNetVariation(seed+1, seed+energyNetColumns)-.5)*2.1)*w.scale,
+	// The sheet is static for a tenth of a second unless the view or the
+	// springs move. Pointer frames then replay it instead of rebuilding it.
+	key := w.energyWeaveKey()
+	if key == w.weaveKey && len(w.weaveVerts) > 0 {
+		w.canvas.AppendVertices(w.weaveVerts)
+		return
+	}
+	recorded := w.canvas.VertexCount()
+	phase := float32(float64(n.phase) / float64(12*time.Second))
+	radius := max(w.viewport.Width, w.viewport.Height) * .62
+	w.canvas.RadialGradient(w.viewport.X+w.viewport.Width*.48, w.viewport.Y+w.viewport.Height*.34, radius,
+		scene.ColorHex(0x123f48, .02), scene.ColorHex(0x07121a, 0))
+	projection := n.projection()
+	size := 1 / (float32(energyWeaveAcross) * float32(math.Sqrt(3)))
+	xStep, yStep := size*float32(math.Sqrt(3)), size*1.5
+	minCol := int(math.Floor(-.28 / float64(xStep)))
+	maxCol := int(math.Ceil(1.28 / float64(xStep)))
+	minRow := int(math.Floor(-.32 / float64(yStep)))
+	maxRow := int(math.Ceil(1.32 / float64(yStep)))
+	seen := make(map[[4]int32]struct{}, (maxCol-minCol+1)*(maxRow-minRow+1)*3)
+	quantize := func(value float32) int32 { return int32(math.Round(float64(value * 20000))) }
+	for row := minRow; row <= maxRow; row++ {
+		for col := minCol; col <= maxCol; col++ {
+			cx := xStep * (float32(col) + .5*float32(row&1))
+			cy := yStep * float32(row)
+			var vertex [6][2]float32
+			for i := 0; i < 6; i++ {
+				angle := (float64(i)*60 + 30) * math.Pi / 180
+				vertex[i][0] = cx + size*float32(math.Cos(angle))
+				vertex[i][1] = cy + size*float32(math.Sin(angle))
 			}
-			descStart, descEnd := tl, br
-			ascStart, ascEnd := tr, bl
-			descControl := energyNetCanvasPoint{2*cross.x - (descStart.x+descEnd.x)/2, 2*cross.y - (descStart.y+descEnd.y)/2}
-			ascControl := energyNetCanvasPoint{2*cross.x - (ascStart.x+ascEnd.x)/2, 2*cross.y - (ascStart.y+ascEnd.y)/2}
-			descPath0 := float64(row)/float64(energyNetRows-1) + float64(column-row)*.043
-			descPath1 := float64(row+1)/float64(energyNetRows-1) + float64(column-row)*.043
-			ascPath0 := float64(row)/float64(energyNetRows-1) + float64(column+row+1)*.037
-			ascPath1 := float64(row+1)/float64(energyNetRows-1) + float64(column+row+1)*.037
-			drawDescending := func(over bool) {
-				w.drawEnergyNetFiber(descStart, descControl, descEnd, descPath0, descPath1, phase*2.55,
-					energyNetFiberLight(float32(column)+.5, float32(row)+.5), energyNetVariation(seed, seed+energyNetColumns+1), over)
-			}
-			drawAscending := func(over bool) {
-				w.drawEnergyNetFiber(ascStart, ascControl, ascEnd, ascPath0, ascPath1, .21-phase*2.15,
-					energyNetFiberLight(float32(column)+.5, float32(row)+.5), energyNetVariation(seed+1, seed+energyNetColumns), over)
-			}
-			// Alternating draw order makes the broad dark seat of the later strand
-			// cut a convincing underpass into the earlier one at each crossing.
-			if (row+column)%2 == 0 {
-				drawDescending(false)
-				drawAscending(true)
-			} else {
-				drawAscending(false)
-				drawDescending(true)
+			light := energyWeaveLight(cx, cy)
+			for i := 0; i < 6; i++ {
+				u0, v0 := vertex[i][0], vertex[i][1]
+				u1, v1 := vertex[(i+1)%6][0], vertex[(i+1)%6][1]
+				a0, b0, a1, b1 := quantize(u0), quantize(v0), quantize(u1), quantize(v1)
+				if a0 > a1 || (a0 == a1 && b0 > b1) {
+					a0, b0, a1, b1 = a1, b1, a0, b0
+				}
+				edge := [4]int32{a0, b0, a1, b1}
+				if _, ok := seen[edge]; ok {
+					continue
+				}
+				seen[edge] = struct{}{}
+				start, startOK := w.weaveSample(&projection, u0, v0)
+				end, endOK := w.weaveSample(&projection, u1, v1)
+				if !startOK || !endOK {
+					continue
+				}
+				w.drawEnergyWeaveStrand(start, end, i%3, light, phase*1.15+float32(i)*.07, (v0+v1)*.5+(u0-u1)*.2)
 			}
 		}
 	}
-	// The macro reference falls into deep shadow along the near lower fold. A
-	// broad translucent occlusion wash supplies that depth cue while leaving the
-	// upper fibers in the cool key light.
-	w.canvas.RadialGradient(w.viewport.X+w.viewport.Width*.08, w.viewport.Y+w.viewport.Height*1.06, radius*.92,
-		scene.ColorHex(0x01070b, .27), scene.ColorHex(0x01070b, 0))
+	w.canvas.RadialGradient(w.viewport.X+w.viewport.Width*.12, w.viewport.Y+w.viewport.Height*1.08, radius,
+		scene.ColorHex(0x01070b, .34), scene.ColorHex(0x01070b, 0))
+	w.weaveVerts = w.canvas.VertexSnapshot(recorded)
+	w.weaveKey = key
 }
 
 func (w *Workspace) energyWallCoordinates(x, y float32) (float32, float32) {
-	right, up, normal := applicationBasis()
-	point := right.Mul(x).Add(up.Mul(y)).Add(normal.Mul(energyWallDepth))
-	px, py, _, visible := w.camera.Project(point, w.viewport)
-	u, v := float32(.5)+x/16, float32(.5)-y/10
-	if visible {
-		u = (px - w.viewport.X) / w.viewport.Width
-		v = (py - w.viewport.Y) / w.viewport.Height
-	}
-	return u, v
+	// Window X/Y are already the room axes of the rear sheet. A screen projection
+	// would move the dent when the view turns, even though the window did not.
+	return .5 + x/energyWallSpanX, .5 - y/energyWallSpanY
 }
 
 func (w *Workspace) impactEnergyWall(x, y, strength float32) {
-	if w.energyNet == nil {
+	if w.energyNet == nil || w.skinBackdropVisible() {
 		return
 	}
 	u, v := w.energyWallCoordinates(x, y)
@@ -455,7 +451,7 @@ func (w *Workspace) impactEnergyWall(x, y, strength float32) {
 }
 
 func (w *Workspace) queueEnergyWallImpact(x, y, strength float32, at time.Duration) {
-	if w.energyNet == nil {
+	if w.energyNet == nil || w.skinBackdropVisible() {
 		return
 	}
 	u, v := w.energyWallCoordinates(x, y)

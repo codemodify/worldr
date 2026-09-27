@@ -40,7 +40,16 @@ func (w *Workspace) SetApplications(applications experience.Applications) {
 	w.applicationNode = 0
 	w.application = experience.ApplicationSurface{}
 	w.applications = applications
+	w.publishControlTheme()
+	w.publishSkin()
 	w.syncApplications()
+}
+
+func (w *Workspace) publishControlTheme() {
+	if receiver, ok := w.applications.(experience.ApplicationThemeSetter); ok {
+		selected := w.controlTheme.normalized()
+		receiver.SetControlTheme(experience.ControlTheme{Family: string(selected.Family), Shape: string(selected.Shape)})
+	}
 }
 
 func (w *Workspace) OwnsKeyboard() bool {
@@ -48,10 +57,56 @@ func (w *Workspace) OwnsKeyboard() bool {
 	return w.applicationKeyboard || w.settingsOpen || w.commands != nil && w.commands.open
 }
 
-// CheckApplicationPlacement checks saved slots and current provider surfaces
-// without changing workspace view, history or layouts. Existing keys can reuse
-// their slots even when full. Unregistered live keys also need future slots;
-// providers may have published them earlier in this same host iteration.
+// resolvedApplicationSurfaceKeys assigns the same stable identity that sync uses
+// to every current provider surface without mutating the workspace. Empty-key
+// compatibility surfaces retain their prior fallback where possible, then take
+// the first free local ordinal. The returned key set includes loading surfaces,
+// so their future layout slots cannot be recycled or promised to another launch.
+func (w *Workspace) resolvedApplicationSurfaceKeys(surfaces []experience.ApplicationSurface) (map[uint64]string, map[string]bool, int) {
+	resolved := make(map[uint64]string)
+	reserved := make(map[string]bool)
+	used := make(map[string]bool)
+	for _, surface := range surfaces {
+		if surface.ID == 0 || !validApplicationKey(surface.Key) {
+			continue
+		}
+		resolved[surface.ID] = surface.Key
+		reserved[surface.Key], used[surface.Key] = true, true
+	}
+	anonymous := 0
+	for _, surface := range surfaces {
+		if surface.ID == 0 || surface.Key != "" {
+			continue
+		}
+		if _, ok := resolved[surface.ID]; ok {
+			continue
+		}
+		key := w.applicationKeys[surface.ID]
+		if !validApplicationKey(key) || used[key] {
+			key = ""
+			for ordinal := 1; ordinal <= MaxApplicationLayouts; ordinal++ {
+				candidate := fmt.Sprintf("local:%d", ordinal)
+				if !used[candidate] {
+					key = candidate
+					break
+				}
+			}
+		}
+		if key == "" {
+			anonymous++
+			continue
+		}
+		resolved[surface.ID] = key
+		reserved[key], used[key] = true, true
+	}
+	return resolved, reserved, anonymous
+}
+
+// CheckApplicationPlacement checks current and recyclable slots without
+// changing workspace view, history or layouts. Existing keys can always reuse
+// their retained position. A genuinely new key may use an empty slot or a saved
+// placement whose provider window is closed, after reserving capacity for every
+// other published surface that is still waiting to be registered.
 func (w *Workspace) CheckApplicationPlacement(key string) error {
 	if !validApplicationKey(key) {
 		return fmt.Errorf("invalid application layout key")
@@ -59,28 +114,61 @@ func (w *Workspace) CheckApplicationPlacement(key string) error {
 	if w.m.applicationState.index(key) >= 0 {
 		return nil
 	}
+	var surfaces []experience.ApplicationSurface
+	if w.applications != nil {
+		surfaces = w.applications.Surfaces()
+	}
+	_, liveKeys, anonymous := w.resolvedApplicationSurfaceKeys(surfaces)
 	available := 0
 	for _, placement := range w.m.applicationState.Layouts {
-		if placement.Key == "" {
+		if placement.Key == "" || !liveKeys[placement.Key] {
 			available++
 		}
 	}
-	if w.applications != nil && available > 0 {
-		pending := make(map[string]bool)
-		for _, surface := range w.applications.Surfaces() {
-			// A loading surface still reserves its key even before an image is
-			// ready. Duplicate keys and invalid identities cannot consume slots.
-			if surface.ID == 0 || surface.Key == key || !validApplicationKey(surface.Key) || pending[surface.Key] || w.m.applicationState.index(surface.Key) >= 0 {
-				continue
-			}
-			pending[surface.Key] = true
-			available--
+	required := 1 + anonymous
+	for pending := range liveKeys {
+		if pending != key && w.m.applicationState.index(pending) < 0 {
+			required++
 		}
 	}
-	if available > 0 {
+	if available >= required {
 		return nil
 	}
-	return fmt.Errorf("saved layout has reached its 32-window limit; forget closed placements before opening another window")
+	return fmt.Errorf("workspace already has 32 live or opening windows")
+}
+
+func (w *Workspace) applicationSlotForNewKey(liveKeys map[string]bool) (int, bool) {
+	for i, placement := range w.m.applicationState.Layouts {
+		if placement.Key == "" {
+			return i, false
+		}
+	}
+	for i, placement := range w.m.applicationState.Layouts {
+		if !liveKeys[placement.Key] {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+func (w *Workspace) recycleApplicationSlot(index int) {
+	v := &w.m.applicationState
+	key := v.Layouts[index].Key
+	v.Selected &^= 1 << index
+	if v.Active == key {
+		v.Active, v.Reading = "", false
+	}
+	for i := range v.Spaces {
+		v.Spaces[i].Selected &^= 1 << index
+		if v.Spaces[i].Active == key {
+			v.Spaces[i].Active, v.Spaces[i].Reading = "", false
+		}
+	}
+	w.applicationRestoreSelection &^= 1 << index
+	if w.applicationRestoreKey == key {
+		w.applicationRestoreKey, w.applicationRestoreSelection = "", 0
+	}
+	v.Layouts[index] = ApplicationPlacement{}
 }
 
 func (w *Workspace) ActivateApplication(key string) error {
@@ -92,6 +180,16 @@ func (w *Workspace) ActivateApplication(key string) error {
 	if !live {
 		return fmt.Errorf("opened application is not available in the workspace")
 	}
+	if w.navigation != nil {
+		w.navigationRetireClientKeys()
+		if w.navigation.level == navigationProject {
+			w.navigation.projectPage = w.navigation.page
+			w.navigation.projectPages[w.m.applicationState.Space] = w.navigation.page
+		}
+		w.navigation.home, w.navigation.toolsOpen = false, false
+		w.navigation.page, w.navigation.keyboard = 0, ""
+		w.navigation.returnFocus = key
+	}
 	if i := w.m.applicationState.index(key); i >= 0 && w.m.applicationState.Layouts[i].Space != w.m.applicationState.Space {
 		if err := w.Dispatch(Action{Kind: SwitchSpace, Space: w.m.applicationState.Layouts[i].Space}); err != nil {
 			return err
@@ -99,6 +197,11 @@ func (w *Workspace) ActivateApplication(key string) error {
 	}
 	if err := w.Dispatch(Action{Kind: SelectApplication, ApplicationKey: key}); err != nil {
 		return err
+	}
+	if w.navigation != nil {
+		d := w.Document()
+		d.View.Application.Overview, d.View.Application.Placing, d.View.Application.Reading = false, false, true
+		w.install(d, false)
 	}
 	w.readAndFocusSelectedApplication()
 	return nil
@@ -120,6 +223,22 @@ func (w *Workspace) syncApplications() {
 	w.applicationLayoutFull = false
 	if w.applications != nil {
 		surfaces := w.applications.Surfaces()
+		for id := range w.applicationKeys {
+			found := false
+			for _, surface := range surfaces {
+				if surface.ID == id {
+					found = true
+					break
+				}
+			}
+			if !found {
+				delete(w.applicationKeys, id)
+			}
+		}
+		resolvedKeys, liveKeys, _ := w.resolvedApplicationSurfaceKeys(surfaces)
+		for id, key := range resolvedKeys {
+			w.applicationKeys[id] = key
+		}
 		for _, surface := range surfaces {
 			present[surface.ID] = true
 		}
@@ -131,40 +250,20 @@ func (w *Workspace) syncApplications() {
 			if surface.ID == 0 || surface.Texture == nil || surface.Texture.ID() == 0 {
 				continue
 			}
-			key := surface.Key
-			if key == "" {
-				key = w.applicationKeys[surface.ID]
-				if key == "" {
-					for ordinal := 1; ordinal <= MaxApplicationLayouts; ordinal++ {
-						candidate := fmt.Sprintf("local:%d", ordinal)
-						used := false
-						for _, assigned := range w.applicationKeys {
-							if assigned == candidate {
-								used = true
-								break
-							}
-						}
-						if !used {
-							key = candidate
-							break
-						}
-					}
-				}
-			}
+			key := resolvedKeys[surface.ID]
 			if !validApplicationKey(key) || keys[key] {
 				continue
 			}
 			index := w.m.applicationState.index(key)
 			if index < 0 {
-				for i, p := range w.m.applicationState.Layouts {
-					if p.Key == "" {
-						index = i
-						break
-					}
-				}
+				var recycled bool
+				index, recycled = w.applicationSlotForNewKey(liveKeys)
 				if index < 0 {
 					w.applicationLayoutFull = true
 					continue
+				}
+				if recycled {
+					w.recycleApplicationSlot(index)
 				}
 				placement := ApplicationPlacement{Key: key, Space: w.m.applicationState.Space, X: 1.65, Y: -.2, Depth: 1.9, Wide: w.m.applicationWide}
 				if index > 0 {
@@ -310,7 +409,7 @@ func (w *Workspace) resizeApplicationSurface(surface experience.ApplicationSurfa
 	if i < 0 {
 		return
 	}
-	width, height := applicationLogicalSize(w.m.applicationState.Layouts[i])
+	width, height := applicationSurfaceSize(surface, w.m.applicationState.Layouts[i])
 	w.applications.Resize(surface.ID, width, height)
 }
 
@@ -341,8 +440,9 @@ func (w *Workspace) applicationTransformFor(surface experience.ApplicationSurfac
 		if placement.Wide && !placement.Maximized {
 			basis = 1440
 		}
-		width = 4.6 * float32(placement.Width) / basis
-		height = 4.6 * float32(placement.Height) / basis
+		logicalWidth, logicalHeight := applicationSurfaceSize(surface, placement)
+		width = 4.6 * float32(logicalWidth) / basis
+		height = 4.6 * float32(logicalHeight) / basis
 	} else {
 		tw, th := surface.Texture.Size()
 		height = width * float32(th) / float32(tw)
@@ -394,6 +494,9 @@ func (w *Workspace) syncApplicationScene() {
 		minimized := placementIndex >= 0 && view.Layouts[placementIndex].Minimized
 		node.Hidden = view.Reading && !view.Overview && surface.Key != view.Active
 		node.Surface = surface.Texture
+		// The field skin supplies premultiplied client backgrounds. Keep text
+		// opaque while compositing the sheets at their actual scene depth.
+		node.Translucent = surface.Translucent || w.panelFieldVisible()
 		if minimized && !view.Overview {
 			node.Surface = nil
 		}
@@ -419,9 +522,11 @@ func (w *Workspace) syncApplicationScene() {
 		w.syncApplicationFrame(surface)
 		if view.Reading && !view.Overview && surface.Key == view.Active {
 			if !surface.Frameless && !photoFrameSurface(surface) {
-				// Every selectable border shares the same outer envelope. Include
-				// it when framing both native and compatibility apps for Read.
-				width, height = width*1.09, height*1.09
+				if skinCenter, skinWidth, skinHeight, ok := w.windowSkinReadBounds(surface, center, width, height); ok {
+					center, width, height = skinCenter, skinWidth, skinHeight
+				} else {
+					width, height = width*1.09, height*1.09
+				}
 			}
 			w.frameApplicationCamera(center, normal, up, width, height)
 		}

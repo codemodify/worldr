@@ -8,6 +8,7 @@ import (
 	"github.com/codemodify/worldr/internal/accessibility"
 	"github.com/codemodify/worldr/internal/experience"
 	"github.com/codemodify/worldr/internal/nativeui"
+	skin "github.com/codemodify/worldr/sdk/skin/v1"
 )
 
 type applicationSource struct {
@@ -60,18 +61,61 @@ var errApplicationHubClosed = errors.New("application hub is closed")
 // identity space. Provider IDs remain private, and only one provider can own
 // keyboard focus. Stable document keys pass through without runtime handles.
 type applicationHub struct {
-	providers []experience.Applications
-	ids       map[applicationSource]uint64
-	routes    map[uint64]applicationSource
-	next      uint64
-	focused   uint64
-	surfaces  []experience.ApplicationSurface
-	closed    bool
-	closeErr  error
+	skin         *skin.Skin
+	controlTheme *experience.ControlTheme
+	providers    []experience.Applications
+	ids          map[applicationSource]uint64
+	routes       map[uint64]applicationSource
+	next         uint64
+	focused      uint64
+	surfaces     []experience.ApplicationSurface
+	closed       bool
+	closeErr     error
 }
 
 func newApplicationHub(providers ...experience.Applications) *applicationHub {
-	return &applicationHub{providers: append([]experience.Applications(nil), providers...), ids: make(map[applicationSource]uint64), routes: make(map[uint64]applicationSource)}
+	h := &applicationHub{ids: make(map[applicationSource]uint64), routes: make(map[uint64]applicationSource)}
+	for _, provider := range providers {
+		h.AddProvider(provider)
+	}
+	return h
+}
+
+// AddProvider registers a provider and installs the current preferences before
+// any surface is exposed. Providers added after settings change inherit them.
+func (h *applicationHub) AddProvider(provider experience.Applications) {
+	if h.closed || provider == nil {
+		return
+	}
+	h.providers = append(h.providers, provider)
+	if h.controlTheme != nil {
+		if receiver, ok := provider.(experience.ApplicationThemeSetter); ok {
+			receiver.SetControlTheme(*h.controlTheme)
+		} else if receiver, ok := provider.(experience.ApplicationSkinSetter); ok {
+			if legacy, err := nativeui.LegacySkin(h.controlTheme.Family, h.controlTheme.Shape); err == nil {
+				receiver.SetSkin(legacy)
+			}
+		}
+	}
+	if h.skin != nil {
+		if receiver, ok := provider.(experience.ApplicationSkinSetter); ok {
+			receiver.SetSkin(h.skin.Clone())
+		}
+	}
+}
+
+// SetSkin retains an owned, validated skin and updates every native participant.
+func (h *applicationHub) SetSkin(selected skin.Skin) {
+	if h.closed || selected.Validate() != nil {
+		return
+	}
+	owned := selected.Clone()
+	h.skin = &owned
+	for _, provider := range h.providers {
+		if receiver, ok := provider.(experience.ApplicationSkinSetter); ok {
+			receiver.SetSkin(owned.Clone())
+		}
+	}
 }
 
 // Poll gives every active provider one turn, even when an earlier provider
@@ -230,6 +274,25 @@ func (h *applicationHub) Resize(id uint64, width, height int) {
 	}
 	if source, ok := h.routes[id]; ok {
 		h.providers[source.provider].Resize(source.id, width, height)
+	}
+}
+
+func (h *applicationHub) SetControlTheme(theme experience.ControlTheme) {
+	if h.closed {
+		return
+	}
+	legacy, err := nativeui.LegacySkin(theme.Family, theme.Shape)
+	if err != nil {
+		return
+	}
+	h.controlTheme = &theme
+	h.skin = nil
+	for _, provider := range h.providers {
+		if receiver, ok := provider.(experience.ApplicationThemeSetter); ok {
+			receiver.SetControlTheme(theme)
+		} else if receiver, ok := provider.(experience.ApplicationSkinSetter); ok {
+			receiver.SetSkin(legacy.Clone())
+		}
 	}
 }
 

@@ -51,8 +51,66 @@ func TestEnergyNetIsPinnedPhysicalAndFrameIndependent(t *testing.T) {
 	}
 }
 
+func TestDesktopLookKeepsPinnedWindowsAndTurnsTheWall(t *testing.T) {
+	w := desktop(t)
+	apps := desktopApplications(t, w)
+	w.Draw(1440, 900)
+	eye := w.camera.Eye
+	placement := w.Document().View.Application.Layouts[0]
+	_, center, _, _ := w.applicationTransformFor(apps.surfaces[0])
+	wall := w.energyNet.nodeWorld(w.energyNet.index(energyNetColumns/2, energyNetRows/2))
+	project := func(point scene.Vec3) (float32, float32) {
+		t.Helper()
+		x, y, _, visible := w.camera.Project(point, w.viewport)
+		if !visible {
+			t.Fatalf("point %+v left the view", point)
+		}
+		return x, y
+	}
+	wx, wy := project(center)
+	mx, my := project(wall)
+	command(t, w, Action{Kind: OrbitCamera, DeltaX: 40, DeltaY: -12})
+	w.Draw(1440, 900)
+	if w.camera.Eye.Sub(eye).Length() > .001 {
+		t.Fatalf("looking around moved the standing point: %+v -> %+v", eye, w.camera.Eye)
+	}
+	if w.Document().View.Application.Layouts[0] != placement {
+		t.Fatal("looking around moved a pinned window")
+	}
+	wx2, wy2 := project(center)
+	mx2, my2 := project(wall)
+	wdx, wdy := wx2-wx, wy2-wy
+	mdx, mdy := mx2-mx, my2-my
+	if wdx*mdx+wdy*mdy <= 0 || wdx*wdx+wdy*wdy < 4 || mdx*mdx+mdy*mdy < 4 {
+		t.Fatalf("the wall did not turn with the pinned window: window (%g,%g) wall (%g,%g)", wdx, wdy, mdx, mdy)
+	}
+	command(t, w, Action{Kind: OrbitCamera, DeltaX: -40, DeltaY: 12})
+	w.Draw(1440, 900)
+	wx3, wy3 := project(center)
+	mx3, my3 := project(wall)
+	if abs(wx3-wx) > 1.5 || abs(wy3-wy) > 1.5 || abs(mx3-mx) > 1.5 || abs(my3-my) > 1.5 {
+		t.Fatalf("turning back missed the pinned window or wall: window %g,%g wall %g,%g", wx3-wx, wy3-wy, mx3-mx, my3-my)
+	}
+}
+
+func TestDesktopDrawStaysResponsiveWhileThePointerIsStill(t *testing.T) {
+	w := desktop(t)
+	w.Draw(2520, 1575)
+	start := time.Now()
+	const frames = 20
+	for i := 0; i < frames; i++ {
+		w.Update(16 * time.Millisecond)
+		w.Draw(2520, 1575)
+	}
+	elapsed := time.Since(start) / frames
+	if elapsed > 12*time.Millisecond {
+		t.Fatalf("steady desktop frame took %s; the pointer cannot keep up", elapsed)
+	}
+}
+
 func TestEnergyNetDrawsBeforeEverySceneAndStaysAmbient(t *testing.T) {
 	w := desktop(t)
+	w.environment.DNA = true
 	apps := desktopApplications(t, w)
 	before, history := w.Document(), w.historyPosition
 	first := w.Draw(1440, 900)
@@ -71,7 +129,7 @@ func TestEnergyNetDrawsBeforeEverySceneAndStaysAmbient(t *testing.T) {
 	if dnaIndex <= 0 || applicationIndex <= dnaIndex {
 		t.Fatal("woven wall, DNA landmark and application scene lost their rear-to-front ordering")
 	}
-	if len(first.Vertices) > 120000 {
+	if len(first.Vertices) > 280000 {
 		t.Fatalf("woven wall exceeded its bounded overlay budget: %d vertices", len(first.Vertices))
 	}
 	vertices := append([]render.Vertex(nil), first.Vertices...)
@@ -167,15 +225,13 @@ func TestEnergyNetSecondImpactDoesNotTeleportExistingDent(t *testing.T) {
 	n := newEnergyNet()
 	n.impact(.25, .35, 1)
 	n.update(180 * time.Millisecond)
-	viewport := scene.Viewport{Width: 1400, Height: 900}
-	before := make([][2]float32, len(n.points))
+	before := make([]scene.Vec3, len(n.points))
 	for i := range n.points {
-		before[i][0], before[i][1] = n.screenPoint(i, viewport)
+		before[i] = n.nodeWorld(i)
 	}
 	n.impact(.8, .7, .7)
 	for i := range n.points {
-		x, y := n.screenPoint(i, viewport)
-		if before[i] != [2]float32{x, y} {
+		if n.nodeWorld(i) != before[i] {
 			t.Fatal("changing the impact location teleported existing deformation")
 		}
 	}

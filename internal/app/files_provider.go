@@ -6,12 +6,14 @@ import (
 	"github.com/codemodify/worldr/internal/experience"
 	"github.com/codemodify/worldr/internal/nativeui"
 	"github.com/codemodify/worldr/internal/projectapp"
+	skin "github.com/codemodify/worldr/sdk/skin/v1"
 )
 
 // filesProvider keeps a stable provider lifetime while Files is closed/reopened
 // from the launcher. Runtime IDs never repeat; its copy source follows the
 // current browser and closed textures survive until the host drains them.
 type filesProvider struct {
+	skin              *skin.Skin
 	current           *projectapp.Provider
 	root              string
 	next              uint64
@@ -147,6 +149,9 @@ func (f *filesProvider) LaunchApplication(kind string) (string, error) {
 		_ = f.current.Close()
 		f.retired = append(f.retired, f.current.RetiredTextures()...)
 	}
+	if f.skin != nil {
+		provider.SetSkin(*f.skin)
+	}
 	f.current = provider
 	f.next++
 	provider.SetOpenIntent(intent)
@@ -200,4 +205,22 @@ func (f *filesProvider) Semantics(id uint64) nativeui.SemanticTree {
 		return f.current.Semantics(1)
 	}
 	return nativeui.SemanticTree{}
+}
+
+func (f *filesProvider) SetSkin(selected skin.Skin) {
+	if f.closed || selected.Validate() != nil {
+		return
+	}
+	owned := selected.Clone()
+	f.skin = &owned
+	if f.current != nil {
+		f.current.SetSkin(owned)
+	}
+}
+
+func (f *filesProvider) SetControlTheme(theme experience.ControlTheme) {
+	selected, err := nativeui.LegacySkin(theme.Family, theme.Shape)
+	if err == nil {
+		f.SetSkin(selected)
+	}
 }

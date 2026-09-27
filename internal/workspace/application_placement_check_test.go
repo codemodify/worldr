@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestApplicationPlacementCheckCountsClosedLayoutsAndPreservesFocus(t *testing.T) {
+func TestApplicationPlacementCheckOffersClosedLayoutsWithoutMutatingThem(t *testing.T) {
 	w, apps := multipleApplications(t, MaxApplicationLayouts)
 	closedKey := apps.surfaces[len(apps.surfaces)-1].Key
 	liveKey := apps.surfaces[0].Key
@@ -19,8 +19,8 @@ func TestApplicationPlacementCheckCountsClosedLayoutsAndPreservesFocus(t *testin
 	focusedID, keyboard := w.applicationFocusedID, w.applicationKeyboard
 	historyPosition, historyLength := w.historyPosition, len(w.history)
 	focusCalls, inputEvents, resizes := len(apps.focus), len(apps.events), len(apps.resizes)
-	if err := w.CheckApplicationPlacement("native:photo-viewer"); err == nil || !strings.Contains(err.Error(), "32-window limit") || !strings.Contains(err.Error(), "closed placements") {
-		t.Fatalf("closed saved placements did not reject a new viewer with actionable status: %v", err)
+	if err := w.CheckApplicationPlacement("native:photo-viewer"); err != nil {
+		t.Fatalf("closed saved placements were not offered to a genuinely new viewer: %v", err)
 	}
 	for _, key := range []string{liveKey, closedKey} {
 		if err := w.CheckApplicationPlacement(key); err != nil {
@@ -32,10 +32,6 @@ func TestApplicationPlacementCheckCountsClosedLayoutsAndPreservesFocus(t *testin
 	}
 	if len(apps.focus) != focusCalls || len(apps.events) != inputEvents || len(apps.resizes) != resizes {
 		t.Fatal("capacity checks invoked application focus, input or resizing")
-	}
-	command(t, w, Action{Kind: ForgetClosedPlacements})
-	if err := w.CheckApplicationPlacement("native:photo-viewer"); err != nil {
-		t.Fatal("explicitly forgetting closed placements did not free viewer capacity", err)
 	}
 	if w.m.applicationState.index("native:photo-viewer") >= 0 {
 		t.Fatal("preflight reserved a placement before its application existed")
@@ -67,8 +63,7 @@ func TestApplicationPlacementCheckAccountsForUnregisteredLiveKeys(t *testing.T) 
 	for _, mode := range []string{"ready-surface", "loading-placeholder"} {
 		t.Run(mode, func(t *testing.T) {
 			w, apps := multipleApplications(t, MaxApplicationLayouts-1)
-			closedKey := apps.surfaces[len(apps.surfaces)-1].Key
-			apps.surfaces = apps.surfaces[:1]
+			retainedKey := apps.surfaces[len(apps.surfaces)-1].Key
 			if err := w.ActivateApplication(apps.surfaces[0].Key); err != nil {
 				t.Fatal(err)
 			}
@@ -86,7 +81,7 @@ func TestApplicationPlacementCheckAccountsForUnregisteredLiveKeys(t *testing.T) 
 			if err := w.CheckApplicationPlacement("native:photo-viewer"); err == nil {
 				t.Fatal("incoming live window and photo were admitted into the same final slot")
 			}
-			for _, key := range []string{apps.surfaces[0].Key, closedKey, incoming.Key} {
+			for _, key := range []string{apps.surfaces[0].Key, retainedKey, incoming.Key} {
 				if err := w.CheckApplicationPlacement(key); err != nil {
 					t.Fatalf("reusing stored key or the pending key's own slot was refused: %q: %v", key, err)
 				}
@@ -100,7 +95,6 @@ func TestApplicationPlacementCheckAccountsForUnregisteredLiveKeys(t *testing.T) 
 
 func TestApplicationPlacementCheckCountsDistinctValidPendingKeysOnly(t *testing.T) {
 	w, apps := multipleApplications(t, MaxApplicationLayouts-2)
-	apps.surfaces = apps.surfaces[:1]
 	incoming := apps.surfaces[0]
 	incoming.ID, incoming.Key = 9000, "external:new-window"
 	apps.surfaces = append(apps.surfaces, incoming)
@@ -121,5 +115,32 @@ func TestApplicationPlacementCheckCountsDistinctValidPendingKeysOnly(t *testing.
 	}
 	if w.Document() != before {
 		t.Fatal("checking pending identities registered them prematurely")
+	}
+}
+
+func TestApplicationPlacementCheckReservesRecyclableSlotsForPendingKeys(t *testing.T) {
+	w, apps := multipleApplications(t, MaxApplicationLayouts)
+	apps.surfaces = apps.surfaces[:MaxApplicationLayouts-2]
+	template := apps.surfaces[0]
+	first := template
+	first.ID, first.Key, first.Texture = 9100, "pending/first", nil
+	apps.surfaces = append(apps.surfaces, first)
+	before := w.Document()
+	if err := w.CheckApplicationPlacement("requested/new-window"); err != nil {
+		t.Fatalf("one pending key and one request did not fit two recyclable slots: %v", err)
+	}
+	second := template
+	second.ID, second.Key, second.Texture = 9101, "pending/second", nil
+	apps.surfaces = append(apps.surfaces, second)
+	if err := w.CheckApplicationPlacement("requested/new-window"); err == nil {
+		t.Fatal("two pending keys and a new request overbooked two recyclable slots")
+	}
+	for _, key := range []string{first.Key, second.Key} {
+		if err := w.CheckApplicationPlacement(key); err != nil {
+			t.Fatalf("pending key %q could not claim its own reserved recyclable slot: %v", key, err)
+		}
+	}
+	if w.Document() != before {
+		t.Fatal("recyclable-slot preflight mutated saved placements")
 	}
 }

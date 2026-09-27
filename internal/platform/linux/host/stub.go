@@ -12,6 +12,15 @@ type Window struct{}
 func Open(string, int, int, bool) (*Window, error) {
 	return nil, fmt.Errorf("native host requires Linux, CGO, wayland-client and xkbcommon")
 }
+func OpenWithOptions(string, int, int, Options) (*Window, error) {
+	return nil, fmt.Errorf("native host requires Linux, CGO, wayland-client and xkbcommon")
+}
+func (*Window) BeginMove() bool                           { return false }
+func (*Window) BeginResize(ResizeEdge) bool               { return false }
+func (*Window) Minimize()                                 {}
+func (*Window) SetMaximized(bool)                         {}
+func (*Window) Maximized() bool                           { return false }
+func (*Window) SetTitle(string)                           {}
 func (*Window) Close()                                    {}
 func (*Window) Handles() (unsafe.Pointer, unsafe.Pointer) { return nil, nil }
 func (*Window) Size() (int, int)                          { return 0, 0 }

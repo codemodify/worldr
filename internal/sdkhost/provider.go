@@ -21,6 +21,7 @@ import (
 	"github.com/codemodify/worldr/internal/render"
 	"github.com/codemodify/worldr/internal/scene"
 	nativeapp "github.com/codemodify/worldr/sdk/nativeapp/v1"
+	skin "github.com/codemodify/worldr/sdk/skin/v1"
 )
 
 const (
@@ -88,6 +89,8 @@ var _ experience.ApplicationTextureRetirer = (*Provider)(nil)
 var _ experience.ApplicationGeometryRetirer = (*Provider)(nil)
 var _ experience.ApplicationTextInput = (*Provider)(nil)
 var _ experience.ApplicationCloser = (*Provider)(nil)
+var _ experience.ApplicationThemeSetter = (*Provider)(nil)
+var _ experience.ApplicationSkinSetter = (*Provider)(nil)
 
 // Open starts command directly, without a shell, and negotiates protocol v1.
 // args are copied. stdout is reserved for protocol traffic; stderr goes to log.
@@ -280,19 +283,23 @@ func (p *Provider) acceptEnvelope(request nativeapp.Request, response nativeapp.
 	return nil
 }
 
-func (p *Provider) enqueue(kind nativeapp.RequestKind, surface uint64, event *nativeapp.Event, width, height int) {
+func (p *Provider) enqueueRequest(request nativeapp.Request) {
 	if p.closed || p.err != nil {
 		return
 	}
-	request := nativeapp.Request{Version: nativeapp.Version, Sequence: p.nextSequence(), Kind: kind, Surface: nativeapp.SurfaceID(surface), Event: event, Width: width, Height: height}
+	request.Version, request.Sequence = nativeapp.Version, p.nextSequence()
 	select {
 	case p.requests <- queuedRequest{request}:
 	default:
-		if event != nil && event.Kind == nativeapp.PointerMove {
+		if request.Event != nil && request.Event.Kind == nativeapp.PointerMove {
 			return
 		}
 		p.err = fmt.Errorf("native app %q input queue exceeded %d requests", p.manifest.ID, requestCapacity)
 	}
+}
+
+func (p *Provider) enqueue(kind nativeapp.RequestKind, surface uint64, event *nativeapp.Event, width, height int) {
+	p.enqueueRequest(nativeapp.Request{Kind: kind, Surface: nativeapp.SurfaceID(surface), Event: event, Width: width, Height: height})
 }
 
 func (p *Provider) Poll() error {
@@ -408,6 +415,35 @@ func (p *Provider) Resize(id uint64, width, height int) {
 	width = max(1, min(nativeapp.MaxTextureWidth, width))
 	height = max(1, min(nativeapp.MaxTextureHeight, height))
 	p.enqueue(nativeapp.RequestResize, id, nil, width, height)
+}
+
+// SetControlTheme sends the saved workspace preference only to applications
+// that explicitly advertised support. Older v1 applications receive no unknown
+// request and keep their application-owned presentation.
+func (p *Provider) SetControlTheme(theme experience.ControlTheme) {
+	if p.manifest.Skins {
+		if legacy, err := nativeui.LegacySkin(theme.Family, theme.Shape); err == nil {
+			p.SetSkin(legacy)
+		}
+	}
+	if !p.manifest.ControlThemes {
+		return
+	}
+	preference := nativeapp.ControlTheme{Family: theme.Family, Shape: theme.Shape}
+	if preference.Validate() != nil {
+		return
+	}
+	p.enqueueRequest(nativeapp.Request{Kind: nativeapp.RequestTheme, Theme: &preference})
+}
+
+// SetSkin queues an owned snapshot only after explicit capability negotiation.
+// Legacy v1 clients keep receiving only the requests they opted into.
+func (p *Provider) SetSkin(selected skin.Skin) {
+	if !p.manifest.Skins || selected.Validate() != nil {
+		return
+	}
+	owned := selected.Clone()
+	p.enqueueRequest(nativeapp.Request{Kind: nativeapp.RequestSkin, Skin: &owned})
 }
 
 func (p *Provider) CloseApplication(id uint64) {

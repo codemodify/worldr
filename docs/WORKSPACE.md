@@ -75,12 +75,23 @@ Camera movement must never silently change where a keystroke goes.
 Super+primary dragging empty workspace pans the saved camera target horizontally
 and vertically without moving windows. Empty unmodified drags remain inert. A
 compact scene controller continues the right launcher rail at the bottom-right.
-Its small reticle owns scene orbiting, and two values report yaw and pitch
-without field labels. The adjacent gear opens a modal Settings surface with
-Terminal and Media previews, a saved Windows category for choosing Aperture,
-Instrument, Glass, or Telemetry borders, and an Environment category for
-independent DNA, Cat, and Eyes switches; Reset sits inside the same controller
-and restores the camera view.
+Its small reticle has no angle readout and turns your gaze in place, the way
+looking around works in a first-person view. Windows stay pinned in the room,
+and the rear weave turns with them, so looking back finds both where you left
+them. Its upper-left X restores the camera view and the adjacent gear opens a
+modal Settings surface. Terminal and Media provide previews; Windows selects a
+saved Aperture, Instrument, Glass, or Telemetry border; Themes saves an
+SDK-compatible control palette plus an independent shape grammar and displays a
+live gallery; and Environment switches DNA, Cat, cat/window physics, and Eyes
+independently. The additive native-app v1 theme preference updates apps that
+advertise support; the native-instrument example changes live, while older and
+non-theme-aware apps keep their own presentation.
+
+The **Skins** category selects a complete Merrick, Advanced, Hologram or Plasma
+package for windows and supported native controls, with live accent, shape and
+type-size edits. Custom JSON packages and all authored recipes persist with the
+workspace. See [window and control skins](SKINS.md) for the working showcase,
+package format and renderer support.
 
 Workspace F1 exposes the current shortcuts in an on-screen guide. It owns input
 while open; closing it leaves typing focus with the workspace. Focused
@@ -99,23 +110,28 @@ output, pinned results, and explicitly dispatched task recipes now extend the PT
 should use the engine directly. Compatibility provides access to existing
 software alongside those new experiences.
 
-The general desktop's rear background is a woven cyan energy wall: a pinned
-25-by-15 physical lattice joined by structural, shear, and bending springs. Its
-horizontal and vertical springs are invisible bracing; two visible families of
-bowed diagonal fibers form the weave. An overscanned oblique projection removes
-the rectangular perimeter, and shaded strands read as rounded polymer rather
-than a technical grid. A subtle periodic pressure cue gives the wall a gentle
-breathing motion, while traveling electricity modulates the strand highlights.
-Crossings use local underpass shading without circular knots. Window impacts
-produce a visible dent and spring wave at the collision point. The centered 3D
-DNA double helix remains as subdued retained geometry in front of the weave,
-rotating once every 30 seconds. A retained low-poly cat follows a closed running
-route through X, Y, and depth, while three bloodshot ambient eyes track the host
-pointer. Every ambient layer remains behind application content and never
-participates in picking or pointer capture. Animation and gaze are transient and
-independent of camera navigation, saved layouts, and Undo; only the three
-visibility switches are saved. The effects continue during Read and other
-focused work. The standalone AXIAL experience does not create them.
+The general desktop's rear background is a dim cyan energy weave: a pinned
+25-by-15 physical lattice joined by structural, shear, and bending springs.
+Those springs stay invisible. The visible sheet samples the lattice as a fine
+hexagonal mesh of thin, shaded threads, small enough to read as fabric rather
+than a structural grid. An overscanned oblique projection removes the
+rectangular perimeter. A subtle periodic pressure cue gives the wall a gentle
+breathing motion, while a faint electrical highlight travels along the threads
+without raising them above the rest of the workspace. Window impacts
+produce a visible dent and spring wave at the collision point. The DNA double
+helix stands in the room, left of the working plane and in front of the weave,
+and rotates once every 30 seconds. The cat runs, pauses, and naps on a closed
+route through that same room. Both landmarks use the desktop camera, so looking
+around carries them with the windows and looking back finds them. The cat's
+independent paw physics switch lets a fresh contact add an impulse to a
+window's existing motion without stopping other throws. Three equal, small
+bloodshot eyes stay aligned at the upper-right and track the host pointer.
+Every ambient layer remains behind application content and never captures
+input. Animation and gaze are transient and independent of camera navigation,
+saved layouts, and Undo; the DNA, Cat, cat/window-physics, and Eyes switches
+are saved. Read hides the weave, the cat, and the eyes, and leaves only a faint
+helix, so a page stays quieter than the room around it. The standalone AXIAL
+experience does not create them.
 
 Opening a video from native Files starts playback in a new independent window
 without changing keyboard focus, selection, camera or Read mode. A new player
@@ -221,10 +237,13 @@ before opening content in the native viewer. Ctrl+Alt+Space opens the same
 launcher for all tools, live windows, and named spaces. The desktop has no left
 sidebar, footer, or main toolbar. The launcher stays on the right, and its compact
 scene controller sits directly below it at the bottom-right. The controller has
-no title or yaw/pitch field labels; it combines the orbit reticle and angle
-values with a Settings gear and Reset. Settings shows Terminal and Media
-previews, four saved native-window border choices, and saved Environment
-switches for DNA, Cat, and Eyes.
+no title or angle readout; it combines the inside-sphere orbit reticle with a
+Settings gear and an upper-left reset X. Settings shows Terminal and Media
+previews, a Windows category with four saved native-window border choices, a
+Themes category with a saved SDK-compatible palette and shape grammar plus a
+live control gallery, and saved Environment switches for DNA, Cat, cat/window
+physics, and Eyes. Theme-aware native-app v1 children receive changes live;
+older and non-theme-aware apps keep their own presentation.
 
 `--project` anchors a native Files browser at that directory. Select a file
 to preview UTF-8 text with line numbers. Enter, double-click or Open enters a
@@ -409,19 +428,16 @@ v1 SDK is available for independently built tools.
 
 The workspace displays at most 32 live windows and retains 32 saved placements.
 Closing a window preserves its placement; reused native launch slots recover
-that association. Old saved placements can exhaust capacity even with few live
-windows. Launch errors have a temporary visible notice; an unplaceable new
-terminal is closed without discarding existing layout. Launch/close actions and
-notices stay outside document undo. Sessions remember native resource references;
-live keyboard focus and running processes are not serialized.
-
-**Forget Closed Placements** explicitly frees saved positions of closed windows,
-including from an otherwise empty workspace. Live windows keep their positions,
-groups and selection. The action is undoable without losing subsequently opened
-windows; restoring too many entries is refused with a notice. Redo protects
-windows reopened since the original cleanup. Remembered positions are never
-deleted automatically. Forgetting a closed key also drops any pending session
-reference for that placement on the next save.
+that association while capacity exists. When a genuinely new window needs a
+full layout, the lowest closed slot is recycled deterministically. Complete
+provider state reserves live and still-loading keys first, so pending launches
+cannot overbook capacity and a live layout is never evicted. Launch errors have
+a temporary visible notice. Closing the last live window leaves the bare
+workspace without an empty-state card or closed-placement cleanup control.
+Launch/close actions and notices stay outside document undo. Closed positions
+remain session data so a reused native launch slot can return to its prior place
+before that slot is needed by a new key. Sessions remember native resource
+references; live keyboard focus and running processes are not serialized.
 
 Clipboard contents are requested lazily. Native paste is text-only, bounded to
 1 MiB and two seconds, and cancelled when its original terminal loses focus.

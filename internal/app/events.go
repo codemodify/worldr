@@ -125,10 +125,14 @@ func symbolKey(code uint32) experience.Key {
 		code -= 'a' - 'A'
 	}
 	switch code {
-	case 'B', 'C', 'E', 'F', 'G', 'O', 'P', 'R', 'S', 'Q', 'Z', 'Y', '1', '2', '3':
+	case 'B', 'C', 'E', 'F', 'G', 'H', 'J', 'K', 'M', 'O', 'P', 'R', 'S', 'Q', 'Z', 'Y', '1', '2', '3':
 		return experience.Key(string(rune(code)))
 	case ' ':
 		return experience.KeySpace
+	case 0xff0d, 0xff8d: // Return and KP_Enter.
+		return experience.KeyEnter
+	case 0xff09, 0xfe20: // Tab and ISO_Left_Tab (Shift+Tab).
+		return experience.KeyTab
 	case 0xff1b:
 		return experience.KeyEscape
 	case 0xffbe:
@@ -137,6 +141,10 @@ func symbolKey(code uint32) experience.Key {
 		return experience.KeyLeft
 	case 0xff53:
 		return experience.KeyRight
+	case 0xff52:
+		return experience.KeyUp
+	case 0xff54:
+		return experience.KeyDown
 	}
 	return experience.KeyUnknown
 }
@@ -168,9 +176,11 @@ func (s *keyState) event(code uint32, pressed bool) experience.Event {
 	key := map[uint32]experience.Key{
 		1: experience.KeyEscape, 2: experience.Key1, 3: experience.Key2, 4: experience.Key3, 59: experience.KeyF1,
 		16: experience.KeyQ, 18: experience.KeyE, 19: experience.KeyR, 21: experience.KeyY, 24: experience.KeyO, 25: experience.KeyP,
-		34: experience.KeyG, 46: experience.KeyC,
+		15: experience.KeyTab, 28: experience.KeyEnter, 96: experience.KeyEnter,
+		34: experience.KeyG, 35: experience.KeyH, 36: experience.KeyJ, 37: experience.KeyK,
+		46: experience.KeyC, 50: experience.KeyM,
 		31: experience.KeyS, 33: experience.KeyF, 44: experience.KeyZ, 48: experience.KeyB, 57: experience.KeySpace,
-		105: experience.KeyLeft, 106: experience.KeyRight,
+		103: experience.KeyUp, 105: experience.KeyLeft, 106: experience.KeyRight, 108: experience.KeyDown,
 	}[code]
 	return experience.Event{
 		Kind: experience.KeyInput, Key: key, Keycode: code, Modifiers: mods, Pressed: pressed,

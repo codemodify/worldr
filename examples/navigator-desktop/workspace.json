@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "experience_id": "worldr.workspace",
+  "state": {
+    "version": 1,
+    "navigation": {
+      "home": true,
+      "motion_enabled": true,
+      "page": 0
+    },
+    "environment": {
+      "dna": false,
+      "cat": false,
+      "cat_collisions": false,
+      "eyes": false
+    },
+    "applications": {
+      "space": 0,
+      "spaces": [
+        { "name": "Code" },
+        { "name": "Research" },
+        { "name": "Design" }
+      ],
+      "layouts": [
+        {
+          "key": "native:project-browser",
+          "space": 0,
+          "width": 960,
+          "height": 600
+        },
+        {
+          "key": "native:research-workbench",
+          "space": 1,
+          "width": 960,
+          "height": 600
+        },
+        {
+          "key": "native:model",
+          "space": 2,
+          "width": 960,
+          "height": 600
+        },
+        {
+          "key": "native:axial-07",
+          "space": 2,
+          "width": 960,
+          "height": 600
+        }
+      ]
+    }
+  }
+}

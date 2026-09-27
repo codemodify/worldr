@@ -198,6 +198,30 @@ func TestSeatForwardsOnlySurfaceIndependentKeyboardState(t *testing.T) {
 	}
 }
 
+func TestControlThemePreferenceRequiresAdvertisedSupport(t *testing.T) {
+	preference := experience.ControlTheme{Family: "glass", Shape: "bracketed"}
+	unsupported := bareProvider()
+	unsupported.requests = make(chan queuedRequest, 1)
+	unsupported.SetControlTheme(preference)
+	if len(unsupported.requests) != 0 || unsupported.err != nil {
+		t.Fatal("provider sent a theme request to an application without support")
+	}
+
+	supported := bareProvider()
+	supported.manifest.ControlThemes = true
+	supported.requests = make(chan queuedRequest, 1)
+	supported.SetControlTheme(preference)
+	select {
+	case queued := <-supported.requests:
+		request := queued.request
+		if request.Kind != nativeapp.RequestTheme || request.Surface != 0 || request.Theme == nil || request.Theme.Family != preference.Family || request.Theme.Shape != preference.Shape {
+			t.Fatalf("bad theme request: %+v", request)
+		}
+	default:
+		t.Fatal("theme-aware provider omitted the workspace preference")
+	}
+}
+
 type helperApplication struct {
 	pending  []nativeapp.TextureUpdate
 	revision uint64

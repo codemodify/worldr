@@ -15,6 +15,7 @@ import (
 	"github.com/codemodify/worldr/internal/resourcepath"
 	"github.com/codemodify/worldr/internal/scene"
 	"github.com/codemodify/worldr/internal/textinput"
+	skin "github.com/codemodify/worldr/sdk/skin/v1"
 )
 
 type loadResult struct {
@@ -49,6 +50,7 @@ const MaxViewers = 8
 const maxCollectionTriangles = 800000
 
 type Manager struct {
+	skin                             *skin.Skin
 	loader                           chan struct{}
 	triangles                        int
 	keymap                           experience.Event
@@ -124,6 +126,12 @@ func (m *Manager) open(file *os.File, name, key string, saved *SessionState) (st
 	r, err := newRenderer(960, 600)
 	if err != nil {
 		return "", err
+	}
+	if m.skin != nil {
+		if err := r.painter.SetSkin(*m.skin); err != nil {
+			r.close()
+			return "", err
+		}
 	}
 	input, err := textinput.New()
 	if err != nil {

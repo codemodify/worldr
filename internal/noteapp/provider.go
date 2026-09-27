@@ -12,6 +12,7 @@ import (
 	"github.com/codemodify/worldr/internal/nativeui"
 	"github.com/codemodify/worldr/internal/resourcepath"
 	"github.com/codemodify/worldr/internal/textinput"
+	skin "github.com/codemodify/worldr/sdk/skin/v1"
 )
 
 type viewer struct {
@@ -31,6 +32,7 @@ type viewer struct {
 }
 
 type Manager struct {
+	skin                         *skin.Skin
 	slots                        [MaxNotes]*viewer
 	retiring                     []*viewer
 	pasteTarget                  *viewer
@@ -156,6 +158,12 @@ func (m *Manager) openState(state SessionState, message string) (string, error) 
 	r, err := newRenderer(noteBaseWidth, noteBaseHeight)
 	if err != nil {
 		return "", err
+	}
+	if m.skin != nil {
+		if err := r.painter.SetSkin(*m.skin); err != nil {
+			r.close()
+			return "", err
+		}
 	}
 	input, err := textinput.New()
 	if err != nil {

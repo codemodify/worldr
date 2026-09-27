@@ -226,6 +226,95 @@ func (w *Workspace) stopWindowThrowForKey(key string) {
 	}
 }
 
+// applyWindowImpulse adds a physical impulse without replacing the linked list
+// of independently coasting windows. If the target is already moving, its
+// current residual velocity is rebased at the current placement and the new
+// impulse joins the same undo edit. Unrelated throws are never touched.
+func (w *Workspace) applyWindowImpulse(key string, impulseX, impulseY, impulseZ float64) bool {
+	if !finite(impulseX) || !finite(impulseY) || !finite(impulseZ) {
+		return false
+	}
+	selected := w.m.applicationState.movementSelectionFor(key)
+	if selected == 0 {
+		return false
+	}
+
+	var moving *windowThrow
+	for motion := w.windowThrow; motion != nil; motion = motion.next {
+		if motion.selected&selected == 0 {
+			continue
+		}
+		// Overlapping masks should be identical because direct gestures stop an
+		// existing target before starting another. Preserve both edits if a caller
+		// encounters an unexpected partial overlap instead of merging them.
+		if motion.selected != selected || moving != nil {
+			return false
+		}
+		moving = motion
+	}
+
+	vx, vy, vz := impulseX, impulseY, impulseZ
+	if moving != nil {
+		currentX, currentY, currentZ := windowThrowInstantVelocity(moving)
+		vx, vy, vz = vx+currentX, vy+currentY, vz+currentZ
+	}
+	speed := math.Sqrt(vx*vx + vy*vy + vz*vz)
+	if !finite(speed) {
+		return false
+	}
+	if speed > windowThrowMaxSpeed {
+		vx, vy, vz = vx*windowThrowMaxSpeed/speed, vy*windowThrowMaxSpeed/speed, vz*windowThrowMaxSpeed/speed
+		speed = windowThrowMaxSpeed
+	}
+	if speed < windowThrowStopSpeed {
+		if moving != nil {
+			w.finishOneWindowThrow(moving)
+		}
+		return moving != nil
+	}
+
+	if moving == nil {
+		if speed < windowThrowMinSpeed {
+			return false
+		}
+		current := w.Document()
+		moving = &windowThrow{selected: selected}
+		moving.editID = w.appendEdit(edit{before: current, after: current, fields: fieldApplicationLayout})
+		for _, surface := range w.applicationSurfaces {
+			if index := w.m.applicationState.index(surface.Key); index >= 0 && selected&(1<<index) != 0 {
+				moving.liveIDs[index] = surface.ID
+			}
+		}
+		moving.next, w.windowThrow = w.windowThrow, moving
+	}
+
+	moving.origin = w.m.applicationState.Layouts
+	moving.vx, moving.vy, moving.vz = vx, vy, vz
+	moving.elapsed = 0
+	moving.duration = math.Min(3, math.Log(speed/windowThrowStopSpeed)/windowThrowFriction)
+	moving.wallCollisionTime, moving.wallCollisionSpeed = -1, 0
+	moving.wallImpactSent = false
+	if w.desktop {
+		moving.wallCollisionTime, moving.wallCollisionSpeed = energyWallCollision(moving.origin, moving.selected, vz)
+	}
+	return true
+}
+
+func windowThrowInstantVelocity(motion *windowThrow) (vx, vy, vz float64) {
+	if motion == nil {
+		return 0, 0, 0
+	}
+	decay := math.Exp(-windowThrowFriction * motion.elapsed)
+	vx, vy = motion.vx*decay, motion.vy*decay
+	if motion.wallCollisionTime >= 0 && motion.elapsed > motion.wallCollisionTime {
+		reboundTime := motion.elapsed - motion.wallCollisionTime
+		vz = motion.wallCollisionSpeed * float64(energyWallRestitution) * math.Exp(-windowThrowFriction*reboundTime)
+	} else {
+		vz = motion.vz * decay
+	}
+	return
+}
+
 // Other windows can move while a gesture is held or coasting. Its edit/cancel
 // must contain only its own members, not snapshots of their unrelated motion.
 func windowMoveBefore(start, current Document, selected uint32) Document {

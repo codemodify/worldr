@@ -255,7 +255,7 @@ func TestWindowResizeCancelRestoresSizeAndDrainsRelease(t *testing.T) {
 	before, history := w.Document(), w.historyPosition
 	w.Handle(experience.Event{Kind: experience.PointerDown, Button: experience.ButtonSecondary, Modifiers: experience.ModSuper, X: x, Y: y})
 	w.Handle(experience.Event{Kind: experience.PointerMove, X: x - 500, Y: y - 500})
-	if p := w.Document().View.Application.Layouts[0]; p.Width != minApplicationWidth || p.Height != minApplicationHeight {
+	if p := w.Document().View.Application.Layouts[0]; p.Width != legacyMinApplicationWidth || p.Height != legacyMinApplicationHeight {
 		t.Fatalf("resize did not clamp to minimum dimensions: %+v", p)
 	}
 	if !key(w, experience.KeyEscape, 0) || w.Document() != before || w.historyPosition != history {

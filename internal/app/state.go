@@ -13,7 +13,9 @@ import (
 	"github.com/codemodify/worldr/internal/experience"
 )
 
-const maxStateBytes = 1 << 20
+// A session may carry a complete (up to 1 MiB) skin package as well as native
+// documents. Leave bounded room for JSON indentation and the state envelope.
+const maxStateBytes = 8 << 20
 const stateEnvelopeVersion = 1
 const sessionEnvelopeVersion = 2
 

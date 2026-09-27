@@ -221,9 +221,9 @@ func TestFootWorkspaceCompatibilityGPU(t *testing.T) {
 	if err := vk.RenderFrame(afterExit, clear, pixels); err != nil {
 		t.Fatalf("workspace failed after application exit: %v", err)
 	}
-	// A closed app now exposes the deliberate Forget Closed Placements
-	// control. Complete that action before requiring the entire rendered image
-	// to match the original empty workspace, without masking any pixels.
+	// Exercise the compatibility cleanup reducer before requiring the entire
+	// rendered image to match the original empty workspace, without masking any
+	// pixels. The desktop no longer exposes a cleanup control.
 	if err := work.Dispatch(workspace.Action{Kind: workspace.ForgetClosedPlacements}); err != nil {
 		t.Fatal(err)
 	}

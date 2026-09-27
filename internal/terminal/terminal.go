@@ -313,6 +313,22 @@ func (t *Terminal) Resize(cols, rows int) error {
 	return nil
 }
 
+// SetPalette replaces this terminal's sixteen ANSI colors. Existing indexed
+// screen and scrollback cells use the new palette on the next Poll; explicit
+// truecolor, the extended 256-color cube, and default foreground/background
+// colors remain unchanged. It does not modify other terminal instances.
+func (t *Terminal) SetPalette(colors [16]Color) error {
+	if t == nil || t.closed {
+		return ErrClosed
+	}
+	var packed [48]C.uint8_t
+	for i, color := range colors {
+		packed[i*3], packed[i*3+1], packed[i*3+2] = C.uint8_t(color.R), C.uint8_t(color.G), C.uint8_t(color.B)
+	}
+	C.worldr_term_palette(t.ptr, &packed[0])
+	return nil
+}
+
 func (t *Terminal) Focus(focused bool) {
 	if t == nil || t.closed || focused == t.focused {
 		return

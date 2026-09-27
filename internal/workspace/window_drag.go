@@ -16,8 +16,8 @@ func applicationDragHandleMeshFor(style windowBorderStyle) (*scene.Mesh, error) 
 	palette := chromePaletteFor(style)
 	plate, tab := palette.plate, palette.edge
 	if style == windowBorderInstrument {
-		plate = scene.Color{R: .25, G: .35, B: .4, A: 1}
-		tab = scene.Color{R: 1, G: 1, B: 1, A: 1}
+		plate = scene.Color{R: .22, G: .28, B: .34, A: 1}
+		tab = scene.Color{R: .86, G: .9, B: .94, A: 1}
 	}
 	// Segments leave two dark notches in a broad, readily grabbed plate.
 	g.rect(-.16, .522, .16, .548, plate)
@@ -54,14 +54,22 @@ func (w *Workspace) syncApplicationDragHandle(surface experience.ApplicationSurf
 	i := view.index(surface.Key)
 	minimized := i >= 0 && view.Layouts[i].Minimized
 	handle.Hidden = surface.Frameless || surface.DragContent || minimized || view.Overview || view.Reading
+	if w.activeSkin != nil && !photoFrameSurface(surface) {
+		meshes := w.skinWindowMeshes(surface)
+		applyWindowSkinPart(handle, meshes.grip)
+		w.syncWindowSkinTitle(surface, meshes.layout)
+		return
+	}
+	w.retireWindowSkinTitle(surface.ID)
+	resetWindowSkinMaterial(handle, false)
 	handle.Glow = [3]float32{}
 	if style == windowBorderInstrument {
-		handle.Color = scene.ColorHex(0x6ca7b7, .78)
+		handle.Color = scene.ColorHex(0xd5e0e8, .82)
 		if w.pointer.windowDrag && w.pointer.surface == w.applicationNodes[surface.ID] {
-			handle.Color = scene.ColorHex(0xb2f5ff, 1)
-			handle.Glow = windowChromeGlow(style, .16)
+			handle.Color = scene.ColorHex(0xf7fafc, 1)
+			handle.Glow = windowChromeGlow(style, .12)
 		} else if surface.Key == view.Active {
-			handle.Color = scene.ColorHex(0x82dbe9, .95)
+			handle.Color = scene.ColorHex(0xe7eef3, .95)
 		}
 		return
 	}

@@ -48,48 +48,6 @@ func (w *Workspace) handleTerminalShortcut(event experience.Event) bool {
 	return true
 }
 
-// Closed-placement cleanup is a document edit. Live launching and closing use
-// the global keyboard shortcuts, so the workspace has no duplicate buttons for
-// those process actions.
-func (w *Workspace) handleApplicationControl(event experience.Event) bool {
-	if w.pointer.kind == captureForgetClosedPlacements {
-		switch event.Kind {
-		case experience.PointerMove:
-			w.movePointer(event.X, event.Y)
-			return true
-		case experience.PointerDown:
-			return true
-		case experience.PointerUp:
-			if applicationButton(event) != 272 {
-				return true
-			}
-			w.movePointer(event.X, event.Y)
-			p := w.pointer
-			w.pointer = pointerCapture{}
-			if !p.dragged && forgetClosedPlacementsButton.contains(p.lastX, p.lastY) {
-				_ = w.Dispatch(Action{Kind: ForgetClosedPlacements})
-			}
-			return true
-		case experience.PointerCancel, experience.KeyboardCancel:
-			return w.cancelPointer()
-		}
-	}
-	if event.Kind != experience.PointerDown || applicationButton(event) != 272 {
-		return false
-	}
-	x, y := (event.X-w.ox)/w.scale, (event.Y-w.oy)/w.scale
-	if !forgetClosedPlacementsButton.contains(x, y) || w.closedPlacementMask() == 0 {
-		return false
-	}
-	w.clearApplicationFocus()
-	w.cancelPointer()
-	w.pointer = pointerCapture{
-		kind: captureForgetClosedPlacements, start: w.Document(),
-		pressX: x, pressY: y, lastX: x, lastY: y, scale: w.scale, ox: w.ox, oy: w.oy,
-	}
-	return true
-}
-
 func (w *Workspace) launchTerminal(launcher experience.ApplicationLauncher) {
 	w.clearApplicationFocus()
 	before := w.Document()
@@ -114,9 +72,8 @@ func (w *Workspace) launchTerminal(launcher experience.ApplicationLauncher) {
 		w.install(next, false)
 		return
 	}
-	// Saved placements can fill every slot even with no live windows. The
-	// provider has already launched here, so inspect its full surface list,
-	// including the new surface excluded from the workspace by that limit.
+	// The provider has already launched here, so inspect its full surface list,
+	// including a new surface excluded by the live-window limit.
 	if closer, ok := w.applications.(experience.ApplicationCloser); ok {
 		for _, surface := range w.applications.Surfaces() {
 			if surface.ID != 0 && surface.Key == key && !existing[surface.ID] {
@@ -127,7 +84,7 @@ func (w *Workspace) launchTerminal(launcher experience.ApplicationLauncher) {
 	}
 	w.install(before, false)
 	if w.applicationLayoutFull {
-		w.showApplicationNotice("Terminal could not open: saved layout has reached its 32-window limit.")
+		w.showApplicationNotice("Terminal could not open: workspace already has 32 live or opening windows.")
 	} else {
 		w.showApplicationNotice("Terminal could not open: its window is unavailable.")
 	}
@@ -151,7 +108,7 @@ func (w *Workspace) showApplicationNotice(message string) {
 func (w *Workspace) Notify(message string) { w.showApplicationNotice(message) }
 
 // SavedApplicationKeys lets the host retain temporarily unavailable session
-// resources until the user explicitly forgets their saved placements.
+// resources until their slot is needed by a genuinely new live window.
 func (w *Workspace) SavedApplicationKeys() []string {
 	var keys []string
 	for _, placement := range w.m.applicationState.Layouts {

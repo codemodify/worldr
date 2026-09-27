@@ -23,6 +23,7 @@ worldr_term *worldr_term_new(int rows,int cols,int scrollback);
 void worldr_term_free(worldr_term *t);
 int worldr_term_feed(worldr_term *t,const char *data,size_t len);
 void worldr_term_resize(worldr_term *t,int rows,int cols);
+void worldr_term_palette(worldr_term *t,const uint8_t colors[48]);
 worldr_term_info worldr_term_snapshot(worldr_term *t,worldr_term_cell *cells);
 const char *worldr_term_title(worldr_term *t);
 size_t worldr_term_output(worldr_term *t,char *data,size_t capacity);

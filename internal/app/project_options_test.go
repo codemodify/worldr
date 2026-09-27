@@ -17,6 +17,11 @@ func TestExperienceOptionsKeepDesktopDefaultAndExplicitChoice(t *testing.T) {
 		{"demo study", []string{"--demo"}, "axial"},
 		{"explicit study", []string{"--experience=axial"}, "axial"},
 		{"explicit study demo", []string{"--experience=axial", "--demo"}, "axial"},
+		{"app navigator", []string{"--experience=navigator"}, "navigator"},
+		{"navigator demonstration", []string{"--experience=navigator", "--demo"}, "navigator"},
+		{"explicit navigator overrides demo default", []string{"--demo", "--experience=navigator"}, "navigator"},
+		{"fluid playground", []string{"--experience=plasma"}, "plasma"},
+		{"fluid demonstration", []string{"--experience=plasma", "--demo"}, "plasma"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			o, err := Parse(test.args, io.Discard)
@@ -34,6 +39,17 @@ func TestExperienceOptionsKeepDesktopDefaultAndExplicitChoice(t *testing.T) {
 		if _, err := Parse(args, io.Discard); err == nil {
 			t.Fatalf("accepted unsupported desktop demo: %q", args)
 		}
+	}
+}
+
+func TestNavigatorOptionsRetainNativeStarterApplications(t *testing.T) {
+	args := []string{"--experience=navigator", "--project=.", "--research=examples/data/orbit-signals.csv", "--model=examples/models/mount.obj", "--axial", "--width=1280", "--height=820"}
+	o, err := Parse(args, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Experience != "navigator" || o.Project != "." || len(o.Research) != 1 || o.Research[0] != "examples/data/orbit-signals.csv" || len(o.Models) != 1 || o.Models[0] != "examples/models/mount.obj" || !o.Axial || o.Width != 1280 || o.Height != 820 {
+		t.Fatalf("navigator lost native startup options: %+v", o)
 	}
 }
 

@@ -349,6 +349,10 @@ func reduce(d Document, a Action) (Document, error) {
 }
 
 func (w *Workspace) Demo(elapsed time.Duration) {
+	if w.navigation != nil {
+		w.demoNavigation(elapsed)
+		return
+	}
 	if w.desktop {
 		return
 	}

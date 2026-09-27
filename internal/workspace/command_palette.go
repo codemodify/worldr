@@ -152,6 +152,10 @@ func (w *Workspace) chooseCommand() {
 			break
 		}
 		if e.kind == "terminal" {
+			if w.navigation != nil {
+				w.navigationAction("tool:launch:terminal")
+				return
+			}
 			w.launchTerminal(launcher)
 			return
 		}
@@ -176,6 +180,9 @@ func (w *Workspace) chooseCommand() {
 					break
 				}
 			}
+		}
+		if err == nil && w.navigation != nil && (e.action.Kind == SwitchSpace || e.action.Kind == CreateSpace) {
+			w.navigationProject(w.m.applicationState.Space)
 		}
 	}
 	if err != nil {

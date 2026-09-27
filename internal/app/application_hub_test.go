@@ -19,6 +19,15 @@ type hubProvider struct {
 
 type semanticHubProvider struct{ hubProvider }
 
+type themedHubProvider struct {
+	hubProvider
+	themes []experience.ControlTheme
+}
+
+func (p *themedHubProvider) SetControlTheme(theme experience.ControlTheme) {
+	p.themes = append(p.themes, theme)
+}
+
 func (p *semanticHubProvider) Semantics(id uint64) nativeui.SemanticTree {
 	if id != 5 {
 		return nativeui.SemanticTree{}
@@ -97,6 +106,24 @@ func TestApplicationHubKeepsProvidersAndFocusIndependent(t *testing.T) {
 	surfaces = h.Surfaces()
 	if surfaces[1].ID == second || surfaces[0].ID != first {
 		t.Fatal("reconnection reused stale route or changed live sibling identity")
+	}
+}
+
+func TestApplicationHubBroadcastsControlThemeOnlyToSupportingProviders(t *testing.T) {
+	plain := &hubProvider{}
+	first, second := &themedHubProvider{}, &themedHubProvider{}
+	hub := newApplicationHub(first, plain, second)
+	want := experience.ControlTheme{Family: "aperture", Shape: "slab"}
+	hub.SetControlTheme(want)
+	if len(first.themes) != 1 || first.themes[0] != want || len(second.themes) != 1 || second.themes[0] != want {
+		t.Fatalf("theme was not broadcast exactly once: first=%v second=%v", first.themes, second.themes)
+	}
+	if err := hub.Close(); err != nil {
+		t.Fatal(err)
+	}
+	hub.SetControlTheme(experience.ControlTheme{Family: "glass", Shape: "notched"})
+	if len(first.themes) != 1 || len(second.themes) != 1 {
+		t.Fatal("closed hub broadcast a theme")
 	}
 }
 

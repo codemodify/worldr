@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"sync/atomic"
+
+	fluid "github.com/codemodify/worldr/sdk/fluid/v1"
 )
 
 // Vertex uses top-left pixel coordinates and Vulkan depth (0 near, 1 far).
@@ -102,6 +104,7 @@ const (
 	OverlayCommand CommandKind = iota
 	SceneCommand
 	ImageCommand
+	FluidCommand
 )
 
 // Image is a retained premultiplied-RGBA screen overlay. Bounds are x, y,
@@ -266,12 +269,16 @@ type Draw struct {
 // Overlay commands draw Frame.Vertices[First:First+Count] without depth testing.
 // Scene commands clear depth within View.Viewport, then draw meshes and surfaces.
 // Image commands blend retained premultiplied RGBA within Image.Bounds without depth.
+// Fluid commands paint an opaque procedural backdrop and fused glass surfaces
+// within Fluid.Bounds without depth. Following overlay/image commands stay crisp.
 type Command struct {
 	Kind         CommandKind
 	First, Count int
 	View         View
 	Draws        []Draw
 	Image        Image
+	// Fluid.Surfaces is borrowed until the synchronous frame submission returns.
+	Fluid fluid.Field
 }
 
 type Frame struct {

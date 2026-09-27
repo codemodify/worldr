@@ -100,10 +100,13 @@ func (w *Workspace) shapedFrame(frame render.Frame) render.Frame {
 	return frame
 }
 func (w *Workspace) RetiredTextures() []uint64 {
-	if w.labels == nil {
-		return nil
+	var ids []uint64
+	if w.labels != nil {
+		ids, w.labels.retired = w.labels.retired, nil
 	}
-	ids := w.labels.retired
-	w.labels.retired = nil
+	if w.panelField != nil {
+		ids = append(ids, w.panelField.retiredTextures...)
+		w.panelField.retiredTextures = nil
+	}
 	return ids
 }

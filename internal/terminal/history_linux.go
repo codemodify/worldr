@@ -25,37 +25,7 @@ func (t *Terminal) History() (History, error) {
 	var cells [512]C.worldr_term_text_cell
 	for row := 0; row < count; row++ {
 		n := int(C.worldr_term_text_line(t.ptr, C.int(row), &cells[0], C.int(len(cells))))
-		var text strings.Builder
-		columns := make([]uint16, 0, n+1)
-		end := 0
-		for col := 0; col < n; col++ {
-			cell := cells[col]
-			if cell.width <= 0 {
-				continue
-			}
-			if cell.chars[0] == 0 {
-				text.WriteByte(' ')
-				columns = append(columns, uint16(col))
-			} else {
-				for _, ch := range cell.chars {
-					if ch == 0 {
-						break
-					}
-					text.WriteRune(rune(ch))
-					columns = append(columns, uint16(col))
-				}
-			}
-			end = col + int(cell.width)
-		}
-		value := text.String()
-		trimmed := strings.TrimRight(value, " ")
-		removed := len(value) - len(trimmed)
-		if removed > 0 {
-			end = int(columns[len(columns)-removed])
-			columns = columns[:len(columns)-removed]
-		}
-		columns = append(columns, uint16(end))
-		h.Lines = append(h.Lines, TextLine{ID: h.FirstLine + uint64(row), Text: trimmed, Columns: columns})
+		h.Lines = append(h.Lines, plainTextLine(h.FirstLine+uint64(row), cells[:n]))
 	}
 	var commands [128]C.worldr_term_command
 	n := int(C.worldr_term_commands(t.ptr, &commands[0], C.int(len(commands))))
@@ -63,6 +33,40 @@ func (t *Terminal) History() (History, error) {
 		h.Commands = append(h.Commands, CommandBlock{ID: uint64(c.id), CommandLine: uint64(c.command_line), OutputLine: uint64(c.output_line), EndLine: uint64(c.end_line), CommandColumn: int(c.command_col), OutputColumn: int(c.output_col), EndColumn: int(c.end_col), Started: c.started != 0, Finished: c.finished != 0, Status: int(c.status)})
 	}
 	return h, nil
+}
+
+func plainTextLine(id uint64, cells []C.worldr_term_text_cell) TextLine {
+	var text strings.Builder
+	text.Grow(len(cells))
+	columns := make([]uint16, 0, len(cells)+1)
+	end := 0
+	for col, cell := range cells {
+		if cell.width <= 0 {
+			continue
+		}
+		if cell.chars[0] == 0 {
+			text.WriteByte(' ')
+			columns = append(columns, uint16(col))
+		} else {
+			for _, ch := range cell.chars {
+				if ch == 0 {
+					break
+				}
+				text.WriteRune(rune(ch))
+				columns = append(columns, uint16(col))
+			}
+		}
+		end = col + int(cell.width)
+	}
+	value := text.String()
+	trimmed := strings.TrimRight(value, " ")
+	removed := len(value) - len(trimmed)
+	if removed > 0 {
+		end = int(columns[len(columns)-removed])
+		columns = columns[:len(columns)-removed]
+	}
+	columns = append(columns, uint16(end))
+	return TextLine{ID: id, Text: trimmed, Columns: columns}
 }
 
 // ScrollToLine puts an existing row as close to the top as possible. Expired

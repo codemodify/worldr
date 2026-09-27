@@ -16,6 +16,8 @@ int worldr_vk_create_on_drm(int drm_fd, uint32_t connector_id, uint32_t prefer_w
 			    worldr_vk **out, char *err, int errlen);
 int worldr_vk_create_wayland(void *display, void *surface, uint32_t w, uint32_t h,
  worldr_vk **out, char *err, int errlen);
+int worldr_vk_create_wayland_transparent(void *display, void *surface, uint32_t w, uint32_t h,
+ worldr_vk **out, char *err, int errlen);
 int worldr_vk_resize(worldr_vk *vk, uint32_t w, uint32_t h, char *err, int errlen);
 typedef struct { uint64_t allocated,peak,budget; uint32_t images,buffers; } worldr_vk_memory_stats;
 int worldr_vk_memory_budget(worldr_vk *vk,uint64_t bytes,char *err,int errlen);

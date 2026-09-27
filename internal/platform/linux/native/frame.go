@@ -21,6 +21,7 @@ type frameState struct {
 	uploaded map[uint64]bool
 	textures map[uint64]uint64
 	ordered  []render.Draw
+	fluids   []C.worldr_fluid_field
 }
 
 // SampleCount reports the active scene target sample count (4 when color/depth
@@ -142,9 +143,19 @@ func (v *VK) RenderFrame(frame render.Frame, clear [4]float32, dst []byte) error
 	}
 	state := v.frame
 	state.draws = state.draws[:0]
+	state.fluids = state.fluids[:0]
 	defer func() { clearDraws(state.ordered); state.ordered = state.ordered[:0] }()
 	for _, command := range frame.Commands {
 		switch command.Kind {
+		case render.FluidCommand:
+			if err := command.Fluid.Validate(); err != nil {
+				return fmt.Errorf("invalid fluid field: %w", err)
+			}
+			if uint64(len(state.fluids)) >= math.MaxUint32 {
+				return fmt.Errorf("too many fluid fields")
+			}
+			state.draws = append(state.draws, C.worldr_frame_draw{kind: 7, first: C.uint32_t(len(state.fluids))})
+			state.fluids = append(state.fluids, packFluid(command.Fluid))
 		case render.OverlayCommand:
 			if command.First < 0 || command.Count < 0 || command.First > len(frame.Vertices) || command.Count > len(frame.Vertices)-command.First || command.Count%3 != 0 {
 				return fmt.Errorf("invalid overlay range")
@@ -385,6 +396,10 @@ func (v *VK) RenderFrame(frame render.Frame, clear [4]float32, dst []byte) error
 	if len(dst) > 0 {
 		output = (*C.uint8_t)(unsafe.Pointer(&dst[0]))
 	}
+	var fluids *C.worldr_fluid_field
+	if len(state.fluids) > 0 {
+		fluids = &state.fluids[0]
+	}
 	var errb [errBuf]C.char
 	linear := C.int(0)
 	if frame.LinearColor {
@@ -394,9 +409,10 @@ func (v *VK) RenderFrame(frame render.Frame, clear [4]float32, dst []byte) error
 		C.float(frame.Output.Exposure), C.float(frame.Output.Saturation), C.float(frame.Output.Contrast), C.float(frame.Output.ToneMap),
 		C.float(frame.Output.BloomStrength), C.float(frame.Output.BloomThreshold), C.float(frame.Output.BloomRadius), 0,
 	}
-	result := C.worldr_vk_render_frame(v.ptr, linear, &transform[0], vertices, C.uint32_t(len(frame.Vertices)), draws, C.uint32_t(len(state.draws)), (*C.float)(unsafe.Pointer(&clear[0])), output, &errb[0], C.int(len(errb)))
+	result := C.worldr_vk_render_frame(v.ptr, linear, &transform[0], vertices, C.uint32_t(len(frame.Vertices)), draws, C.uint32_t(len(state.draws)), fluids, C.uint32_t(len(state.fluids)), (*C.float)(unsafe.Pointer(&clear[0])), output, &errb[0], C.int(len(errb)))
 	runtime.KeepAlive(frame)
 	runtime.KeepAlive(state.draws)
+	runtime.KeepAlive(state.fluids)
 	runtime.KeepAlive(dst)
 	if result == -2 {
 		return ErrOutOfDate
@@ -463,3 +479,20 @@ func finiteValues(values []float32) bool {
 }
 
 func clearDraws(draws []render.Draw) { clear(draws) }
+
+// These internal diagnostics let regression tests compare retained halo pixels
+// against a forced render without changing scene quality or shader settings.
+func (v *VK) invalidateGlowCache() {
+	if v != nil && v.ptr != nil {
+		C.worldr_vk_invalidate_glow_cache(v.ptr)
+	}
+}
+
+func (v *VK) glowCacheStats() (rendered, reused uint64) {
+	if v == nil || v.ptr == nil {
+		return 0, 0
+	}
+	var a, b C.uint64_t
+	C.worldr_vk_glow_cache_stats(v.ptr, &a, &b)
+	return uint64(a), uint64(b)
+}

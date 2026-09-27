@@ -147,6 +147,15 @@ fail:worldr_term_free(t);return NULL;
 void worldr_term_free(worldr_term*t){if(!t)return;clear_history(t);free(t->history);free(t->output);if(t->vt)vterm_free(t->vt);xkb_compose_state_unref(t->compose);xkb_compose_table_unref(t->compose_table);xkb_state_unref(t->keys);xkb_keymap_unref(t->keymap);xkb_context_unref(t->xkb);free(t);}
 int worldr_term_feed(worldr_term*t,const char*data,size_t len){size_t used=vterm_input_write(t->vt,data,len);vterm_screen_flush_damage(t->screen);return used==len?0:-1;}
 void worldr_term_resize(worldr_term*t,int rows,int cols){vterm_set_size(t->vt,rows,cols);vterm_screen_flush_damage(t->screen);t->rows=rows;t->cols=cols;t->revision++;}
+void worldr_term_palette(worldr_term*t,const uint8_t colors[48]){
+    for(int i=0;i<16;i++){
+        VTermColor color;vterm_color_rgb(&color,colors[i*3],colors[i*3+1],colors[i*3+2]);
+        vterm_state_set_palette_color(t->state,i,&color);
+    }
+    // Screen and history cells retain their indexed colors. Snapshot converts
+    // them against this palette, while explicit truecolor stays unchanged.
+    t->revision++;
+}
 worldr_term_info worldr_term_snapshot(worldr_term*t,worldr_term_cell*cells){
     worldr_term_info info={.revision=t->revision,.first_line=t->first_line,.rows=t->rows,.cols=t->cols,.cursor_row=t->cursor_row,.cursor_col=t->cursor_col,.cursor_visible=t->cursor_visible&&!t->scroll_offset,.cursor_shape=t->cursor_shape,.cursor_blink=t->cursor_blink,.scroll_offset=t->scroll_offset,.scrollback_len=t->history_count,.mouse=t->mouse,.alternate=t->alternate};
     if(!cells)return info;

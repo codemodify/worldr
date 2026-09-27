@@ -163,7 +163,7 @@ func (w *Workspace) handleWindowResize(event experience.Event) bool {
 	if i < 0 || view.Layouts[i].Minimized {
 		return false
 	}
-	width, height := applicationLogicalSize(view.Layouts[i])
+	width, height := applicationSurfaceSize(surface, view.Layouts[i])
 	ratioX, ratioY := w.applicationResizeRatios(surface, width, height)
 	_, _, worldWidth, worldHeight := w.applicationTransformFor(surface)
 	w.stopWindowThrowForKey(surface.Key)
@@ -210,15 +210,26 @@ func (w *Workspace) previewWindowResize(x, y float32) {
 		return
 	}
 	p.dragged = true
-	width := max(minApplicationWidth, min(maxApplicationWidth, p.resizeWidth+int(math.Round(float64(dx*p.resizeRatioX)))))
-	height := max(minApplicationHeight, min(maxApplicationHeight, p.resizeHeight+int(math.Round(float64(dy*p.resizeRatioY)))))
+	var surface experience.ApplicationSurface
+	for _, candidate := range w.applicationSurfaces {
+		if candidate.Key == p.resizeKey {
+			surface = candidate
+			break
+		}
+	}
+	if surface.ID == 0 {
+		return
+	}
+	minWidth, minHeight := applicationSurfaceMinimumSize(surface)
+	width := max(minWidth, min(maxApplicationWidth, p.resizeWidth+int(math.Round(float64(dx*p.resizeRatioX)))))
+	height := max(minHeight, min(maxApplicationHeight, p.resizeHeight+int(math.Round(float64(dy*p.resizeRatioY)))))
 	action := Action{Kind: ResizeApplication, ApplicationKey: p.resizeKey, Width: width, Height: height}
 	if p.resizeAnchor {
 		i := w.m.applicationState.index(p.resizeKey)
 		if i < 0 {
 			return
 		}
-		currentWidth, currentHeight := applicationLogicalSize(w.m.applicationState.Layouts[i])
+		currentWidth, currentHeight := applicationSurfaceSize(surface, w.m.applicationState.Layouts[i])
 		// Move the center by half the physical size delta. The top-left stays
 		// fixed, so the visible bottom-right corner follows the resize pointer.
 		action.DeltaX = float32(width-currentWidth) * p.resizeWorldX / 2

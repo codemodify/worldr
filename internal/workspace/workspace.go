@@ -10,6 +10,7 @@ import (
 	"github.com/codemodify/worldr/internal/presentation"
 	"github.com/codemodify/worldr/internal/render"
 	"github.com/codemodify/worldr/internal/scene"
+	skin "github.com/codemodify/worldr/sdk/skin/v1"
 )
 
 type box struct{ x, y, w, h float32 }
@@ -17,6 +18,7 @@ type box struct{ x, y, w, h float32 }
 func (b box) contains(x, y float32) bool { return x >= b.x && x <= b.x+b.w && y >= b.y && y <= b.y+b.h }
 
 type Workspace struct {
+	navigation                                                        *navigationState
 	labels                                                            *shapedLabels
 	commands                                                          *commandPalette
 	commandKeymap                                                     experience.Event
@@ -29,9 +31,18 @@ type Workspace struct {
 	backgroundPhase                                                   time.Duration
 	environment                                                       environmentSettings
 	windows                                                           windowSettings
+	controlTheme                                                      controlThemeSettings
+	activeSkin                                                        *skin.Skin
+	windowSkinCache                                                   windowSkinCache
+	skinPreview                                                       skinSettingsPreview
+	skinBackdrop                                                      *render.Texture
+	panelField                                                        *panelField
 	ambientPointer                                                    ambientPointerState
 	ambientCat                                                        *ambientCat
+	ambientCatCollisions                                              ambientCatCollisionState
 	energyNet                                                         *energyNet
+	weaveKey                                                          energyWeaveKey
+	weaveVerts                                                        []render.Vertex
 	energyWallImpacts                                                 []energyWallImpact
 	hologramPhase                                                     time.Duration
 	nodes                                                             [3]scene.NodeID
@@ -118,7 +129,7 @@ func newWorkspace(desktop bool) (*Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	w := &Workspace{desktop: desktop, m: initialModel(), canvas: c, scene: scene.NewScene(), width: 1440, height: 900, scale: 1, applicationDockHover: -1, environment: defaultEnvironmentSettings(), windows: defaultWindowSettings()}
+	w := &Workspace{desktop: desktop, m: initialModel(), canvas: c, scene: scene.NewScene(), width: 1440, height: 900, scale: 1, applicationDockHover: -1, environment: defaultEnvironmentSettings(), windows: defaultWindowSettings(), controlTheme: defaultControlThemeSettings()}
 	stage, err := stageMesh()
 	if err != nil {
 		c.Close()
@@ -190,6 +201,10 @@ func (w *Workspace) Close() error {
 }
 func (w *Workspace) Update(dt time.Duration) {
 	w.syncApplications()
+	if w.navigation != nil {
+		w.updateNavigation(dt)
+		return
+	}
 	w.updateWindowThrow(dt)
 	if dt > 0 && w.applicationNoticeRemaining > 0 {
 		w.applicationNoticeRemaining -= dt
@@ -202,8 +217,11 @@ func (w *Workspace) Update(dt time.Duration) {
 	w.updateHologram(dt)
 }
 func (w *Workspace) Info() experience.Info {
+	if w.navigation != nil {
+		return experience.Info{ID: "worldr.workspace", Title: "Worldr · Navigator", Controls: "Click a project, then an app · Back and Overview keep your place · Ctrl+Alt+O overview · Ctrl+Alt+H home · Ctrl+Alt+J/K switch apps · Ctrl+Alt+Space search · Escape inside an app belongs to that app"}
+	}
 	if w.desktop {
-		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the right launcher rail to search or open native tools · Super+drag empty space to pan · drag the bottom-right scene controller to orbit · use its gear for Terminal, Media, Windows, and Environment settings or Reset to restore the camera · drag a window grip or Super+primary to move and throw · scroll while holding it and release to throw into the rear energy wall · use the square window control or Super+double-click to enter or leave Read · drag a window's bottom-right grip or Super+secondary to resize · use the other top-grip controls to minimize or close · Super+C closes the active app · Super+wheel changes hovered-window depth · Ctrl+Alt+Enter opens a shell · Ctrl+Alt+O finds windows · Enter reads the selected app · F1 opens Help"}
+		return experience.Info{ID: "worldr.workspace", Title: "worldr — Spatial workspace", Controls: "use the compact right launcher rail to search or open native tools · Super+drag empty space to walk · drag the bottom-right scene controller to look around in place; windows stay where you put them · use its gear for Skins, Terminal, Media, Windows, Themes, and Environment (DNA, Cat, cat/window physics, Eyes) or its upper-left X to restore the camera · drag a window grip or Super+primary to move and throw · scroll while holding it and release to throw into the rear energy wall · use the square window control or Super+double-click to enter or leave Read · drag a window's bottom-right grip or Super+secondary to resize · use the other top-grip controls to minimize or close · Super+C closes the active app · Super+wheel changes hovered-window depth · Ctrl+Alt+Enter opens a shell · Ctrl+Alt+O finds windows · Enter reads the selected app · F1 opens Help"}
 	}
 	if w.applications != nil {
 		return experience.Info{ID: "worldr.axial", Title: "worldr — AXIAL / 07", Controls: "Ctrl+Alt+Enter opens a shell · click app or press Enter from workspace to read and type · Ctrl+Alt+O overview from any app · overview: arrows select, Enter or Esc returns · drag scene to orbit, scroll scene to zoom · Place: drag apps, Shift+click to select, scroll for depth · Group moves selected apps together · Super+C requests closing the active window · click workspace to use native shortcuts"}
@@ -228,8 +246,28 @@ func (w *Workspace) layout(width, height int) {
 	}
 	w.ox = (float32(width) - 1440*w.scale) / 2
 	w.oy = (float32(height) - 900*w.scale) / 2
+	if w.navigation != nil {
+		w.viewport = scene.Viewport{Width: max(1, float32(width)), Height: max(1, float32(height))}
+		w.layoutNavigation()
+		return
+	}
 	x, y, vw, vh := float32(253), float32(172), float32(877), float32(570)
 	if w.desktop {
+		if w.skinDesktopChromeVisible() {
+			if w.activeSkin.Desktop.Chrome == "corner-tools" {
+				inset := 24 * w.scale
+				w.viewport = scene.Viewport{X: inset, Y: inset, Width: max(1, float32(width)-2*inset), Height: max(1, float32(height)-inset-52*w.scale)}
+				return
+			}
+			// The slate desktop occupies a wide working area between the rails.
+			// Center that area on taller displays so the saved window arrangement
+			// remains reachable when the containing window changes aspect ratio.
+			inset := 88 * w.scale
+			vw := max(1, float32(width)-2*inset)
+			vh := max(1, min(float32(height)-56*w.scale, vw*840/1872))
+			w.viewport = scene.Viewport{X: inset, Y: (float32(height) - vh) / 2, Width: vw, Height: vh}
+			return
+		}
 		// The right rail stays outside scene picking. A compact notification row
 		// is reserved above the scene after removing the desktop toolbar.
 		w.viewport = scene.Viewport{X: w.ox + 24*w.scale, Y: w.oy + 48*w.scale, Width: 1310 * w.scale, Height: 828 * w.scale}
@@ -245,12 +283,20 @@ func (w *Workspace) layout(width, height int) {
 }
 
 func (w *Workspace) syncScene() {
+	if w.navigation != nil {
+		w.syncNavigationScene()
+		return
+	}
 	w.scene.EffectPhase = float32(float64(w.hologramPhase) / float64(hologramCycle))
-	radius := (float32(9.8) + w.m.explosion*1.4) * float32(math.Exp(-float64(w.m.zoom)))
-	right, up, normal := applicationBasis()
-	target := right.Mul(w.m.cameraX).Add(up.Mul(w.m.cameraY)).Add(normal.Mul(w.m.cameraDepth))
-	eyeOffset := scene.Vec3{X: radius * float32(math.Cos(float64(w.m.pitch))) * float32(math.Cos(float64(w.m.yaw))), Y: radius * float32(math.Sin(float64(w.m.pitch))), Z: radius * float32(math.Cos(float64(w.m.pitch))) * float32(math.Sin(float64(w.m.yaw)))}
-	w.camera = scene.Camera{Eye: target.Add(eyeOffset), Target: target, Up: scene.Vec3{Y: 1}, FOV: 0.69, Near: 0.1, Far: 100}
+	if w.desktop {
+		w.camera = w.desktopLookCamera()
+	} else {
+		radius := (float32(9.8) + w.m.explosion*1.4) * float32(math.Exp(-float64(w.m.zoom)))
+		right, up, normal := applicationBasis()
+		target := right.Mul(w.m.cameraX).Add(up.Mul(w.m.cameraY)).Add(normal.Mul(w.m.cameraDepth))
+		eyeOffset := scene.Vec3{X: radius * float32(math.Cos(float64(w.m.pitch))) * float32(math.Cos(float64(w.m.yaw))), Y: radius * float32(math.Sin(float64(w.m.pitch))), Z: radius * float32(math.Cos(float64(w.m.pitch))) * float32(math.Sin(float64(w.m.yaw)))}
+		w.camera = scene.Camera{Eye: target.Add(eyeOffset), Target: target, Up: scene.Vec3{Y: 1}, FOV: 0.69, Near: 0.1, Far: 100}
+	}
 	stage := w.scene.Node(w.stageNode)
 	stage.Color = scene.ColorHex(teal, .3)
 	stage.Hidden = w.desktop || w.application.ID != 0 && (w.m.applicationReading || w.m.applicationState.Overview)
@@ -292,6 +338,22 @@ func (w *Workspace) syncScene() {
 	w.syncApplicationScene()
 }
 
+// desktopLookCamera stands in the room and turns in place. Yaw and pitch change
+// only the gaze, so a window left in the space is still there when the view
+// comes back. Pan walks, and zoom steps along the current look direction.
+func (w *Workspace) desktopLookCamera() scene.Camera {
+	right, up, normal := applicationBasis()
+	eye := normal.Mul(9.8).Add(right.Mul(w.m.cameraX)).Add(up.Mul(w.m.cameraY)).Add(normal.Mul(w.m.cameraDepth))
+	yaw, pitch := float64(w.m.yaw), float64(w.m.pitch)
+	look := scene.Vec3{
+		X: -float32(math.Cos(pitch) * math.Cos(yaw)),
+		Y: -float32(math.Sin(pitch)),
+		Z: -float32(math.Cos(pitch) * math.Sin(yaw)),
+	}
+	eye = eye.Add(look.Mul(float32(9.8 * (1 - math.Exp(-float64(w.m.zoom))))))
+	return scene.Camera{Eye: eye, Target: eye.Add(look), Up: scene.Vec3{Y: 1}, FOV: 0.69, Near: 0.1, Far: 100}
+}
+
 func (w *Workspace) color(rgb uint32, alpha float32) scene.Color { return scene.ColorHex(rgb, alpha) }
 func (w *Workspace) rect(x, y, ww, hh float32, rgb uint32, alpha float32) {
 	w.canvas.Rect(w.ox+x*w.scale, w.oy+y*w.scale, ww*w.scale, hh*w.scale, w.color(rgb, alpha))
@@ -315,6 +377,9 @@ const (
 )
 
 func (w *Workspace) Draw(width, height int) render.Frame {
+	if w.navigation != nil {
+		return w.drawNavigation(width, height)
+	}
 	w.beginShapedLabels()
 	w.syncApplications()
 	if width != w.width || height != w.height {
@@ -335,13 +400,14 @@ func (w *Workspace) Draw(width, height int) render.Frame {
 	w.drawSpatialApplicationLabels()
 	w.drawApplicationOverviewLabels()
 	if w.desktop {
-		w.drawDesktop()
-		w.drawOrbitPad()
-		w.drawApplicationDock()
+		if !w.drawSkinDesktopChrome() {
+			w.drawOrbitPad()
+			w.drawApplicationDock()
+		}
 		w.drawApplicationNotice()
 		w.drawSettings()
 		w.drawHelp()
-		return w.commandFrame(w.shapedFrame(w.canvas.Frame()))
+		return w.commandFrame(w.skinSettingsFrame(w.shapedFrame(w.canvas.Frame())))
 	}
 	w.drawHeader()
 	if w.application.ID != 0 {

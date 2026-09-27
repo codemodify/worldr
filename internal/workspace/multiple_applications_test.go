@@ -312,8 +312,13 @@ func TestInvalidApplicationLayoutsAreTransactionalAndCapacityBounded(t *testing.
 	}
 	full.Update(0)
 	full.Draw(1440, 900)
-	if !full.applicationLayoutFull || len(full.applicationNodes) != 0 {
-		t.Fatal("exhausted saved layout silently reused old keys")
+	if full.applicationLayoutFull || len(full.applicationNodes) != MaxApplicationLayouts {
+		t.Fatal("closed saved slots were not deterministically recycled for live keys")
+	}
+	for _, surface := range fullApps.surfaces {
+		if full.m.applicationState.index(surface.Key) < 0 {
+			t.Fatalf("recycled layout omitted live key %q", surface.Key)
+		}
 	}
 }
 

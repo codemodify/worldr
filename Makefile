@@ -13,10 +13,14 @@ endif
 
 build:
 	mkdir -p $(BIN_DIR)
+	go build -o $(BIN_DIR)/worldr-desktop ./cmd/worldr-desktop
+	go build -o $(BIN_DIR)/worldr-terminal ./cmd/worldr-terminal
 	go build -o $(BIN_DIR)/worldr-shell ./cmd/worldr-shell
 	go build -o $(BIN_DIR)/worldr-session ./cmd/worldr-session
 
 install: build
+	install -Dm755 $(BIN_DIR)/worldr-desktop $(DESTDIR)$(PREFIX)/bin/worldr-desktop
+	install -Dm755 $(BIN_DIR)/worldr-terminal $(DESTDIR)$(PREFIX)/bin/worldr-terminal
 	install -Dm755 $(BIN_DIR)/worldr-shell $(DESTDIR)$(PREFIX)/bin/worldr-shell
 	install -Dm755 $(BIN_DIR)/worldr-session $(DESTDIR)$(PREFIX)/bin/worldr-session
 	install -Dm644 contrib/wayland-sessions/worldr.desktop $(DESTDIR)$(PREFIX)/share/wayland-sessions/worldr.desktop
